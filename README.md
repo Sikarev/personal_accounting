@@ -6,14 +6,23 @@ SaaS для учёта личных и семейных финансов.
 - [Модель данных](docs/data-model.md)
 - [UI/UX: принципы и стандарты](docs/ux.md)
 - [План разработки](docs/roadmap.md)
+- [Соглашения API](docs/api.md)
 
 ## Структура
 
 ```
 api/                Go-бэкенд
+  openapi.yaml      контракт API (OpenAPI 3) — источник истины для сервера и клиента
+  sqlc.yaml         настройки генерации кода по SQL-запросам
   cmd/api/          HTTP-сервер
   cmd/migrate/      применение миграций БД
   internal/         код приложения (не импортируется извне — правило Go для папки internal)
+    httpapi/        роутер, middleware, обработчики эндпоинтов
+    oapi/           сгенерировано oapi-codegen из openapi.yaml
+    db/queries/     SQL-запросы для sqlc
+    db/dbgen/       сгенерировано sqlc
+    problem/        ошибки API (RFC 9457, problem+json)
+    testdb/         временные БД для тестов
   migrations/       SQL-миграции (goose), встраиваются в бинарник
 web/                React + TypeScript + Vite + Mantine
 docs/               документация
@@ -42,7 +51,19 @@ cd api && go run ./cmd/api
 cd web && pnpm install && pnpm dev
 ```
 
-Настройки по умолчанию совпадают с `docker-compose.yml`. Чтобы их переопределить, скопируй `.env.example` в `.env` (его читает docker compose) и задай переменные окружения для API.
+Настройки по умолчанию совпадают с `docker-compose.yml`. `APP_ENV=production` переключает логи API в JSON (по умолчанию — текст). Чтобы их переопределить, скопируй `.env.example` в `.env` (его читает docker compose) и задай переменные окружения для API.
+
+## Бэкенд: генерация кода и тесты
+
+```bash
+cd api
+go generate ./...   # openapi.yaml → internal/oapi, queries/*.sql → internal/db/dbgen
+go test ./...       # нужен запущенный Postgres (docker compose up -d)
+```
+
+Генераторы (`oapi-codegen`, `sqlc`) закреплены в `go.mod` и запускаются через `go tool` — ставить их отдельно не нужно. Сгенерированный код коммитится. Порядок добавления эндпоинта — в [docs/api.md](docs/api.md#как-добавить-эндпоинт).
+
+Тесты работают с настоящим Postgres: каждый тестовый пакет создаёт себе временную БД со случайным именем на сервере из `TEST_DATABASE_URL` (по умолчанию — Postgres из `docker-compose.yml`), применяет миграции и удаляет БД после тестов. Если Postgres не запущен, тесты падают с подсказкой.
 
 ## Миграции
 

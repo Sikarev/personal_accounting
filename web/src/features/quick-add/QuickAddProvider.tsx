@@ -18,7 +18,8 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
   return (
     <QuickAddContext.Provider value={api}>
       {children}
-      <ResponsiveSheet opened={opened} onClose={close} title={t.quickAdd.title}>
+      {/* fullHeight: на телефоне быстрый ввод — на всю высоту, клавиатура сразу (ux.md, §3). */}
+      <ResponsiveSheet opened={opened} onClose={close} title={t.quickAdd.title} fullHeight>
         {/* Заглушка до этапа 3 (roadmap): там появится форма с суммой и чипами категорий. */}
         <EmptyState
           icon={IconBolt}

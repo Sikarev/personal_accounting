@@ -10,8 +10,9 @@ import { defineConfig, devices } from '@playwright/test'
 // Тестируется production-сборка (`vite preview`): так проверяем то, что увидит
 // пользователь, а dev-бейдж статуса API не попадает в кадр.
 
-// Не 4173 (порт vite preview по умолчанию), чтобы не подхватить чужой запущенный preview.
-const PORT = 4180
+// Порт можно переопределить (E2E_PORT=4181 pnpm test:e2e), чтобы параллельные worktree
+// не мешали друг другу. По умолчанию не 4173 — порт vite preview из коробки.
+const PORT = Number(process.env.E2E_PORT ?? 4180)
 
 export default defineConfig({
   testDir: './e2e',
@@ -77,7 +78,9 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec vite build && pnpm exec vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Всегда своя свежая сборка: занятый порт — ошибка, а не тихое тестирование
+    // чужого сервера (например, preview из соседнего worktree).
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 })

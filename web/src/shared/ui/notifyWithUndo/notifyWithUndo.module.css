@@ -15,3 +15,9 @@
   height: max(100%, var(--app-touch-target));
   transform: translate(-50%, -50%);
 }
+
+/* Подсказка о сочетании — второстепенная, не спорит с подписью кнопки. */
+.kbd {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}

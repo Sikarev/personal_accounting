@@ -1,0 +1,24 @@
+/* Глобальные правки поверх Mantine. Подключается после слойных стилей Mantine
+   (в main.tsx и .storybook/preview.tsx), поэтому перекрывает их без !important. */
+
+/* Кольцо фокуса — цвет из токена --app-focus-ring (theme.ts): в тёмной теме
+   стандартный цвет Mantine не дотягивает до контраста 3:1. */
+.mantine-focus-auto:focus-visible,
+.mantine-focus-always:focus {
+  outline-color: var(--app-focus-ring);
+}
+
+/* Кнопки при увеличенном системном шрифте (ux.md, раздел 6: до 200 %): у Mantine подпись
+   не переносится и кнопка вылезает за экран. Разрешаем перенос и рост в высоту;
+   при обычном шрифте высота прежняя (min-height). */
+.mantine-Button-root {
+  max-width: 100%;
+  height: auto;
+  min-height: var(--button-height);
+  padding-block: var(--mantine-spacing-xs);
+}
+
+.mantine-Button-label {
+  white-space: normal;
+  text-align: center;
+}

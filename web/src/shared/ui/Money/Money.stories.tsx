@@ -14,7 +14,7 @@ const meta = {
   },
   argTypes: {
     variant: { control: 'inline-radio', options: ['plain', 'flow', 'balance'] },
-    currency: { control: 'inline-radio', options: ['RUB', 'USD'] },
+    currency: { control: 'inline-radio', options: ['RUB', 'USD', 'JPY'] },
     size: { control: 'inline-radio', options: ['xs', 'sm', 'md', 'lg', 'xl'] },
   },
 } satisfies Meta<typeof Money>
@@ -39,6 +39,14 @@ export const FlowIncome: Story = { args: { amount: 8500000, variant: 'flow' } }
 
 /** Отрицательный остаток — проблема, поэтому красный. Минус остаётся: цвет не единственный признак. */
 export const NegativeBalance: Story = { args: { amount: -1520000, variant: 'balance' } }
+
+/** −40 коп. с округлением до рублей — «0 ₽» без минуса и не красным: цвет по показанному значению. */
+export const RoundedToZero: Story = {
+  args: { amount: -40, variant: 'balance', roundToMajor: true },
+}
+
+/** Иена: минимальных единиц нет, знаки берутся из ISO 4217 автоматически. */
+export const Yen: Story = { args: { amount: 1500, currency: 'JPY' } }
 
 /** Положительный остаток — обычным цветом. */
 export const PositiveBalance: Story = { args: { amount: 25000000, variant: 'balance' } }

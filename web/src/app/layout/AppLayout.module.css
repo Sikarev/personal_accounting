@@ -1,11 +1,15 @@
+/* Отступы самого AppShell (padding) не умеют safe-area, поэтому задаём их здесь. */
 .main {
-  /* Отступы самого AppShell (padding) не умеют safe-area, поэтому задаём их здесь. */
-  --app-shell-padding: var(--mantine-spacing-md);
-  padding-top: calc(var(--mantine-spacing-lg) + env(safe-area-inset-top));
+  --app-shell-padding: var(--mantine-spacing-xl);
+  padding-top: var(--mantine-spacing-xl);
 
-  @mixin larger-than $mantine-breakpoint-sm {
-    --app-shell-padding: var(--mantine-spacing-xl);
-    padding-top: var(--mantine-spacing-xl);
+  /* Мобильная раскладка (data-mobile ставит AppLayout по useMobileLayout). */
+  &[data-mobile] {
+    --app-shell-padding: var(--mantine-spacing-md);
+    padding-top: calc(var(--mantine-spacing-lg) + env(safe-area-inset-top));
+    /* В альбомной ориентации контент не уходит под «чёлку» сбоку. */
+    padding-inline: max(var(--app-shell-padding), env(safe-area-inset-left))
+      max(var(--app-shell-padding), env(safe-area-inset-right));
   }
 }
 

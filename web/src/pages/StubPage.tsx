@@ -41,7 +41,7 @@ export function StubPage({
             withAddAction && (
               <Button
                 variant="light"
-                leftSection={<IconPlus size={icons.size.md} stroke={2} />}
+                leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
                 onClick={quickAdd.open}
               >
                 {t.nav.addTransaction}

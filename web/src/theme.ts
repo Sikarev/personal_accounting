@@ -25,19 +25,22 @@ export const layout = {
 /**
  * Иконки Tabler: один набор, единая толщина линий и несколько размеров по контексту
  * (ux.md: «один размер и толщина линий в пределах контекста»).
+ *
+ * Размеры — в rem, а не в пикселях: при увеличенном системном шрифте иконки растут
+ * вместе с подписями (ux.md, раздел 6). Толщину линий задаём только этим токеном.
  */
 export const icons = {
   stroke: 1.75,
   size: {
-    /** Внутри кнопок и пунктов меню. */
-    md: 20,
-    /** Нижняя панель, крупные кнопки. */
-    lg: 24,
-    /** Иллюстрация пустого состояния. */
-    xl: 28,
+    /** Внутри кнопок и пунктов меню (20 px при стандартном шрифте). */
+    md: rem(20),
+    /** Нижняя панель, крупные кнопки (24 px). */
+    lg: rem(24),
+    /** Иллюстрация пустого состояния (28 px). */
+    xl: rem(28),
   },
-  /** Подложка иконки пустого состояния. */
-  badgeSize: 56,
+  /** Подложка иконки пустого состояния (56 px). */
+  badgeSize: rem(56),
 } as const
 
 export const theme = createTheme({
@@ -149,6 +152,9 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     // Shade 9: 5.3:1 даже на светлой подложке активного пункта меню (shade 7 там — 3.9:1).
     '--app-color-accent-text': `var(--mantine-color-${t.primaryColor}-9)`,
     '--app-color-surface': 'var(--mantine-color-gray-0)',
+    // Кольцо фокуса (WCAG 1.4.11, ≥ 3:1): 4.98 на белом, 4.73 на gray-0,
+    // 3.93 на подложке активного пункта меню (indigo-1).
+    '--app-focus-ring': `var(--mantine-color-${t.primaryColor}-7)`,
   },
   dark: {
     '--mantine-color-dimmed': '#a3a3a3', // 6.5:1 на dark-7, 5.4:1 на dark-6
@@ -157,5 +163,9 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     '--app-color-negative': 'var(--mantine-color-red-4)',
     '--app-color-accent-text': `var(--mantine-color-${t.primaryColor}-3)`,
     '--app-color-surface': 'var(--mantine-color-dark-8)',
+    // Стандартное кольцо Mantine в тёмной теме — indigo-8, всего 2.74:1 на dark-7.
+    // indigo-4: 5.23 на dark-7, 5.55 на dark-8, 4.58 на dark-6, 3.78 на dark-5 (hover),
+    // 4.61 на подложке активного пункта меню.
+    '--app-focus-ring': `var(--mantine-color-${t.primaryColor}-4)`,
   },
 })

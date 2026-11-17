@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 
 import { QuickAddProvider } from '../features/quick-add/QuickAddProvider'
-import { useIsMobile } from '../shared/lib/useIsMobile'
+import { useMobileLayout } from '../shared/lib/useMobileLayout'
 import { cssVariablesResolver, theme } from '../theme'
 import classes from './AppProviders.module.css'
 
@@ -31,13 +31,13 @@ export function ThemeProviders({
 }
 
 function AppNotifications() {
-  const isMobile = useIsMobile()
-  // На mobile тосты снизу по центру, над нижней панелью — рядом с большим пальцем
-  // и кнопкой «Отменить»; на desktop — в правом нижнем углу, не перекрывая контент.
+  const mobile = useMobileLayout()
+  // В мобильной раскладке тосты снизу по центру, над нижней панелью — рядом с большим
+  // пальцем и кнопкой «Отменить»; на desktop — в правом нижнем углу, не перекрывая контент.
   return (
     <Notifications
-      position={isMobile ? 'bottom-center' : 'bottom-right'}
-      classNames={{ root: classes.notifications }}
+      position={mobile ? 'bottom-center' : 'bottom-right'}
+      classNames={{ root: mobile ? classes.aboveBottomNav : undefined }}
     />
   )
 }

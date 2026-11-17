@@ -1,6 +1,7 @@
 import '@fontsource-variable/inter'
 import '@mantine/core/styles.layer.css'
 import '@mantine/notifications/styles.layer.css'
+import '../src/app/global.css'
 
 import type { Preview } from '@storybook/react-vite'
 

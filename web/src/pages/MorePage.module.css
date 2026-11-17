@@ -9,6 +9,19 @@
   & + & {
     border-top: 1px solid var(--mantine-color-default-border);
   }
+
+  /* У списка overflow: hidden (скруглённые углы) — внешнее кольцо фокуса обрезалось бы,
+     поэтому рисуем его внутри пункта. */
+  &:focus-visible {
+    outline-offset: -2px;
+    border-radius: var(--mantine-radius-lg);
+  }
+}
+
+/* При крупном шрифте длинное слово («Настройки») переносится, а не обрезается многоточием. */
+.body {
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .label {

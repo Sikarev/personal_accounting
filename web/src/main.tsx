@@ -5,6 +5,7 @@ import '@fontsource-variable/inter'
 // без гонки специфичности и без !important.
 import '@mantine/core/styles.layer.css'
 import '@mantine/notifications/styles.layer.css'
+import './app/global.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatMoney, MINUS } from './money'
+import { formatMoney, formatMoneyParts, getMinorUnits, MINUS, moneyTone } from './money'
+
+describe('moneyTone (цвет компонента Money)', () => {
+  it('−40 коп. с округлением до рублей — «0 ₽» обычным цветом, не красным', () => {
+    const { sign } = formatMoneyParts(-40, 'RUB', { roundToMajor: true })
+    expect(moneyTone('balance', sign)).toBeUndefined()
+  })
+
+  it('+40 коп. с округлением в ленте — не зелёный «0 ₽»', () => {
+    const { sign } = formatMoneyParts(40, 'RUB', { roundToMajor: true, signDisplay: 'always' })
+    expect(moneyTone('flow', sign)).toBeUndefined()
+  })
+
+  it('отрицательный остаток — красный, доход в ленте — зелёный, расход — обычный', () => {
+    expect(moneyTone('balance', -1)).toBe('negative')
+    expect(moneyTone('flow', 1)).toBe('income')
+    expect(moneyTone('flow', -1)).toBeUndefined()
+    expect(moneyTone('plain', -1)).toBeUndefined()
+    expect(moneyTone('balance', 1)).toBeUndefined()
+  })
+})
 
 // Intl ставит неразрывные пробелы (U+00A0, в некоторых версиях ICU — U+202F).
 // Сравниваем видимый текст, а отдельный тест проверяет, что пробелы неразрывные.
@@ -37,6 +57,16 @@ describe('formatMoney', () => {
     expect(visible(formatMoney(-40, 'RUB', { roundToMajor: true }))).toBe('0 ₽')
   })
 
+  it('знак считается по показанному значению, а не по исходной сумме', () => {
+    expect(formatMoneyParts(-40, 'RUB', { roundToMajor: true }).sign).toBe(0)
+    expect(formatMoneyParts(40, 'RUB', { roundToMajor: true, signDisplay: 'always' })).toEqual({
+      text: '0 ₽',
+      sign: 0,
+    })
+    expect(formatMoneyParts(-60, 'RUB', { roundToMajor: true }).sign).toBe(-1)
+    expect(formatMoneyParts(-40, 'RUB').sign).toBe(-1)
+  })
+
   it('ставит «+» перед положительной суммой по опции', () => {
     expect(visible(formatMoney(59000, 'RUB', { signDisplay: 'always' }))).toBe('+590 ₽')
     expect(visible(formatMoney(-59000, 'RUB', { signDisplay: 'always' }))).toBe('−590 ₽')
@@ -49,8 +79,16 @@ describe('formatMoney', () => {
     expect(visible(formatMoney(-123456, 'USD'))).toBe('−1 234,56 $')
   })
 
-  it('учитывает число знаков в минимальной единице', () => {
-    expect(visible(formatMoney(1500, 'JPY', { minorUnits: 0 }))).toBe('1 500 ¥')
+  it('берёт число знаков валюты из ISO 4217 через Intl', () => {
+    expect(getMinorUnits('RUB')).toBe(2)
+    expect(getMinorUnits('USD')).toBe(2)
+    expect(getMinorUnits('JPY')).toBe(0)
+    // У иены нет «копеек»: 1500 минимальных единиц — это 1 500 ¥, а не 15 ¥.
+    expect(visible(formatMoney(1500, 'JPY'))).toBe('1 500 ¥')
+  })
+
+  it('явный minorUnits важнее стандарта валюты', () => {
+    expect(visible(formatMoney(1500, 'JPY', { minorUnits: 2 }))).toBe('15 ¥')
     expect(visible(formatMoney(1234, 'RUB', { minorUnits: 3 }))).toBe('1,234 ₽')
   })
 

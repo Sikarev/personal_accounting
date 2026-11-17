@@ -42,7 +42,11 @@ export function MorePage() {
               />
             }
             className={classes.item}
-            classNames={{ label: classes.label, description: classes.description }}
+            classNames={{
+              body: classes.body,
+              label: classes.label,
+              description: classes.description,
+            }}
           />
         ))}
       </Paper>

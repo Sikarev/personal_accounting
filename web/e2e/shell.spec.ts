@@ -14,6 +14,19 @@ async function openPage(page: Page, path: string) {
   await page.evaluate(() => document.fonts.ready)
 }
 
+/** На сколько пикселей страница шире экрана (0 — горизонтального скролла нет). */
+function horizontalOverflow(page: Page) {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  )
+}
+
+/** Увеличенный системный шрифт (ux.md, раздел 6: до 200 % без поломки вёрстки). */
+async function enlargeFont(page: Page) {
+  await page.addStyleTag({ content: 'html { font-size: 200% }' })
+  await page.evaluate(() => document.fonts.ready)
+}
+
 /** Кнопка добавления операции из навигации: «+» на mobile, кнопка в боковом меню на desktop. */
 function addButton(page: Page) {
   return page
@@ -53,10 +66,7 @@ test.describe('главная', () => {
 
   test('нет горизонтального скролла', { tag: '@a11y' }, async ({ page }) => {
     await openPage(page, '/')
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    )
-    expect(overflow).toBe(0)
+    expect(await horizontalOverflow(page)).toBe(0)
   })
 
   test(
@@ -148,6 +158,68 @@ test.describe('mobile: нижняя панель и экран «Ещё»', () =
       page.getByRole('navigation', { name: t.nav.label }).getByRole('link', { name: t.nav.more }),
     ).toHaveAttribute('aria-current', 'page')
   })
+
+  test('скриншот с фокусом на пункте списка', { tag: '@visual' }, async ({ page }) => {
+    await openPage(page, '/more')
+    // Первый Tab — на первую ссылку списка: кольцо фокуса не должно обрезаться краем карточки.
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('main').getByRole('link').first()).toBeFocused()
+    await expect(page).toHaveScreenshot('more-focus.png')
+  })
+
+  for (const path of ['/', '/more']) {
+    test(
+      `шрифт 200 %: нет горизонтального скролла (${path})`,
+      { tag: '@a11y' },
+      async ({ page }) => {
+        await openPage(page, path)
+        await enlargeFont(page)
+        expect(await horizontalOverflow(page)).toBe(0)
+        // Нижняя панель целиком в пределах экрана.
+        const box = await page.getByRole('navigation', { name: t.nav.label }).boundingBox()
+        expect(box!.x).toBeGreaterThanOrEqual(0)
+        expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+      },
+    )
+  }
+
+  test('скриншот главной при шрифте 200 %', { tag: '@visual' }, async ({ page }) => {
+    await openPage(page, '/')
+    await enlargeFont(page)
+    await expect(page).toHaveScreenshot('home-font-200.png')
+  })
+
+  test(
+    'поворот телефона с открытым быстрым вводом: раскладка мобильная, содержимое не пересоздаётся',
+    // Ориентация — WCAG 1.3.4; тест от ОС не зависит, поэтому идёт в CI вместе с a11y.
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 })
+      await openPage(page, '/')
+      const dialog = await openQuickAdd(page)
+      const heading = dialog.getByRole('heading', { level: 3 })
+      // Метка на DOM-узле: если содержимое пересоздастся, новый узел её не получит.
+      await heading.evaluate((el) => {
+        ;(el as HTMLElement & { marker?: string }).marker = 'kept'
+      })
+
+      await page.setViewportSize({ width: 844, height: 390 })
+
+      await expect(dialog).toBeVisible()
+      await expect(page.locator('.mantine-Drawer-content')).toBeVisible()
+      expect(await heading.evaluate((el) => (el as HTMLElement & { marker?: string }).marker)).toBe(
+        'kept',
+      )
+
+      // После закрытия — нижняя панель, а не боковое меню: телефон в альбомной ориентации.
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
+      const nav = page.getByRole('navigation', { name: t.nav.label })
+      await expect(nav).toHaveCount(1)
+      await expect(nav.getByRole('link', { name: t.nav.more })).toBeVisible()
+      await expect(nav.getByRole('link', { name: t.nav.accounts })).toHaveCount(0)
+    },
+  )
 
   test('зоны касания нижней панели не меньше 44 px', { tag: '@a11y' }, async ({ page }) => {
     await openPage(page, '/')

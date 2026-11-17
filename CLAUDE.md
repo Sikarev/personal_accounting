@@ -40,7 +40,7 @@ pnpm test:a11y                # только @a11y — то, что идёт в 
 pnpm test:e2e:update          # переснять эталоны скриншотов после намеренного изменения UI
 ```
 
-Playwright сам собирает приложение и поднимает `vite preview` на :4180. Эталоны скриншотов (`web/e2e/*-snapshots/*-win32.png`) сняты на Windows: рендеринг шрифтов зависит от ОС, поэтому в CI (Linux, `.github/workflows/web.yml`) запускаются только `@a11y`-тесты. Меняешь UI — переснимай эталоны локально и смотри диф глазами.
+Playwright сам собирает приложение и поднимает `vite preview` на :4180; порт меняется переменной `E2E_PORT` (например, `E2E_PORT=4181 pnpm test:e2e` в соседнем worktree). Чужой сервер на этом порту не переиспользуется — тест упадёт с ошибкой «порт занят», а не проверит чужую сборку. Эталоны скриншотов (`web/e2e/*-snapshots/*-win32.png`) сняты на Windows: рендеринг шрифтов зависит от ОС, поэтому в CI (Linux, `.github/workflows/web.yml`) запускаются только `@a11y`-тесты. Меняешь UI — переснимай эталоны локально и смотри диф глазами.
 
 Если добавляешь команду (тесты, генерация, Storybook) — допиши её сюда.
 
@@ -70,10 +70,12 @@ Playwright сам собирает приложение и поднимает `v
   - `pages/` — экраны, по одному файлу на маршрут;
   - `features/` — сценарии, которые используются из нескольких экранов (например, `quick-add`: окно быстрого ввода и `useQuickAdd()`);
   - `shared/ui/` — базовые компоненты (`Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo`, `PageHeader`), рядом — `*.stories.tsx` и `*.module.css`;
-  - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate`, `plural`) и хуки (`useDelayedLoading`, `useIsMobile`), рядом — `*.test.ts`;
+  - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate` + `todayIn`, `plural`), хуки (`useDelayedLoading`, `useMobileLayout`), логика Ctrl+Z для тостов (`undoShortcut`); рядом — `*.test.ts`;
   - `shared/i18n/` — словарь `ru.ts` и `useT()`: `const t = useT(); t.nav.home`. Ключи проверяются типами.
 - Стили компонентов — CSS-модули рядом с компонентом; в них только `var(--mantine-*)` и `var(--app-*)`. Стили Mantine подключены слоем (`styles.layer.css`), поэтому модули перекрывают их без `!important`.
-- Mobile/desktop переключаем CSS (`hiddenFrom`/`visibleFrom`, `@mixin smaller-than $mantine-breakpoint-sm`); `useIsMobile()` — только когда меняется сам компонент (Drawer ↔ Modal).
+- Мобильная раскладка — `useMobileLayout()` / `MOBILE_LAYOUT_QUERY`: ширина < `sm` **или** телефон в альбомной ориентации (`max-height: 30em` и `pointer: coarse`). Это единый источник для оболочки, тостов и `ResponsiveSheet`; брейкпоинты Mantine (`hiddenFrom`, `@mixin smaller-than`) для переключения mobile/desktop не используем — они не знают про альбомную ориентацию.
+- Глобальные правки поверх Mantine — только в `app/global.css` (цвет кольца фокуса, перенос подписей кнопок при крупном шрифте).
+- Иконки: размеры — `icons.size.*` (rem, растут со шрифтом), толщина — только `icons.stroke`.
 - Новый базовый компонент — сразу с историей в Storybook во всех состояниях; новый экран — в `e2e/` (скриншот + axe).
 
 ## Работа агентов

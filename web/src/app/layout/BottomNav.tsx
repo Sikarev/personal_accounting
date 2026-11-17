@@ -46,7 +46,7 @@ export function BottomNav() {
           aria-label={t.nav.addTransaction}
           aria-haspopup="dialog"
         >
-          <IconPlus size={icons.size.lg} stroke={2.25} aria-hidden />
+          <IconPlus size={icons.size.lg} stroke={icons.stroke} aria-hidden />
         </UnstyledButton>
       </div>
       {bottomNavItems.end.map(renderItem)}

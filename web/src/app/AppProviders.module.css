@@ -1,11 +1,9 @@
-/* На mobile тосты поднимаются над нижней панелью навигации.
+/* В мобильной раскладке тосты поднимаются над нижней панелью навигации.
    Mantine рендерит контейнер на каждую позицию, поэтому сдвигаем только нижние:
    у верхних появился бы и top, и bottom — контейнер растянулся бы на весь экран
    и перехватывал бы клики. Позиция Mantine задана через :where(), !important не нужен. */
-.notifications[data-position^='bottom'] {
-  @mixin smaller-than $mantine-breakpoint-sm {
-    bottom: calc(
-      var(--app-bottom-nav-height) + env(safe-area-inset-bottom) + var(--mantine-spacing-sm)
-    );
-  }
+.aboveBottomNav[data-position^='bottom'] {
+  bottom: calc(
+    var(--app-bottom-nav-height) + env(safe-area-inset-bottom) + var(--mantine-spacing-sm)
+  );
 }

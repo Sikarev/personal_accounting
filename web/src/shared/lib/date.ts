@@ -27,6 +27,33 @@ function toUtc({ year, month, day }: CalendarDate): Date {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+const todayFormats = new Map<string, Intl.DateTimeFormat>()
+
+/**
+ * «Сегодня» в часовом поясе пользователя — строка `YYYY-MM-DD`.
+ *
+ * Пояс берётся из профиля пользователя (появится на этапе 1), а не из часов браузера:
+ * в поездке или на чужом компьютере «сегодня» не должно съезжать. До этапа 1 вызывающий
+ * код передаёт пояс явно.
+ *
+ * `now` — момент времени (по умолчанию текущий), параметр нужен для тестов.
+ */
+export function todayIn(timeZone: string, now: Date = new Date()): string {
+  let format = todayFormats.get(timeZone)
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    todayFormats.set(timeZone, format)
+  }
+  // Собираем из частей, а не из строки: порядок полей зависит от локали.
+  const parts = Object.fromEntries(format.formatToParts(now).map((p) => [p.type, p.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
 const weekdayFormat = new Intl.DateTimeFormat(LOCALE, {
   timeZone: 'UTC',
   weekday: 'short',
@@ -49,13 +76,11 @@ function capitalize(value: string): string {
  * Дата операции для ленты (ux.md, раздел 2):
  * «Сегодня», «Вчера», «Пн, 16 ноября» в текущем году, «16 ноября 2025» для других лет.
  *
- * `today` передаётся явно в тестах и там, где «сегодня» считается в часовом поясе
- * пользователя из профиля; по умолчанию — локальная дата браузера.
+ * `today` обязателен: «сегодня» считается в часовом поясе пользователя из профиля
+ * (`todayIn(user.timeZone)`), а не по часам браузера. Так же он делает функцию
+ * детерминированной в тестах.
  */
-export function formatOpDate(
-  date: CalendarDateInput,
-  today: CalendarDateInput = new Date(),
-): string {
+export function formatOpDate(date: CalendarDateInput, today: CalendarDateInput): string {
   const target = toCalendarDate(date)
   const now = toCalendarDate(today)
   const diffDays = Math.round((toUtc(now).getTime() - toUtc(target).getTime()) / DAY_MS)

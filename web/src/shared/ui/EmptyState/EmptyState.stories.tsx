@@ -33,7 +33,7 @@ type Story = StoryObj<typeof meta>
 export const WithAction: Story = {
   args: {
     action: (
-      <Button leftSection={<IconPlus size={icons.size.md} stroke={2} />}>
+      <Button leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}>
         Добавить первую операцию
       </Button>
     ),

@@ -1,4 +1,4 @@
-import { Button, Stack, Text } from '@mantine/core'
+import { Button, Stack, Text, TextInput } from '@mantine/core'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { useEffect, useRef, useState } from 'react'
 
@@ -42,6 +42,12 @@ function UndoDemo({ autoOpen = false }: { autoOpen?: boolean }) {
       <Button onClick={remove} disabled={count === 0}>
         Удалить операцию
       </Button>
+      <TextInput
+        label="Комментарий"
+        description="Ctrl+Z здесь отменяет набранный текст, а не удаление операции"
+        w="100%"
+        maw={360}
+      />
     </Stack>
   )
 }
@@ -53,7 +59,9 @@ const meta = {
     docs: {
       description: {
         component:
-          'Действие выполняется сразу, а в тосте есть «Отменить» (ux.md, принцип 4). Подтверждений «Вы уверены?» нет.',
+          'Действие выполняется сразу, а в тосте есть «Отменить» (ux.md, принцип 4). Подтверждений «Вы уверены?» нет. ' +
+          'Ctrl+Z / ⌘Z отменяет последнее действие, пока тост на экране (но не в поле ввода). ' +
+          'Пока фокус внутри тоста (Tab до кнопки), он не закрывается.',
       },
     },
   },

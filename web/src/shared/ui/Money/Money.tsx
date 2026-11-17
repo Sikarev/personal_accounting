@@ -1,17 +1,17 @@
 import { Text, type TextProps } from '@mantine/core'
 
-import { formatMoney } from '../../lib/money'
+import { formatMoneyParts, moneyTone, type MoneyVariant } from '../../lib/money'
 import { semanticColors } from '../../../theme'
 import classes from './Money.module.css'
 
-export type MoneyVariant = 'plain' | 'flow' | 'balance'
+export type { MoneyVariant }
 
 export type MoneyProps = Omit<TextProps, 'c' | 'color' | 'variant'> & {
   /** Сумма в минимальных единицах валюты (копейки, центы), со знаком. */
   amount: number
   /** Код валюты ISO 4217: `RUB`, `USD`. */
   currency: string
-  /** Знаков в минимальной единице. */
+  /** Знаков в минимальной единице; по умолчанию — по ISO 4217 (RUB, USD — 2, JPY — 0). */
   minorUnits?: number
   /** Округлить до целых (отчёты, балансы). */
   roundToMajor?: boolean
@@ -21,17 +21,12 @@ export type MoneyProps = Omit<TextProps, 'c' | 'color' | 'variant'> & {
    * - `flow` — движение денег (лента): доход `+590 ₽` зелёным, расход `−590 ₽` обычным цветом;
    * - `balance` — остаток: отрицательный выделяется красным как проблема.
    *
+   * Цвет и знак считаются по показанному (уже округлённому) значению: «0 ₽» всегда обычный.
    * Цвет никогда не единственный носитель смысла: знак есть всегда.
    */
   variant?: MoneyVariant
   /** Вывести как `<span>` (по умолчанию) или другой тег. */
   component?: 'span' | 'div' | 'p'
-}
-
-function colorFor(variant: MoneyVariant, amount: number): string | undefined {
-  if (variant === 'flow' && amount > 0) return semanticColors.income
-  if (variant === 'balance' && amount < 0) return semanticColors.negative
-  return undefined
 }
 
 /**
@@ -48,18 +43,19 @@ export function Money({
   className,
   ...textProps
 }: MoneyProps) {
-  const text = formatMoney(amount, currency, {
+  const { text, sign } = formatMoneyParts(amount, currency, {
     minorUnits,
     roundToMajor,
     signDisplay: variant === 'flow' ? 'always' : 'auto',
   })
+  const tone = moneyTone(variant, sign)
 
   return (
     <Text
       component={component}
       inherit={textProps.size === undefined && textProps.fz === undefined}
       {...textProps}
-      c={colorFor(variant, amount)}
+      c={tone && semanticColors[tone]}
       className={className ? `${classes.root} ${className}` : classes.root}
     >
       {text}

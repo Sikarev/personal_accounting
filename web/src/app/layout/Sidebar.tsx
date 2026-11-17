@@ -16,9 +16,8 @@ export function Sidebar() {
   const { pathname } = useLocation()
 
   return (
-    // AppShell.Navbar — это <nav>. На mobile «свёрнутое» меню Mantine лишь сдвигает за край
-    // экрана, и его ссылки остались бы доступны с клавиатуры; visibleFrom убирает его целиком.
-    <AppShell.Navbar visibleFrom="sm" aria-label={t.nav.label} className={classes.navbar}>
+    // AppShell.Navbar — это <nav>. В мобильной раскладке AppLayout его не рендерит вовсе.
+    <AppShell.Navbar aria-label={t.nav.label} className={classes.navbar}>
       <AppShell.Section className={classes.top}>
         <Group gap="sm" wrap="nowrap" className={classes.brand}>
           <ThemeIcon size="lg" radius="md" aria-hidden>
@@ -35,7 +34,7 @@ export function Sidebar() {
           // иначе «Добавить операцию» не помещается в ширину бокового меню.
           // Размер шрифта Mantine задаёт inline-переменной, поэтому меняем через vars.
           vars={() => ({ root: { '--button-fz': 'var(--mantine-font-size-sm)' } })}
-          leftSection={<IconPlus size={icons.size.md} stroke={2} />}
+          leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
           onClick={quickAdd.open}
           aria-haspopup="dialog"
         >

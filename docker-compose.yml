@@ -1,0 +1,23 @@
+# Локальное окружение для разработки: только Postgres.
+# API и фронт запускаются на хосте (go run / npm run dev) — так быстрее перезапуск.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pa_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-pa}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # С версии 18 образ хранит данные в /var/lib/postgresql/18/docker,
+      # поэтому том монтируется на уровень выше.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

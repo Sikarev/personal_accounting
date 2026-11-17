@@ -15,6 +15,7 @@ import (
 
 	"personal-accounting/api/internal/config"
 	"personal-accounting/api/internal/httpapi"
+	"personal-accounting/api/internal/logging"
 )
 
 func main() {
@@ -29,6 +30,11 @@ func main() {
 func run() error {
 	cfg := config.Load()
 
+	// Логгер передаём в роутер явно. slog.SetDefault нужен для того, что пишет
+	// в лог без явного логгера (в т. ч. ошибки в main выше) — формат будет тем же.
+	logger := logging.New(os.Stdout, cfg.IsProduction())
+	slog.SetDefault(logger)
+
 	// ctx отменится по Ctrl+C или SIGTERM (так останавливает контейнер Docker).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -41,7 +47,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewRouter(db),
+		Handler:           httpapi.NewRouter(logger, db),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -49,7 +55,7 @@ func run() error {
 	// а ошибку передаём через канал.
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("api listening", "addr", cfg.Addr)
+		logger.Info("api listening", "addr", cfg.Addr, "env", cfg.Env)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -59,7 +65,7 @@ func run() error {
 			return err
 		}
 	case <-ctx.Done():
-		slog.Info("shutting down")
+		logger.Info("shutting down")
 	}
 
 	// Даём текущим запросам до 10 секунд на завершение.

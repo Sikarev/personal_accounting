@@ -1,0 +1,34 @@
+# Настройки sqlc: из SQL-запросов в internal/db/queries генерирует типобезопасный Go-код.
+# Запуск: go generate ./... из каталога api/ (директива — в internal/db/generate.go).
+version: "2"
+sql:
+  - engine: postgresql
+    # Схему sqlc читает прямо из миграций goose: секции «-- +goose Down» он пропускает.
+    schema: migrations
+    queries: internal/db/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/db/dbgen
+        sql_package: pgx/v5
+        emit_interface: true
+        # NULL-колонки — указатели (*time.Time), а не pgtype.Timestamptz:
+        # с ними проще работать и сериализовать в JSON.
+        emit_pointers_for_null_types: true
+        overrides:
+          # uuid — тот же тип, что использует oapi-codegen (openapi_types.UUID).
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true

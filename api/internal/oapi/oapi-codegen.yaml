@@ -1,0 +1,7 @@
+# Настройки oapi-codegen. Запуск: go generate ./... из каталога api/.
+package: oapi
+output: oapi.gen.go
+generate:
+  models: true
+  chi-server: true
+  strict-server: true

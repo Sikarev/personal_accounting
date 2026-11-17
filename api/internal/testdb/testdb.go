@@ -24,13 +24,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -73,7 +74,7 @@ func Pool(t testing.TB) *pgxpool.Pool {
 	if initErr != nil {
 		t.Fatalf("testdb: нет тестовой БД: %v\n"+
 			"Тесты работают с настоящим Postgres. Запусти его из корня репозитория: docker compose up -d\n"+
-			"или укажи сервер в TEST_DATABASE_URL (сейчас: %s).", initErr, redact(adminURL()))
+			"или укажи сервер в TEST_DATABASE_URL (сейчас: %s).", initErr, describe(adminURL()))
 	}
 	return pool
 }
@@ -85,13 +86,15 @@ func adminURL() string {
 	return DefaultURL
 }
 
-// redact скрывает пароль в строке подключения перед выводом в лог теста.
-func redact(dsn string) string {
-	u, err := url.Parse(dsn)
+// describe — описание сервера для сообщений: только хост, порт, пользователь и БД.
+// Строку подключения целиком не выводим: в ней пароль, а в форме «ключ=значение»
+// (host=... password=...) url.Redacted его не скрывает.
+func describe(dsn string) string {
+	cfg, err := pgconn.ParseConfig(dsn)
 	if err != nil {
-		return "<некорректный URL>"
+		return "<строка подключения не разбирается>"
 	}
-	return u.Redacted()
+	return fmt.Sprintf("host=%s port=%d user=%s database=%s", cfg.Host, cfg.Port, cfg.User, cfg.Database)
 }
 
 func setup() error {
@@ -101,9 +104,11 @@ func setup() error {
 	adminDS = adminURL()
 	admin, err := pgx.Connect(ctx, adminDS)
 	if err != nil {
-		return fmt.Errorf("подключение к %s: %w", redact(adminDS), err)
+		return fmt.Errorf("подключение к %s: %w", describe(adminDS), err)
 	}
 	defer admin.Close(ctx)
+
+	dropStale(ctx, admin, time.Now())
 
 	name := randomName()
 	// Параметры ($1) в CREATE DATABASE Postgres не поддерживает, поэтому имя
@@ -165,10 +170,53 @@ func cleanup() error {
 	return err
 }
 
-// randomName — имя вида pa_test_20261118_153045_1a2b3c4d. Дата в имени помогает
-// найти и удалить БД, оставшиеся от прерванных запусков (Ctrl+C, паника в TestMain).
+const (
+	namePrefix = "pa_test_"
+	nameTime   = "20060102_150405" // время создания в UTC — часть имени БД
+	// staleAfter — возраст, после которого временная БД считается брошенной.
+	// Сутки с большим запасом длиннее любого прогона, поэтому параллельные
+	// и текущие прогоны под удаление не попадают.
+	staleAfter = 24 * time.Hour
+)
+
+// randomName — имя вида pa_test_20261118_153045_1a2b3c4d. Время в имени нужно,
+// чтобы находить и удалять БД, оставшиеся от прерванных запусков
+// (Ctrl+C, убитый процесс), — см. dropStale.
 func randomName() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
-	return "pa_test_" + time.Now().Format("20060102_150405") + "_" + hex.EncodeToString(b)
+	return namePrefix + time.Now().UTC().Format(nameTime) + "_" + hex.EncodeToString(b)
+}
+
+// dropStale удаляет временные БД старше staleAfter. Ошибки игнорируются:
+// уборка — не цель теста, а несколько параллельных пакетов могут удалять
+// одну и ту же брошенную БД одновременно (тогда один из DROP просто не удастся).
+func dropStale(ctx context.Context, admin *pgx.Conn, now time.Time) {
+	rows, err := admin.Query(ctx, `SELECT datname FROM pg_database WHERE datname LIKE 'pa\_test\_%'`)
+	if err != nil {
+		return
+	}
+	names, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return
+	}
+	for _, name := range names {
+		if isStale(name, now) {
+			_, _ = admin.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
+		}
+	}
+}
+
+// isStale сообщает, что БД с таким именем создана раньше now - staleAfter.
+// Имена, которые не разбираются, не трогаем: это может быть чужая БД.
+func isStale(name string, now time.Time) bool {
+	rest, ok := strings.CutPrefix(name, namePrefix)
+	if !ok || len(rest) < len(nameTime) {
+		return false
+	}
+	created, err := time.Parse(nameTime, rest[:len(nameTime)])
+	if err != nil {
+		return false
+	}
+	return now.Sub(created) > staleAfter
 }

@@ -15,6 +15,11 @@ func TestMain(m *testing.M) { testdb.Main(m) }
 
 // Все миграции должны откатываться и накатываться заново без ошибок:
 // так проверяется, что у каждой есть рабочий Down.
+//
+// Тест сносит всю схему временной БД пакета, поэтому он должен оставаться
+// единственным тестом с БД в этом пакете: другой тест, запущенный параллельно
+// или после него, увидел бы пустую или пересозданную схему. Новые тесты схемы
+// пиши в internal/db — там своя БД.
 func TestUpDownUp(t *testing.T) {
 	ctx := context.Background()
 	pool := testdb.Pool(t) // уже с применёнными миграциями — это первый Up
@@ -39,19 +44,24 @@ func TestUpDownUp(t *testing.T) {
 	}
 }
 
-// countObjects считает таблицы и пользовательские типы в схеме public,
-// кроме служебной таблицы goose. Down, который забыл удалить тип или таблицу,
-// оставит здесь след.
+// countObjects считает объекты схемы public, кроме служебных объектов goose:
+// отношения из pg_class (таблицы, индексы, последовательности, представления),
+// функции и процедуры из pg_proc и самостоятельные типы из pg_type (enum,
+// домены; типы строк таблиц и массивов не считаются — они уходят вместе
+// с исходным объектом). Down, который что-то забыл удалить, оставит здесь след.
 func countObjects(t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 	var n int
 	err := pool.QueryRow(context.Background(), `
 		SELECT
-		  (SELECT count(*) FROM pg_tables
-		    WHERE schemaname = 'public' AND tablename <> 'goose_db_version')
-		+ (SELECT count(*) FROM pg_type t
-		    JOIN pg_namespace ns ON ns.oid = t.typnamespace
-		    WHERE ns.nspname = 'public' AND t.typtype = 'e')`).Scan(&n)
+		  (SELECT count(*) FROM pg_class c
+		    WHERE c.relnamespace = 'public'::regnamespace
+		      AND c.relname NOT LIKE 'goose\_db\_version%')
+		+ (SELECT count(*) FROM pg_proc p
+		    WHERE p.pronamespace = 'public'::regnamespace)
+		+ (SELECT count(*) FROM pg_type ty
+		    WHERE ty.typnamespace = 'public'::regnamespace
+		      AND ty.typrelid = 0 AND ty.typcategory <> 'A')`).Scan(&n)
 	if err != nil {
 		t.Fatal(err)
 	}

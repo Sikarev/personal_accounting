@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: включает env(safe-area-inset-*) на iPhone с «чёлкой» и полоской «домой». -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Фон до загрузки JS совпадает с системной темой: нет белой вспышки в тёмной теме. -->
+    <meta name="color-scheme" content="light dark" />
     <title>Домашняя бухгалтерия</title>
   </head>
   <body>

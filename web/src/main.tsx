@@ -1,27 +1,24 @@
-import '@mantine/core/styles.css'
-import '@mantine/notifications/styles.css'
+// Шрифт Inter — из локального пакета, а не с Google Fonts (ux.md, раздел 2: 152-ФЗ).
+// Браузер скачает только нужные подмножества (кириллица, латиница) по unicode-range.
+import '@fontsource-variable/inter'
+// Слойные версии стилей Mantine (@layer mantine): наши CSS-модули перекрывают их
+// без гонки специфичности и без !important.
+import '@mantine/core/styles.layer.css'
+import '@mantine/notifications/styles.layer.css'
 
-import { MantineProvider } from '@mantine/core'
-import { Notifications } from '@mantine/notifications'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router'
 
-import { App } from './App.tsx'
-import { theme } from './theme.ts'
-
-const queryClient = new QueryClient()
+import { App } from './app/App'
+import { AppProviders } from './app/AppProviders'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
-      <Notifications />
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </QueryClientProvider>
-    </MantineProvider>
+    <BrowserRouter>
+      <AppProviders>
+        <App />
+      </AppProviders>
+    </BrowserRouter>
   </StrictMode>,
 )

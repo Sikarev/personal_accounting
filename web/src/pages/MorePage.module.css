@@ -1,0 +1,26 @@
+.list {
+  overflow: hidden;
+}
+
+.item {
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.label {
+  font-size: var(--mantine-font-size-md);
+  font-weight: 500;
+}
+
+.description {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+}

@@ -1,0 +1,19 @@
+.main {
+  /* Отступы самого AppShell (padding) не умеют safe-area, поэтому задаём их здесь. */
+  --app-shell-padding: var(--mantine-spacing-md);
+  padding-top: calc(var(--mantine-spacing-lg) + env(safe-area-inset-top));
+
+  @mixin larger-than $mantine-breakpoint-sm {
+    --app-shell-padding: var(--mantine-spacing-xl);
+    padding-top: var(--mantine-spacing-xl);
+  }
+}
+
+.content {
+  max-width: var(--app-content-max-width);
+  margin-inline: auto;
+}
+
+.footer {
+  padding-bottom: env(safe-area-inset-bottom);
+}

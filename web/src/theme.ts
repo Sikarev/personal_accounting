@@ -1,6 +1,161 @@
-import { createTheme } from '@mantine/core'
+import { createTheme, rem, type CSSVariablesResolver } from '@mantine/core'
+
+// Дизайн-токены приложения (docs/ux.md, раздел 2). Значения «на месте» в компонентах
+// запрещены: только токены отсюда или CSS-переменные, которые они порождают.
+//
+// Контраст семантических цветов проверен по WCAG 2.2 AA (≥ 4.5:1 для текста) на фонах
+// body и приглушённой поверхности в обеих темах. Меняешь цвет — перепроверь контраст
+// (Playwright + axe в e2e/a11y это ловит, но только на тех экранах, где цвет виден).
+
+const fontFamily =
+  "'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+
+/** Размеры каркаса приложения. Используются в AppShell и CSS-модулях (через переменные). */
+export const layout = {
+  /** Ширина бокового меню на desktop. */
+  navbarWidth: 248,
+  /** Высота нижней панели на mobile без учёта safe-area. */
+  bottomNavHeight: 64,
+  /** Максимальная ширина контента: на широком экране строки не растягиваются на всю ширину. */
+  contentMaxWidth: 1040,
+  /** Минимальная зона касания (ux.md, раздел 6). */
+  touchTarget: 44,
+} as const
+
+/**
+ * Иконки Tabler: один набор, единая толщина линий и несколько размеров по контексту
+ * (ux.md: «один размер и толщина линий в пределах контекста»).
+ */
+export const icons = {
+  stroke: 1.75,
+  size: {
+    /** Внутри кнопок и пунктов меню. */
+    md: 20,
+    /** Нижняя панель, крупные кнопки. */
+    lg: 24,
+    /** Иллюстрация пустого состояния. */
+    xl: 28,
+  },
+  /** Подложка иконки пустого состояния. */
+  badgeSize: 56,
+} as const
 
 export const theme = createTheme({
-  primaryColor: 'teal',
+  primaryColor: 'indigo',
+  // indigo-7 на белом — 4.98:1, белый текст на indigo-8 в тёмной теме — 5.67:1.
+  primaryShade: { light: 7, dark: 8 },
+  // Чистый #000 на белом слишком резкий; gray-9 мягче и даёт 15:1.
+  black: '#212529',
+  fontFamily,
+  fontFamilyMonospace: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+
+  // Пять размеров шрифта на всё приложение (ux.md: «4–5 размеров, не больше»):
+  // xs — подписи и мелкие пометки, sm — вторичный текст, md — основной,
+  // lg — заголовки разделов, xl — заголовок экрана и главная цифра.
+  fontSizes: {
+    xs: rem(12),
+    sm: rem(14),
+    md: rem(16),
+    lg: rem(20),
+    xl: rem(28),
+  },
+  lineHeights: {
+    xs: '1.4',
+    sm: '1.45',
+    md: '1.5',
+    lg: '1.35',
+    xl: '1.25',
+  },
+  headings: {
+    fontFamily,
+    fontWeight: '600',
+    textWrap: 'balance',
+    // Заголовки переиспользуют ту же шкалу размеров, новых не вводим.
+    sizes: {
+      h1: { fontSize: rem(28), lineHeight: '1.25' },
+      h2: { fontSize: rem(20), lineHeight: '1.35' },
+      h3: { fontSize: rem(16), lineHeight: '1.5' },
+      h4: { fontSize: rem(16), lineHeight: '1.5' },
+      h5: { fontSize: rem(14), lineHeight: '1.45' },
+      h6: { fontSize: rem(14), lineHeight: '1.45' },
+    },
+  },
+
+  // Шкала отступов: xs 4 · sm 8 · md 16 · lg 24 · xl 32. Других значений нет.
+  spacing: {
+    xs: rem(4),
+    sm: rem(8),
+    md: rem(16),
+    lg: rem(24),
+    xl: rem(32),
+  },
+  radius: {
+    xs: rem(4),
+    sm: rem(6),
+    md: rem(8),
+    lg: rem(12),
+    xl: rem(16),
+  },
   defaultRadius: 'md',
+
+  // Mantine отключает свои анимации при prefers-reduced-motion (ux.md, раздел 6).
+  respectReducedMotion: true,
+  cursorType: 'pointer',
+  focusRing: 'auto',
+
+  components: {
+    Modal: {
+      defaultProps: { transitionProps: { duration: 200 } },
+    },
+    Drawer: {
+      defaultProps: { transitionProps: { duration: 200 } },
+    },
+    Notifications: {
+      defaultProps: { transitionDuration: 200 },
+    },
+  },
+})
+
+/**
+ * Семантические цвета. В компонентах пишем `c={semanticColors.income}`,
+ * а не конкретный оттенок: значение само переключается между темами.
+ */
+export const semanticColors = {
+  /** Доход, положительное движение денег. */
+  income: 'var(--app-color-income)',
+  /** Проблема: отрицательный остаток, ошибка. Не для обычных расходов. */
+  negative: 'var(--app-color-negative)',
+  /** Акцентный текст (активный пункт меню и т. п.) с достаточным контрастом в обеих темах. */
+  accentText: 'var(--app-color-accent-text)',
+} as const
+
+/**
+ * Дополняет CSS-переменные Mantine: семантические цвета и размеры каркаса.
+ * Заодно усиливает `dimmed` и `error`: стандартные оттенки Mantine не проходят AA
+ * (gray-6 на белом — 3.3:1, dark-2 на dark-7 — 4.0:1).
+ */
+export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
+  variables: {
+    '--app-navbar-width': rem(layout.navbarWidth),
+    '--app-bottom-nav-height': rem(layout.bottomNavHeight),
+    '--app-content-max-width': rem(layout.contentMaxWidth),
+    '--app-touch-target': rem(layout.touchTarget),
+  },
+  light: {
+    '--mantine-color-dimmed': '#656c73', // 5.4:1 на белом, 5.1:1 на gray-0
+    '--mantine-color-error': 'var(--mantine-color-red-9)', // 5.5:1
+    '--app-color-income': '#2b7a3b', // 5.3:1 на белом; green-9 из палитры даёт только 4.4:1
+    '--app-color-negative': 'var(--mantine-color-red-9)',
+    // Shade 9: 5.3:1 даже на светлой подложке активного пункта меню (shade 7 там — 3.9:1).
+    '--app-color-accent-text': `var(--mantine-color-${t.primaryColor}-9)`,
+    '--app-color-surface': 'var(--mantine-color-gray-0)',
+  },
+  dark: {
+    '--mantine-color-dimmed': '#a3a3a3', // 6.5:1 на dark-7, 5.4:1 на dark-6
+    '--mantine-color-error': 'var(--mantine-color-red-4)', // 6.7:1
+    '--app-color-income': 'var(--mantine-color-green-5)', // 7.7:1
+    '--app-color-negative': 'var(--mantine-color-red-4)',
+    '--app-color-accent-text': `var(--mantine-color-${t.primaryColor}-3)`,
+    '--app-color-surface': 'var(--mantine-color-dark-8)',
+  },
 })

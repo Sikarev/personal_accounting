@@ -1,0 +1,5 @@
+.root {
+  /* Одинаковая ширина цифр: суммы в колонках выравниваются по разрядам. */
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

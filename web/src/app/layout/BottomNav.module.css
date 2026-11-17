@@ -1,0 +1,95 @@
+.root {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: stretch;
+  height: var(--app-bottom-nav-height);
+  padding-inline: var(--mantine-spacing-xs);
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mantine-spacing-xs);
+  min-height: var(--app-touch-target);
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+  border-radius: var(--mantine-radius-md);
+  -webkit-tap-highlight-color: transparent;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: -2px;
+  }
+
+  &[data-active] {
+    color: var(--app-color-accent-text);
+  }
+}
+
+/* Активный пункт — «таблетка» под иконкой: он заметен не только цветом. */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 2rem;
+  border-radius: var(--mantine-radius-xl);
+  transition: background-color 150ms ease;
+
+  .item[data-active] & {
+    background-color: var(--mantine-primary-color-light);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.label {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1;
+  font-weight: 500;
+  /* Длинная подпись не ломает панель при увеличенном системном шрифте. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  .item[data-active] & {
+    font-weight: 600;
+  }
+}
+
+.addSlot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Главное действие приложения — крупная круглая кнопка в центре, под большим пальцем. */
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: var(--mantine-primary-color-contrast);
+  background-color: var(--mantine-primary-color-filled);
+  box-shadow: var(--mantine-shadow-sm);
+
+  &:hover {
+    background-color: var(--mantine-primary-color-filled-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-primary-color-filled);
+    outline-offset: 2px;
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
+}

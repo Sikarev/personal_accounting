@@ -22,6 +22,21 @@ func TestMain(m *testing.M) { testdb.Main(m) }
 
 var discardLogger = slog.New(slog.DiscardHandler)
 
+func newRouter(t *testing.T, logger *slog.Logger, pool *pgxpool.Pool) http.Handler {
+	t.Helper()
+	h, err := NewRouter(logger, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+// jsonLogger пишет логи в буфер в JSON, чтобы тест мог их разобрать.
+func jsonLogger() (*slog.Logger, *bytes.Buffer) {
+	var buf bytes.Buffer
+	return slog.New(slog.NewJSONHandler(&buf, nil)), &buf
+}
+
 // do выполняет запрос к роутеру без сетевого сервера: httptest.NewRecorder
 // запоминает статус, заголовки и тело ответа.
 func do(t *testing.T, h http.Handler, method, path string) *httptest.ResponseRecorder {
@@ -68,7 +83,7 @@ func decodeProblem(t *testing.T, rec *httptest.ResponseRecorder, status int, cod
 }
 
 func TestListCurrencies(t *testing.T) {
-	h := NewRouter(discardLogger, testdb.Pool(t))
+	h := newRouter(t, discardLogger, testdb.Pool(t))
 	rec := do(t, h, http.MethodGet, "/api/v1/currencies")
 
 	if rec.Code != http.StatusOK {
@@ -97,7 +112,7 @@ func TestListCurrencies(t *testing.T) {
 }
 
 func TestUnknownAPIRoutes(t *testing.T) {
-	h := NewRouter(discardLogger, closedPool(t))
+	h := newRouter(t, discardLogger, closedPool(t))
 	for _, path := range []string{"/api", "/api/", "/api/nope", "/api/v1/nope", "/api/v2/currencies"} {
 		t.Run(path, func(t *testing.T) {
 			decodeProblem(t, do(t, h, http.MethodGet, path), http.StatusNotFound, "not_found")
@@ -106,16 +121,51 @@ func TestUnknownAPIRoutes(t *testing.T) {
 }
 
 func TestMethodNotAllowed(t *testing.T) {
-	h := NewRouter(discardLogger, closedPool(t))
-	decodeProblem(t, do(t, h, http.MethodDelete, "/api/v1/currencies"), http.StatusMethodNotAllowed, "method_not_allowed")
+	h := newRouter(t, discardLogger, closedPool(t))
+	rec := do(t, h, http.MethodDelete, "/api/v1/currencies")
+	decodeProblem(t, rec, http.StatusMethodNotAllowed, "method_not_allowed")
+	if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+		t.Fatalf("Allow = %q, ожидалось \"GET, HEAD\"", got)
+	}
+}
+
+// HEAD на ресурс с GET отвечает как GET (статус и заголовки).
+func TestHeadOnGetResource(t *testing.T) {
+	h := newRouter(t, discardLogger, testdb.Pool(t))
+	for _, path := range []string{"/api/v1/currencies", "/healthz"} {
+		t.Run(path, func(t *testing.T) {
+			rec := do(t, h, http.MethodHead, path)
+			if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/json" {
+				t.Fatalf("HEAD %s: %d %q", path, rec.Code, rec.Header().Get("Content-Type"))
+			}
+		})
+	}
+}
+
+// Клиент отменил запрос — это не сбой сервера: в логе info и статус 499, а не 500.
+func TestClientCanceledIsNotError(t *testing.T) {
+	logger, logBuf := jsonLogger()
+	h := newRouter(t, logger, testdb.Pool(t))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/currencies", nil).WithContext(ctx))
+
+	if rec.Code != statusClientClosedRequest {
+		t.Fatalf("статус %d, ожидался %d", rec.Code, statusClientClosedRequest)
+	}
+	logs := logBuf.String()
+	if strings.Contains(logs, `"level":"ERROR"`) || !strings.Contains(logs, "request canceled by client") {
+		t.Fatalf("отмена клиентом залогирована неверно:\n%s", logs)
+	}
 }
 
 // Ошибка БД → 500 с общим текстом: подробности (адрес БД, текст ошибки драйвера)
 // клиенту не уходят, но попадают в лог с request id.
 func TestInternalErrorDoesNotLeakDetails(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-	h := NewRouter(logger, closedPool(t))
+	logger, logBuf := jsonLogger()
+	h := newRouter(t, logger, closedPool(t))
 
 	rec := do(t, h, http.MethodGet, "/api/v1/currencies")
 	body := decodeProblem(t, rec, http.StatusInternalServerError, "internal")
@@ -135,8 +185,7 @@ func TestInternalErrorDoesNotLeakDetails(t *testing.T) {
 }
 
 func TestPanicReturnsProblem(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	logger, logBuf := jsonLogger()
 	h := requestID(requestLogger(logger)(recoverer(logger)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("boom")
 	}))))
@@ -153,9 +202,8 @@ func TestPanicReturnsProblem(t *testing.T) {
 }
 
 func TestRequestLog(t *testing.T) {
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-	h := NewRouter(logger, closedPool(t))
+	logger, logBuf := jsonLogger()
+	h := newRouter(t, logger, closedPool(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil)
 	req.Header.Set(requestIDHeader, "client-id-1")
@@ -183,7 +231,7 @@ func TestRequestLog(t *testing.T) {
 }
 
 func TestRequestIDRejectsUnsafeValues(t *testing.T) {
-	h := NewRouter(discardLogger, closedPool(t))
+	h := newRouter(t, discardLogger, closedPool(t))
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil)
 	req.Header.Set(requestIDHeader, "bad id\nwith newline")
 	rec := httptest.NewRecorder()
@@ -198,7 +246,7 @@ func TestParamErrorsBecomeValidationProblems(t *testing.T) {
 	rec := httptest.NewRecorder()
 	paramErrorHandler(rec, httptest.NewRequest(http.MethodGet, "/", nil),
 		&oapi.InvalidParamFormatError{ParamName: "limit", Err: errors.New("invalid syntax")})
-	body := decodeProblem(t, rec, http.StatusBadRequest, "validation_failed")
+	body := decodeProblem(t, rec, http.StatusUnprocessableEntity, "validation_failed")
 	errs, _ := body["errors"].([]any)
 	if len(errs) != 1 {
 		t.Fatalf("errors = %v", body["errors"])
@@ -215,24 +263,51 @@ func TestRequestBodyErrorIsProblem(t *testing.T) {
 	decodeProblem(t, rec, http.StatusBadRequest, "bad_request")
 }
 
+// Ошибка типа при разборе тела strict-сервером указывает на поле.
+func TestRequestBodyTypeErrorHasField(t *testing.T) {
+	var dst struct {
+		Split struct {
+			Amount int32 `json:"amount"`
+		} `json:"split"`
+	}
+	err := json.Unmarshal([]byte(`{"split":{"amount":"сто"}}`), &dst)
+
+	rec := httptest.NewRecorder()
+	requestErrorHandler(rec, httptest.NewRequest(http.MethodPost, "/", nil), err)
+	body := decodeProblem(t, rec, http.StatusUnprocessableEntity, "validation_failed")
+	errs, _ := body["errors"].([]any)
+	if len(errs) != 1 || errs[0].(map[string]any)["field"] != "split.amount" {
+		t.Fatalf("errors = %v", body["errors"])
+	}
+}
+
 func TestHealthz(t *testing.T) {
 	t.Run("БД доступна", func(t *testing.T) {
-		rec := do(t, NewRouter(discardLogger, testdb.Pool(t)), http.MethodGet, "/healthz")
+		logger, logBuf := jsonLogger()
+		rec := do(t, newRouter(t, logger, testdb.Pool(t)), http.MethodGet, "/healthz")
 		if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"status":"ok"}` {
 			t.Fatalf("%d %s", rec.Code, rec.Body)
 		}
+		if logBuf.Len() != 0 {
+			t.Fatalf("успешный /healthz не должен попадать в лог:\n%s", logBuf)
+		}
 	})
 	t.Run("БД недоступна", func(t *testing.T) {
-		rec := do(t, NewRouter(discardLogger, closedPool(t)), http.MethodGet, "/healthz")
+		logger, logBuf := jsonLogger()
+		rec := do(t, newRouter(t, logger, closedPool(t)), http.MethodGet, "/healthz")
 		if rec.Code != http.StatusServiceUnavailable {
 			t.Fatalf("%d %s", rec.Code, rec.Body)
+		}
+		logs := logBuf.String()
+		if !strings.Contains(logs, `"level":"WARN"`) || !strings.Contains(logs, "db ping failed") || !strings.Contains(logs, `"status":503`) {
+			t.Fatalf("в логе нет предупреждения о БД или строки запроса:\n%s", logs)
 		}
 	})
 }
 
 // Вне /api ошибки не обязаны быть problem+json — там нет API.
 func TestUnknownRouteOutsideAPI(t *testing.T) {
-	rec := do(t, NewRouter(discardLogger, closedPool(t)), http.MethodGet, "/nope")
+	rec := do(t, newRouter(t, discardLogger, closedPool(t)), http.MethodGet, "/nope")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("статус %d", rec.Code)
 	}

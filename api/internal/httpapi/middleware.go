@@ -58,6 +58,11 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			if status == 0 { // обработчик ничего не записал — net/http отдаст 200
 				status = http.StatusOK
 			}
+			// Успешные проверки доступности идут каждые несколько секунд
+			// и только засоряют лог; неуспешные пишем.
+			if r.URL.Path == healthzPath && status == http.StatusOK {
+				return
+			}
 			level := slog.LevelInfo
 			if status >= http.StatusInternalServerError {
 				level = slog.LevelError

@@ -5,3 +5,6 @@ generate:
   models: true
   chi-server: true
   strict-server: true
+  # Спецификация, встроенная в бинарник (GetSpec): по ней middleware
+  # проверяет входящие запросы.
+  embedded-spec: true

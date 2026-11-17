@@ -45,9 +45,14 @@ func run() error {
 	}
 	defer db.Close()
 
+	router, err := httpapi.NewRouter(logger, db)
+	if err != nil {
+		return err
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewRouter(logger, db),
+		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

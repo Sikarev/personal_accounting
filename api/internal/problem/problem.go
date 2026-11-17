@@ -65,9 +65,11 @@ func BadRequest(detail string) *Problem {
 	return New(http.StatusBadRequest, CodeBadRequest, detail)
 }
 
-// Validation — ошибка валидации с перечнем полей.
+// Validation — ошибка валидации с перечнем полей. Статус 422, а не 400:
+// запрос разобран, но данные не прошли проверку — клиент исправляет поля
+// из errors. 400 (bad_request) остаётся для запросов, которые не разобрать вовсе.
 func Validation(errs ...FieldError) *Problem {
-	p := New(http.StatusBadRequest, CodeValidationFailed, "Некорректные данные запроса.")
+	p := New(http.StatusUnprocessableEntity, CodeValidationFailed, "Некорректные данные запроса.")
 	p.Errors = errs
 	return p
 }

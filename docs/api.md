@@ -40,17 +40,17 @@
 
 ## Ошибки
 
-Все ошибки под `/api` — в формате [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) (Problem Details), `Content-Type: application/problem+json`. Это касается и неизвестных адресов, и неподдерживаемых методов, и ошибок разбора запроса.
+Все ошибки под `/api` — в формате [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) (Problem Details), `Content-Type: application/problem+json`. Это касается и неизвестных адресов, и неподдерживаемых методов, и ошибок разбора и проверки запроса.
 
 ```json
 {
   "type": "about:blank",
-  "title": "Bad Request",
-  "status": 400,
+  "title": "Unprocessable Entity",
+  "status": 422,
   "detail": "Некорректные данные запроса.",
   "code": "validation_failed",
   "errors": [
-    {"field": "amount", "code": "required", "message": "Укажите сумму."}
+    {"field": "amount", "code": "required", "message": "Обязательное поле."}
   ]
 }
 ```
@@ -64,32 +64,100 @@
 | `code` | **машиночитаемый код** — по нему клиент выбирает текст для пользователя |
 | `errors` | только при `validation_failed`: ошибки по полям |
 
-`errors[].field` — путь к полю в camelCase через точку (`amount`, `splits.0.amount`) или имя параметра запроса. Формат совпадает с путями полей в `@mantine/form`, ошибку можно сразу показать у поля.
+`errors[].field` — путь к полю в camelCase через точку (`amount`, `splits.0.amount`) или имя параметра запроса (`limit`). Формат совпадает с путями полей в `@mantine/form`, ошибку можно сразу показать у поля. `errors[].code` — вид нарушения: `required`, `invalid_type`, `invalid_value` (не из enum), `invalid_format`, `too_long`, `too_short`, `too_large`, `too_small`, `too_many_items`, `too_few_items`, `unknown_field`, `invalid` (прочее); сервисный слой добавляет свои.
 
 Коды ошибок (список расширяется; неизвестный код клиент обрабатывает по HTTP-статусу):
 
 | `code` | Статус | Когда |
 |---|---|---|
-| `bad_request` | 400 | запрос не удалось разобрать (невалидный JSON и т. п.) |
-| `validation_failed` | 400 | данные разобраны, но не прошли проверку; подробности в `errors` |
+| `bad_request` | 400 | запрос не удалось разобрать: невалидный JSON, тело там, где его быть не должно |
+| `validation_failed` | 422 | запрос разобран, но данные не прошли проверку; подробности в `errors` |
 | `not_found` | 404 | адрес или объект не найден (в т. ч. объект чужой семьи — не 403, чтобы не раскрывать факт существования) |
-| `method_not_allowed` | 405 | метод не поддерживается для адреса |
+| `method_not_allowed` | 405 | метод не поддерживается для адреса; список допустимых — в заголовке `Allow` |
 | `internal` | 500 | непредвиденная ошибка |
+
+**Почему 422, а не 400.** 400 — «запрос не понят»: это ошибка в клиентском коде, пользователю показать нечего. 422 — «понят, но данные не подходят»: клиент подсвечивает поля из `errors`. Разные статусы позволяют клиенту обрабатывать два случая по-разному, не разбирая тело. 422 возвращается для любых `validation_failed` — и от проверки по контракту, и от бизнес-правил.
 
 При 500 клиент получает только общий текст. Подробности (текст ошибки, SQL, стек) пишутся в лог вместе с request id. Request id сервер возвращает в заголовке `X-Request-Id` — по нему ошибку пользователя находят в логах. Клиент может прислать свой `X-Request-Id` (до 64 символов `A-Za-z0-9._-`), иначе сервер сгенерирует его сам.
 
+Если клиент сам отменил запрос (закрыл соединение), это не ошибка сервера: в лог пишется уровень info и статус 499.
+
 В Go ошибка с известным кодом — это `*problem.Problem` из `internal/problem`: обработчик возвращает её как обычную ошибку (`return nil, problem.NotFound("Счёт не найден.")`). Любая другая ошибка превращается в 500.
+
+## Проверка запросов
+
+Запрос проверяется в два слоя.
+
+**1. Контракт** — middleware `requestValidator` (kin-openapi) по спецификации, встроенной в бинарник (`oapi.GetSpec`). Срабатывает до обработчика, ответ — 422 `validation_failed` с `errors[]` по всем полям сразу (или 400, если тело не JSON). Проверяет всё, что выражается схемой:
+
+- обязательные поля и параметры (`required`);
+- типы, `enum`, `format` (`uuid`, `date`, `date-time`), `pattern`;
+- `minLength`/`maxLength`, `minimum`/`maximum`, `minItems`/`maxItems`;
+- лишние поля — **соглашение:** у каждого объекта в теле запроса `additionalProperties: false`, иначе опечатка в имени поля молча проигнорируется. Тест `TestContractRequestBodiesForbidAdditionalProperties` проверяет это для всего контракта;
+- тело у операции без `requestBody` — 400.
+
+Ответы по контракту не проверяются.
+
+**2. Сервисный слой** — всё, что зависит от данных и пользователя:
+
+- принадлежность семье: каждый запрос фильтрует по `family_id` из сессии; чужой объект — 404;
+- видимость личных счетов;
+- бизнес-правила: тип категории соответствует типу операции, глубина дерева категорий ≤ 2, у перевода разные счета, удаление счёта только без операций и т. п.
+
+Ошибки сервисного слоя — тоже `problem.Validation(...)` с полями (или `problem.NotFound`), формат для клиента один.
 
 ## Как добавить эндпоинт
 
 Все команды — из каталога `api/`.
 
-1. **Контракт.** Опиши операцию в `openapi.yaml`: `operationId` в camelCase (из него получится имя метода), схемы запроса и ответа в `components/schemas`, ответ `default: $ref: "#/components/responses/Problem"`.
-2. **Генерация сервера.** `go generate ./...` — обновит `internal/oapi/oapi.gen.go`. Сборка упадёт на строке `var _ oapi.StrictServerInterface = (*server)(nil)` в `internal/httpapi/server.go`, пока метод не реализован, — так и задумано.
-3. **SQL.** Добавь запрос в `internal/db/queries/<область>.sql` с аннотацией `-- name: GetAccount :one` (`:one`, `:many`, `:exec`). Каждый запрос к доменным таблицам фильтрует по `family_id`. Снова `go generate ./...` — sqlc обновит `internal/db/dbgen`.
-4. **Обработчик.** Реализуй метод `server` в `internal/httpapi/<область>.go`: вызови запрос из `s.q`, преобразуй строки БД в типы `oapi`, верни типизированный ответ (`oapi.GetAccount200JSONResponse{...}`) или ошибку (`*problem.Problem` либо любую другую → 500). Для пустых списков создавай срез через `make`, чтобы в JSON был `[]`, а не `null`.
-5. **Тест.** В `internal/httpapi/*_test.go`: роутер через `NewRouter(logger, testdb.Pool(t))`, запрос через `httptest`. Проверяй сырой JSON (имена полей), коды ошибок, изоляцию семей и видимость личных счетов.
+1. **Контракт.** Опиши операцию в `openapi.yaml`: `operationId` в camelCase (из него получится имя метода), схемы запроса и ответа в `components/schemas`, ответ `default: $ref: "#/components/responses/Problem"`. Всё, что можно выразить схемой, выражай в ней (`required`, `enum`, `maxLength`, `minimum`, `format`), у объектов тела — `additionalProperties: false`: эти проверки выполнит валидатор, в обработчике их не повторяй.
+2. **Генерация сервера.** `go generate ./...` — обновит `internal/oapi/oapi.gen.go` и встроенную спецификацию. Сборка упадёт на строке `var _ oapi.StrictServerInterface = (*server)(nil)` в `internal/httpapi/server.go`, пока метод не реализован, — так и задумано.
+3. **SQL.** Добавь запрос в `internal/db/queries/<область>.sql` с аннотацией `-- name: GetAccount :one` (`:one`, `:many`, `:exec`). Каждый запрос к доменным таблицам фильтрует по `family_id`. Снова `go generate ./...` — sqlc обновит `internal/db/dbgen`. Если удалил `.sql`-файл, удали и его `.sql.go` в `dbgen`: sqlc старые файлы не стирает.
+4. **Обработчик.** Реализуй метод `server` в `internal/httpapi/<область>.go`: проверь бизнес-правила, вызови запрос из `s.q` (несколько изменений — в транзакции, см. ниже), преобразуй строки БД в типы `oapi`, верни типизированный ответ (`oapi.GetAccount200JSONResponse{...}`) или ошибку (`*problem.Problem` либо любую другую → 500). Для пустых списков создавай срез через `make`, чтобы в JSON был `[]`, а не `null`.
+5. **Тест.** В `internal/httpapi/*_test.go`: роутер через `newRouter(t, logger, testdb.Pool(t))`, запрос через `httptest`. Проверяй сырой JSON (имена полей), коды ошибок, бизнес-правила, изоляцию семей и видимость личных счетов. Правила схемы отдельно тестировать не нужно — их покрывают тесты валидатора.
 6. **Проверка.** `gofmt -l .` (пусто), `go vet ./...`, `go test ./...`. Сгенерированный код коммитится вместе с изменением: CI проверяет, что `go generate ./...` не даёт diff.
+
+### Транзакции
+
+`server` хранит пул (`s.pool`) и запросы (`s.q`, `*dbgen.Queries`). Одиночный запрос — через `s.q`. Несколько изменений, которые должны примениться вместе (операция + запись в журнал изменений), — в транзакции:
+
+```go
+tx, err := s.pool.Begin(ctx)
+if err != nil {
+	return nil, err
+}
+// Rollback после Commit ничего не делает, поэтому defer безопасен:
+// при любом раннем return транзакция откатится.
+defer tx.Rollback(ctx)
+
+q := s.q.WithTx(tx) // те же запросы, но внутри транзакции
+if err := q.CreateTransaction(ctx, ...); err != nil {
+	return nil, err
+}
+if err := q.InsertAuditLog(ctx, ...); err != nil {
+	return nil, err
+}
+if err := tx.Commit(ctx); err != nil {
+	return nil, err
+}
+```
+
+## Соответствие типов
+
+| PostgreSQL | Go (sqlc, `dbgen`) | OpenAPI | Go (oapi-codegen, `oapi`) |
+|---|---|---|---|
+| `uuid` | `uuid.UUID` | `string, format: uuid` | `openapi_types.UUID` (= `uuid.UUID`) |
+| `bigint` (деньги) | `int64` | `integer, format: int64` | `int64` |
+| `integer` / `smallint` | `int32` / `int16` | `integer` | `int` (с `format: int32` — `int32`) |
+| `text`, `char(3)` | `string` | `string` | `string` |
+| `boolean` | `bool` | `boolean` | `bool` |
+| `date` | `time.Time` (полночь UTC) | `string, format: date` | `openapi_types.Date` — обёртка: `openapi_types.Date{Time: d}`, обратно `.Time` |
+| `timestamptz` | `time.Time` | `string, format: date-time` | `time.Time` |
+| `numeric` (курсы) | `pgtype.Numeric` | `string` (десятичная запись, без потери точности) | `string`; формат уточняется на этапе 4 |
+| enum (`account_type` и др.) | свой строковый тип (`dbgen.AccountType`) | `string, enum: [...]` | свой строковый тип в `oapi` — преобразование через `string(...)` |
+| NULL-колонка | указатель (`*string`, `*time.Time`, `*uuid.UUID`) | необязательное поле или `nullable: true` | указатель |
+
+`date` переопределён на `time.Time` (а не `pgtype.Date`), потому что `openapi_types.Date` — тоже обёртка над `time.Time`: преобразование — одна строка без проверки `Valid`. Переопределения — в `api/sqlc.yaml`.
 
 ## Инструменты генерации
 
@@ -97,9 +165,13 @@
 
 | Инструмент | Конфиг | Результат |
 |---|---|---|
-| `oapi-codegen` (strict server для chi) | `internal/oapi/oapi-codegen.yaml` | `internal/oapi/oapi.gen.go` |
+| `oapi-codegen` (strict server для chi + встроенная спецификация) | `internal/oapi/oapi-codegen.yaml` | `internal/oapi/oapi.gen.go` |
 | `sqlc` (pgx/v5) | `sqlc.yaml`; схема — прямо из `migrations/` | `internal/db/dbgen/` |
 
 `sqlc` на Windows работает без gcc: при сборке без cgo он использует парсер Postgres, скомпилированный в WebAssembly (`wasilibs/go-pgquery`). CI запускает генерацию так же (`CGO_ENABLED=0`).
 
-Типы sqlc: `uuid` → `uuid.UUID` (`*uuid.UUID` для NULL), `timestamptz` → `time.Time` (`*time.Time`), прочие NULL-колонки — указатели.
+## Прочее
+
+- `HEAD` на любой ресурс с `GET` работает (chi `middleware.GetHead`), ответ 405 содержит заголовок `Allow`.
+- `middleware.RealIP` намеренно не подключён: он безусловно доверяет `X-Forwarded-For`, и клиент мог бы подменить свой IP. Вернётся на этапе 1 вместе с ограничением частоты запросов и списком доверенных прокси.
+- Успешные `GET /healthz` не пишутся в лог запросов (их шлёт балансировщик каждые несколько секунд); неуспешные пишутся, причина отказа БД — отдельной строкой уровня warn.

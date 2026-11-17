@@ -378,7 +378,7 @@ type EmailToken struct {
 
 type ExchangeRate struct {
 	CurrencyCode string
-	RateDate     pgtype.Date
+	RateDate     time.Time
 	Rate         pgtype.Numeric
 }
 
@@ -428,7 +428,7 @@ type Transaction struct {
 	ToAccountID *uuid.UUID
 	ToAmount    *int64
 	CategoryID  *uuid.UUID
-	OpDate      pgtype.Date
+	OpDate      time.Time
 	Comment     string
 	CreatedBy   *uuid.UUID
 	CreatedAt   time.Time

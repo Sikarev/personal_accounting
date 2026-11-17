@@ -157,9 +157,9 @@ func TestTransactionKindShape(t *testing.T) {
 		{"перевод на тот же счёт", tx{kind: "transfer", accountID: f.account, amount: -100, toAccountID: &f.account, toAmount: ptr[int64](100)}},
 		{"перевод с категорией", tx{kind: "transfer", accountID: f.account, amount: -100, toAccountID: &f.account2, toAmount: ptr[int64](100), categoryID: &f.expenseCat}},
 		{"корректировка на ноль", tx{kind: "adjustment", accountID: f.account, amount: 0}},
-		// TODO: перевод с to_amount = NULL сейчас проходит: в CHECK условие
-		// «to_amount > 0» при NULL даёт NULL, а CHECK пропускает NULL. Нужна миграция
-		// с «to_amount IS NOT NULL»; после неё добавить сюда этот случай.
+		// Регрессия, исправленная миграцией 00002: «to_amount > 0» при NULL даёт NULL,
+		// а CHECK пропускает NULL.
+		{"перевод без суммы зачисления", tx{kind: "transfer", accountID: f.account, amount: -100, toAccountID: &f.account2}},
 	}
 	for _, c := range invalid {
 		t.Run("отклоняется/"+c.name, func(t *testing.T) {

@@ -1,0 +1,5 @@
+# В рабочей копии всегда LF, даже на Windows с core.autocrlf=true:
+# gofmt считает CRLF ошибкой форматирования, а генераторы (sqlc, oapi-codegen)
+# пишут LF — иначе проверки «gofmt -l» и «сгенерированный код актуален» расходились бы
+# между Windows и CI.
+* text=auto eol=lf

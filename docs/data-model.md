@@ -1,6 +1,6 @@
 # Модель данных
 
-Схема: [`api/migrations/00001_init.sql`](../api/migrations/00001_init.sql). PostgreSQL 18.
+Схема: миграции в [`api/migrations/`](../api/migrations/), начальная — [`00001_init.sql`](../api/migrations/00001_init.sql). PostgreSQL 18.
 
 ```mermaid
 erDiagram

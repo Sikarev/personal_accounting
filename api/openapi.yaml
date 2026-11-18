@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Домашняя бухгалтерия API
+  version: 1.0.0
+  description: |
+    Контракт HTTP API. Соглашения (ошибки, деньги, даты, пагинация) — в docs/api.md.
+
+    Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
+    `/currencies` обслуживается по адресу `/api/v1/currencies`.
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: reference
+    description: Справочники
+
+paths:
+  /currencies:
+    get:
+      operationId: listCurrencies
+      summary: Список активных валют
+      description: Валюты, доступные для новых счетов. Публичный справочник, авторизация не нужна.
+      tags: [reference]
+      responses:
+        "200":
+          description: Активные валюты, отсортированные по коду.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrencyList"
+        default:
+          $ref: "#/components/responses/Problem"
+
+components:
+  responses:
+    Problem:
+      description: Ошибка в формате RFC 9457 (Problem Details).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      description: |
+        Ошибка в формате RFC 9457. Клиент выбирает текст для пользователя по `code`;
+        `detail` — пояснение для разработчика и запасной вариант.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          description: URI типа ошибки. Пока всегда `about:blank`.
+          example: about:blank
+        title:
+          type: string
+          description: Краткое описание по HTTP-статусу.
+          example: Not Found
+        status:
+          type: integer
+          description: HTTP-статус (дублирует статус ответа).
+          example: 404
+        detail:
+          type: string
+          description: Пояснение к конкретному случаю.
+        code:
+          type: string
+          description: |
+            Машиночитаемый код ошибки. Список может расширяться — неизвестный код
+            клиент обрабатывает по HTTP-статусу. Известные значения:
+            `bad_request`, `validation_failed`, `not_found`, `method_not_allowed`, `internal`.
+          example: not_found
+        errors:
+          type: array
+          description: Ошибки по полям; только при `code = validation_failed`.
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+    FieldError:
+      type: object
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: |
+            Путь к полю в camelCase через точку (`amount`, `splits.0.amount`)
+            или имя параметра запроса.
+          example: amount
+        code:
+          type: string
+          description: Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
+          example: required
+        message:
+          type: string
+          description: Пояснение на русском.
+
+    Currency:
+      type: object
+      required: [code, name, symbol, minorUnits]
+      properties:
+        code:
+          type: string
+          description: Код ISO 4217.
+          pattern: "^[A-Z]{3}$"
+          example: RUB
+        name:
+          type: string
+          example: Российский рубль
+        symbol:
+          type: string
+          example: ₽
+        minorUnits:
+          type: integer
+          description: Число знаков после запятой. Суммы в этой валюте передаются в 10^minorUnits раз больше.
+          example: 2
+
+    CurrencyList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Currency"

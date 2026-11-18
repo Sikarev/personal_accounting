@@ -1,0 +1,9 @@
+.root {
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-md);
+}
+
+.description {
+  /* Короткие строки читаются легче, чем текст на всю ширину desktop. */
+  max-width: 36ch;
+  text-wrap: pretty;
+}

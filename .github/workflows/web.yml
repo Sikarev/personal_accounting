@@ -1,0 +1,67 @@
+name: web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'web/**'
+      - '.github/workflows/web.yml'
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Как в README: corepack ставит версию pnpm из поля packageManager в web/package.json.
+      - run: corepack enable
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Линтер
+        run: pnpm lint
+
+      - name: Форматирование
+        run: pnpm format:check
+
+      - name: Сборка (tsc + vite)
+        run: pnpm build
+
+      - name: Юнит-тесты
+        run: pnpm test
+
+      - name: Сборка Storybook
+        run: pnpm build-storybook
+
+      - name: Браузер для Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Скриншотные тесты (@visual) в CI не запускаются: эталоны сняты на Windows
+      # и на Linux отличаются рендерингом шрифтов. Доступность от ОС не зависит.
+      - name: Проверка доступности (axe)
+        run: pnpm test:a11y
+
+      - name: Отчёт Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 7

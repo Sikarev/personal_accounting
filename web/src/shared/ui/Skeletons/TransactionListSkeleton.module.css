@@ -1,0 +1,63 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-block: var(--mantine-spacing-sm);
+}
+
+/* Высоты полос равны высоте строки текста соответствующего размера. */
+.headerDate {
+  width: 6rem;
+  height: var(--mantine-font-size-sm);
+}
+
+.headerTotal {
+  width: 4rem;
+  height: var(--mantine-font-size-sm);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding-block: var(--mantine-spacing-sm);
+}
+
+.icon {
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.title {
+  height: var(--mantine-font-size-md);
+}
+
+.meta {
+  height: var(--mantine-font-size-xs);
+}
+
+.amount {
+  flex: none;
+  height: var(--mantine-font-size-md);
+}

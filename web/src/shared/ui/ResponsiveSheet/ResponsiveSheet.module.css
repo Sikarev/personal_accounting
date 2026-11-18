@@ -1,0 +1,31 @@
+/* Bottom sheet по высоте содержимого: скруглены только верхние углы,
+   сверху остаётся полоска затемнённого экрана — видно, что это панель поверх него. */
+.sheet {
+  border-start-start-radius: var(--mantine-radius-xl);
+  border-start-end-radius: var(--mantine-radius-xl);
+  /* Mantine задаёт bottom-drawer фиксированную высоту; нам нужна по содержимому. */
+  height: auto;
+  max-height: calc(100dvh - var(--mantine-spacing-xl) - env(safe-area-inset-top));
+}
+
+/* На всю высоту — без скруглений, как отдельный экран; отступ под «чёлку» телефона. */
+.sheetFull {
+  padding-top: env(safe-area-inset-top);
+}
+
+.header {
+  padding: var(--mantine-spacing-md);
+  padding-inline-start: var(--mantine-spacing-lg);
+}
+
+.title {
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 600;
+  line-height: var(--mantine-line-height-lg);
+}
+
+.body {
+  padding: 0 var(--mantine-spacing-lg) var(--mantine-spacing-lg);
+  /* Контент не уходит под системную полоску «домой» на iPhone. */
+  padding-bottom: calc(var(--mantine-spacing-lg) + env(safe-area-inset-bottom));
+}

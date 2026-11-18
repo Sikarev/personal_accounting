@@ -1,0 +1,23 @@
+.undo {
+  flex: none;
+  position: relative;
+  font-weight: 600;
+  /* У Mantine Button overflow: hidden — он обрезал бы расширенную зону касания ниже. */
+  overflow: visible;
+}
+
+/* Кнопка визуально компактная, но зона касания — не меньше 44 px (ux.md, раздел 6). */
+.undo::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: max(100%, var(--app-touch-target));
+  height: max(100%, var(--app-touch-target));
+  transform: translate(-50%, -50%);
+}
+
+/* Подсказка о сочетании — второстепенная, не спорит с подписью кнопки. */
+.kbd {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}

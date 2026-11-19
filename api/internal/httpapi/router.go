@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"personal-accounting/api/internal/oapi"
+	"personal-accounting/api/internal/problem"
+	"personal-accounting/api/internal/ratelimit"
 )
 
 const (
@@ -22,23 +25,103 @@ const (
 	apiPrefix = "/api/v1"
 )
 
+// Options — настройки роутера. Нулевое значение годится для тестов
+// и разработки: cookie без Secure, прокси не доверяем, лимиты по умолчанию.
+type Options struct {
+	// CookieSecure — флаг Secure у cookie сессии (в production — true).
+	CookieSecure bool
+	// TrustedProxies — прокси, которым доверяем X-Forwarded-For (см. clientIP).
+	TrustedProxies []netip.Prefix
+	// CSRFTrustedOrigins — origin, с которых разрешены кросс-доменные запросы,
+	// меняющие данные, например "http://localhost:5173".
+	CSRFTrustedOrigins []string
+	// Now — источник времени; nil — time.Now. Тесты подменяют его, чтобы
+	// проверить истечение сессий и окна лимитов без ожидания.
+	Now func() time.Time
+	// Limits — лимиты частоты; нулевые поля заменяются значениями по умолчанию.
+	Limits Limits
+}
+
+// Limits — ограничения частоты запросов (в памяти процесса).
+type Limits struct {
+	// AuthPerIP — запросы к регистрации и входу с одного IP.
+	AuthPerIP ratelimit.Rule
+	// LoginPerEmailIP — попытки входа в один аккаунт с одного IP (IPv6 — сеть /64).
+	// Успешный вход сбрасывает счёт.
+	LoginPerEmailIP ratelimit.Rule
+	// LoginFailuresPerEmail — неудачные попытки входа в один аккаунт со всех
+	// адресов вместе: защита от распределённого перебора. Успешный вход его не сбрасывает.
+	LoginFailuresPerEmail ratelimit.Rule
+}
+
+// defaultLimits — лимиты по умолчанию (docs/api.md, «Ограничение частоты»).
+var defaultLimits = Limits{
+	AuthPerIP:             ratelimit.Rule{Limit: 20, Window: time.Minute},
+	LoginPerEmailIP:       ratelimit.Rule{Limit: 5, Window: 15 * time.Minute},
+	LoginFailuresPerEmail: ratelimit.Rule{Limit: 50, Window: time.Hour},
+}
+
+// authRateLimitedOps — операции (operationId), к которым применяется лимит AuthPerIP.
+var authRateLimitedOps = map[string]bool{"register": true, "login": true}
+
+func (o Options) withDefaults() Options {
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	if o.Limits.AuthPerIP.Limit == 0 {
+		o.Limits.AuthPerIP = defaultLimits.AuthPerIP
+	}
+	if o.Limits.LoginPerEmailIP.Limit == 0 {
+		o.Limits.LoginPerEmailIP = defaultLimits.LoginPerEmailIP
+	}
+	if o.Limits.LoginFailuresPerEmail.Limit == 0 {
+		o.Limits.LoginFailuresPerEmail = defaultLimits.LoginFailuresPerEmail
+	}
+	return o
+}
+
 // NewRouter возвращает http.Handler со всеми маршрутами.
-// Зависимости (логгер, пул БД) передаются явно — без глобальных переменных.
-func NewRouter(logger *slog.Logger, db *pgxpool.Pool) (http.Handler, error) {
+// Зависимости (логгер, пул БД, настройки) передаются явно — без глобальных переменных.
+func NewRouter(logger *slog.Logger, db *pgxpool.Pool, opts Options) (http.Handler, error) {
+	opts = opts.withDefaults()
+
 	// Спецификация встроена в бинарник при генерации (oapi.GetSpec);
-	// по ней валидатор проверяет запросы.
+	// по ней валидатор проверяет запросы, а authenticate узнаёт,
+	// какие операции публичные.
 	spec, err := oapi.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("загрузка встроенной спецификации: %w", err)
 	}
+	routes := newSpecRoutes(spec, apiPrefix)
+
+	// Защита от CSRF из стандартной библиотеки (Go 1.25+). Запросы, меняющие
+	// данные (POST, PUT, PATCH, DELETE), пропускаются, только если браузер
+	// подтверждает, что они со страницы того же origin: Sec-Fetch-Site: same-origin
+	// или (в старых браузерах) Origin совпадает с Host. Запросы без этих
+	// заголовков (curl, серверные клиенты) не из браузера — их тоже пропускаем.
+	csrf := http.NewCrossOriginProtection()
+	for _, origin := range opts.CSRFTrustedOrigins {
+		if err := csrf.AddTrustedOrigin(origin); err != nil {
+			return nil, fmt.Errorf("CSRF_TRUSTED_ORIGINS: %w", err)
+		}
+	}
+	csrf.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		problem.Write(w, problem.ForbiddenOrigin())
+	}))
+
+	srv := newServer(db, opts)
+	authIPLimiter := ratelimit.New(opts.Limits.AuthPerIP, opts.Now)
 
 	r := chi.NewRouter()
-	// Порядок важен: логгер оборачивает recoverer, поэтому запрос,
-	// закончившийся паникой, попадает в лог со статусом 500.
+	// Порядок важен:
+	// - withClientInfo первым — реальный IP нужен уже логгеру;
+	// - логгер оборачивает recoverer, поэтому запрос, закончившийся паникой,
+	//   попадает в лог со статусом 500.
 	//
-	// middleware.RealIP намеренно не используется: он безусловно доверяет
-	// X-Forwarded-For, и клиент мог бы подменить свой IP. Вернётся на этапе 1
-	// вместе с ограничением частоты запросов и списком доверенных прокси.
+	// middleware.RealIP из chi не используется: он безусловно доверяет
+	// X-Forwarded-For. Свой withClientInfo верит заголовку только от
+	// доверенных прокси (TRUSTED_PROXIES).
+	r.Use(withClientInfo(opts.TrustedProxies))
 	r.Use(requestID)
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
@@ -50,6 +133,7 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool) (http.Handler, error) {
 	// Всё под /api отвечает ошибками в формате problem+json,
 	// в том числе на неизвестные адреса и неподдерживаемые методы.
 	r.Route("/api", func(api chi.Router) {
+		api.Use(csrf.Handler)
 		// NotFound/MethodNotAllowed задаём до Route("/v1"): chi копирует их
 		// во вложенный роутер в момент монтирования.
 		api.NotFound(notFound)
@@ -58,15 +142,22 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool) (http.Handler, error) {
 		api.Route("/v1", func(v1 chi.Router) {
 			// Strict-сервер сам разбирает запрос и вызывает наш метод с готовой
 			// структурой; мы возвращаем типизированный ответ или ошибку.
-			strict := oapi.NewStrictHandlerWithOptions(newServer(db), nil, oapi.StrictHTTPServerOptions{
+			strict := oapi.NewStrictHandlerWithOptions(srv, nil, oapi.StrictHTTPServerOptions{
 				RequestErrorHandlerFunc:  requestErrorHandler,
 				ResponseErrorHandlerFunc: responseErrorHandler(logger),
 			})
 			oapi.HandlerWithOptions(strict, oapi.ChiServerOptions{
 				BaseRouter:       v1,
 				ErrorHandlerFunc: paramErrorHandler,
-				// Проверка по контракту — до разбора запроса strict-сервером.
-				Middlewares: []oapi.MiddlewareFunc{requestValidator(logger, spec, apiPrefix)},
+				// Сгенерированный код оборачивает обработчик по порядку списка,
+				// поэтому последний элемент выполняется первым. Порядок выполнения:
+				// сессия (401) → лимит частоты (429) → проверка по контракту (422) →
+				// разбор запроса strict-сервером → обработчик.
+				Middlewares: []oapi.MiddlewareFunc{
+					requestValidator(logger, routes),
+					rateLimitByIP(routes, authIPLimiter, authRateLimitedOps),
+					srv.authenticate(logger, routes),
+				},
 			})
 		})
 	})

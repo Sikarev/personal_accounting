@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"runtime/debug"
 	"time"
@@ -73,9 +74,17 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				slog.Int("status", status),
 				slog.Float64("duration_ms", float64(time.Since(start).Microseconds())/1000),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
+				slog.String("ip", ipString(clientInfoFrom(r.Context()).IP)),
 			)
 		})
 	}
+}
+
+func ipString(a netip.Addr) string {
+	if !a.IsValid() {
+		return ""
+	}
+	return a.String()
 }
 
 // recoverer перехватывает панику в обработчике: пишет её со стеком в лог

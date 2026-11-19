@@ -24,7 +24,7 @@ var discardLogger = slog.New(slog.DiscardHandler)
 
 func newRouter(t *testing.T, logger *slog.Logger, pool *pgxpool.Pool) http.Handler {
 	t.Helper()
-	h, err := NewRouter(logger, pool)
+	h, err := NewRouter(logger, pool, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

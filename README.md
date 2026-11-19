@@ -88,6 +88,15 @@ go test ./...       # нужен запущенный Postgres (docker compose u
 
 Тесты работают с настоящим Postgres: каждый тестовый пакет создаёт себе временную БД со случайным именем на сервере из `TEST_DATABASE_URL` (по умолчанию — Postgres из `docker-compose.yml`), применяет миграции и удаляет БД после тестов. Если Postgres не запущен, тесты падают с подсказкой.
 
+## Фронтенд: клиент API
+
+```bash
+cd web
+pnpm generate:api   # ../api/openapi.yaml → src/shared/api/generated (orval)
+```
+
+Запускай после каждого изменения контракта `api/openapi.yaml`. Сгенерированный код коммитится; CI проверяет, что он актуален.
+
 ## Миграции
 
 ```bash

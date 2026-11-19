@@ -67,6 +67,10 @@ export const ru = {
     checking: 'API: проверка…',
     ok: 'API: работает',
     unavailable: 'API недоступен',
+    // Второй бейдж — проверка связки «контракт → клиент orval → API → Postgres».
+    currenciesChecking: 'Валюты: загрузка…',
+    currenciesError: 'Валюты: ошибка',
+    currencies: { one: 'валюта', few: 'валюты', many: 'валют' },
   },
 } as const
 

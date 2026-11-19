@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - 'web/**'
+      - 'api/openapi.yaml' # из контракта генерируется клиент API
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'web/**'
+      - 'api/openapi.yaml'
       - '.github/workflows/web.yml'
 
 concurrency:
@@ -34,6 +36,14 @@ jobs:
       - run: corepack enable
 
       - run: pnpm install --frozen-lockfile
+
+      # Сгенерированный клиент коммитится. Если контракт изменили, а `pnpm generate:api`
+      # не запустили, — здесь будет diff. `git status` ловит и новые, неотслеживаемые файлы.
+      - name: Клиент API актуален
+        run: |
+          pnpm generate:api
+          git status --porcelain -- src/shared/api/generated
+          test -z "$(git status --porcelain -- src/shared/api/generated)"
 
       - name: Линтер
         run: pnpm lint

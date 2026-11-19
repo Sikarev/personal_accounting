@@ -82,9 +82,10 @@ paths:
       summary: Вход по e-mail и паролю
       description: |
         Неверный e-mail и неверный пароль дают один и тот же ответ —
-        401 `invalid_credentials`. После 5 неудачных попыток за 15 минут
-        для этого e-mail, как и после 20 запросов в минуту с одного IP, —
-        429 `too_many_requests` с заголовком `Retry-After`.
+        401 `invalid_credentials`. При превышении лимитов — 429 `too_many_requests`
+        с заголовком `Retry-After`: 5 попыток за 15 минут для пары «e-mail + IP»,
+        50 неудачных попыток в час для e-mail со всех адресов, 20 запросов
+        в минуту с одного IP.
       tags: [auth]
       security: []
       requestBody:

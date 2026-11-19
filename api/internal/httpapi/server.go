@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,11 +22,14 @@ type server struct {
 
 	now          func() time.Time // источник времени; в тестах подменяется
 	cookieSecure bool
-	// loginAttempts — попытки входа по e-mail (лимит неудачных попыток).
+	// loginAttempts — попытки входа по ключу «e-mail + IP» (см. Login).
 	loginAttempts *ratelimit.Limiter
+	// loginFailures — неудачные попытки входа по e-mail со всех адресов.
+	loginFailures *ratelimit.Limiter
 	// dummyHash — хеш для проверки пароля, когда пользователя нет (см. checkPassword).
-	// sync.OnceValue считает его один раз при первом вызове, а не при старте.
-	dummyHash func() string
+	// Считается сразу при создании сервера: если считать лениво, первый вход
+	// с несуществующим e-mail был бы дольше остальных и выдавал бы это по времени.
+	dummyHash string
 }
 
 // Проверка на этапе компиляции: если в контракте появилась операция,
@@ -40,9 +42,8 @@ func newServer(pool *pgxpool.Pool, opts Options) *server {
 		q:             dbgen.New(pool),
 		now:           opts.Now,
 		cookieSecure:  opts.CookieSecure,
-		loginAttempts: ratelimit.New(opts.Limits.LoginPerEmail, opts.Now),
-		dummyHash: sync.OnceValue(func() string {
-			return auth.HashPassword("dummy password for timing equalization")
-		}),
+		loginAttempts: ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
+		loginFailures: ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
+		dummyHash:     auth.HashPassword("dummy password for timing equalization"),
 	}
 }

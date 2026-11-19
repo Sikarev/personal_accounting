@@ -62,7 +62,7 @@ func testValidatorRouter(t *testing.T) http.Handler {
 	}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(v1 chi.Router) {
-		v1.With(requestValidator(discardLogger, doc, apiPrefix)).
+		v1.With(requestValidator(discardLogger, newSpecRoutes(doc, apiPrefix))).
 			Post("/things/{thingId}", func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
 			})

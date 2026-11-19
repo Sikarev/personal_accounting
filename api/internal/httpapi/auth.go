@@ -38,9 +38,13 @@ func (s *server) Register(ctx context.Context, req oapi.RegisterRequestObject) (
 
 	// Длины, формат e-mail и acceptTerms = true проверил валидатор контракта.
 	// Здесь — то, что схемой не выразить.
+	// Управляющие символы в e-mail отклоняет уже валидатор контракта (format: email).
 	var errs []problem.FieldError
-	if name == "" {
+	switch {
+	case name == "":
 		errs = append(errs, problem.FieldError{Field: "name", Code: "required", Message: "Укажите имя."})
+	case hasControlChars(name):
+		errs = append(errs, problem.FieldError{Field: "name", Code: "invalid_format", Message: "Имя содержит недопустимые символы."})
 	}
 	if !validTimezone(b.Timezone) {
 		errs = append(errs, problem.FieldError{Field: "timezone", Code: "invalid_value", Message: "Неизвестный часовой пояс."})
@@ -114,11 +118,20 @@ func (s *server) Register(ctx context.Context, req oapi.RegisterRequestObject) (
 func (s *server) Login(ctx context.Context, req oapi.LoginRequestObject) (oapi.LoginResponseObject, error) {
 	email := normalizeEmail(req.Body.Email)
 
-	// Лимит неудачных попыток на e-mail. Попытка учитывается до проверки пароля,
-	// а успешный вход сбрасывает счёт: так параллельные запросы не проскочат
-	// лимит, пока идёт медленная проверка хеша. Несуществующие e-mail считаются
-	// так же — по ответу не понять, есть ли аккаунт.
-	if retry, ok := s.loginAttempts.Allow(email); !ok {
+	// Два лимита (docs/api.md, «Ограничение частоты»). Несуществующие e-mail
+	// считаются так же, как существующие, — по ответу не понять, есть ли аккаунт.
+	//
+	// 1. Неудачные попытки на e-mail со всех адресов — защита от распределённого
+	//    перебора. Учитываются только неудачи, успешный вход счёт не сбрасывает.
+	if retry, ok := s.loginFailures.Check(email); !ok {
+		return nil, problem.TooManyRequests(retry)
+	}
+	// 2. Попытки на «e-mail + IP». Ключ включает IP, чтобы посторонний не мог
+	//    заблокировать владельцу вход неверными паролями со своего адреса.
+	//    Попытка учитывается до проверки пароля, а успешный вход сбрасывает счёт:
+	//    так параллельные запросы не проскочат лимит, пока считается хеш.
+	attemptKey := email + " " + rateLimitKey(clientInfoFrom(ctx).IP)
+	if retry, ok := s.loginAttempts.Allow(attemptKey); !ok {
 		return nil, problem.TooManyRequests(retry)
 	}
 
@@ -127,9 +140,10 @@ func (s *server) Login(ctx context.Context, req oapi.LoginRequestObject) (oapi.L
 		return nil, err
 	}
 	if !ok {
+		s.loginFailures.Add(email)
 		return nil, problem.InvalidCredentials()
 	}
-	s.loginAttempts.Reset(email)
+	s.loginAttempts.Reset(attemptKey)
 
 	m, err := s.q.GetMembership(ctx, userID)
 	if err != nil {
@@ -163,7 +177,7 @@ func (s *server) Login(ctx context.Context, req oapi.LoginRequestObject) (oapi.L
 func (s *server) checkPassword(ctx context.Context, email, password string) (uuid.UUID, bool, error) {
 	row, err := s.q.GetUserCredentialsByEmail(ctx, email)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && row.PasswordHash == nil) {
-		_, _ = auth.VerifyPassword(s.dummyHash(), password)
+		_, _ = auth.VerifyPassword(s.dummyHash, password)
 		return uuid.Nil, false, nil
 	}
 	if err != nil {

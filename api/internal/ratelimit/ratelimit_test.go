@@ -62,3 +62,21 @@ func TestOldKeysAreSwept(t *testing.T) {
 		t.Fatalf("после уборки ключей %d, ожидался 1", l.Len())
 	}
 }
+
+// Check не учитывает событие, Add учитывает без проверки.
+func TestCheckAndAdd(t *testing.T) {
+	c := &clock{t: time.Date(2026, 11, 19, 12, 0, 0, 0, time.UTC)}
+	l := New(Rule{Limit: 2, Window: time.Minute}, c.now)
+	for range 5 {
+		if _, ok := l.Check("a"); !ok {
+			t.Fatal("Check учёл событие")
+		}
+	}
+	l.Add("a")
+	c.t = c.t.Add(20 * time.Second)
+	l.Add("a")
+	retry, ok := l.Check("a")
+	if ok || retry != 40*time.Second {
+		t.Fatalf("после двух Add: ok=%v retry=%v", ok, retry)
+	}
+}

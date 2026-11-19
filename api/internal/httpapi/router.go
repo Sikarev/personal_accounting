@@ -46,14 +46,19 @@ type Options struct {
 type Limits struct {
 	// AuthPerIP — запросы к регистрации и входу с одного IP.
 	AuthPerIP ratelimit.Rule
-	// LoginPerEmail — попытки входа в один аккаунт (успешный вход сбрасывает счёт).
-	LoginPerEmail ratelimit.Rule
+	// LoginPerEmailIP — попытки входа в один аккаунт с одного IP (IPv6 — сеть /64).
+	// Успешный вход сбрасывает счёт.
+	LoginPerEmailIP ratelimit.Rule
+	// LoginFailuresPerEmail — неудачные попытки входа в один аккаунт со всех
+	// адресов вместе: защита от распределённого перебора. Успешный вход его не сбрасывает.
+	LoginFailuresPerEmail ratelimit.Rule
 }
 
 // defaultLimits — лимиты по умолчанию (docs/api.md, «Ограничение частоты»).
 var defaultLimits = Limits{
-	AuthPerIP:     ratelimit.Rule{Limit: 20, Window: time.Minute},
-	LoginPerEmail: ratelimit.Rule{Limit: 5, Window: 15 * time.Minute},
+	AuthPerIP:             ratelimit.Rule{Limit: 20, Window: time.Minute},
+	LoginPerEmailIP:       ratelimit.Rule{Limit: 5, Window: 15 * time.Minute},
+	LoginFailuresPerEmail: ratelimit.Rule{Limit: 50, Window: time.Hour},
 }
 
 // authRateLimitedOps — операции (operationId), к которым применяется лимит AuthPerIP.
@@ -66,8 +71,11 @@ func (o Options) withDefaults() Options {
 	if o.Limits.AuthPerIP.Limit == 0 {
 		o.Limits.AuthPerIP = defaultLimits.AuthPerIP
 	}
-	if o.Limits.LoginPerEmail.Limit == 0 {
-		o.Limits.LoginPerEmail = defaultLimits.LoginPerEmail
+	if o.Limits.LoginPerEmailIP.Limit == 0 {
+		o.Limits.LoginPerEmailIP = defaultLimits.LoginPerEmailIP
+	}
+	if o.Limits.LoginFailuresPerEmail.Limit == 0 {
+		o.Limits.LoginFailuresPerEmail = defaultLimits.LoginFailuresPerEmail
 	}
 	return o
 }
@@ -146,7 +154,7 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool, opts Options) (http.Handle
 				// сессия (401) → лимит частоты (429) → проверка по контракту (422) →
 				// разбор запроса strict-сервером → обработчик.
 				Middlewares: []oapi.MiddlewareFunc{
-					requestValidator(logger, spec, apiPrefix),
+					requestValidator(logger, routes),
 					rateLimitByIP(routes, authIPLimiter, authRateLimitedOps),
 					srv.authenticate(logger, routes),
 				},

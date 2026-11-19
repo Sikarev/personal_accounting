@@ -604,40 +604,110 @@ func TestAuthRateLimitByIP(t *testing.T) {
 	}
 }
 
-func TestLoginRateLimitByEmail(t *testing.T) {
+func TestLoginRateLimitByEmailAndIP(t *testing.T) {
 	e := newAuthEnv(t, Options{})
 	email := uniqueEmail()
 	e.register(t, email)
+	const attacker, owner = "198.51.100.66:1000", "203.0.113.10:1000"
 
 	// Успешный вход сбрасывает счёт: 4 ошибки + успех + 4 ошибки — без 429.
 	for range 4 {
-		e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"))
+		e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"), withRemote(attacker))
 	}
-	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword)); rec.Code != http.StatusOK {
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), withRemote(attacker)); rec.Code != http.StatusOK {
 		t.Fatalf("вход: %d %s", rec.Code, rec.Body)
 	}
 
-	// 5 неудачных попыток с разных адресов — дальше 429 даже с верным паролем.
-	for i := range 5 {
-		rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"),
-			withRemote("198.51.100."+strconv.Itoa(i+10)+":1000"))
+	// 5 неудачных попыток с одного адреса — дальше с него 429 даже с верным паролем.
+	for range 5 {
+		rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"), withRemote(attacker))
 		decodeProblem(t, rec, http.StatusUnauthorized, "invalid_credentials")
 	}
 	e.clock.Advance(time.Minute)
-	rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(strings.ToUpper(email), testPassword))
+	rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(strings.ToUpper(email), testPassword), withRemote(attacker))
 	decodeProblem(t, rec, http.StatusTooManyRequests, "too_many_requests")
 	if ra := rec.Header().Get("Retry-After"); ra != strconv.Itoa(int((14 * time.Minute).Seconds())) {
 		t.Fatalf("Retry-After = %q", ra)
 	}
-	// Лимит по e-mail не задевает другие аккаунты.
-	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(uniqueEmail(), "x")); rec.Code != http.StatusUnauthorized {
+
+	// Владелец с другого адреса входит: блокировка с чужого IP ему не мешает.
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), withRemote(owner)); rec.Code != http.StatusOK {
+		t.Fatalf("вход с другого IP: %d %s", rec.Code, rec.Body)
+	}
+	// IPv6 из той же /64 — тот же ключ.
+	for range 5 {
+		e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"), withRemote("[2001:db8:1:2::1]:1000"))
+	}
+	rec = e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), withRemote("[2001:db8:1:2::ffff]:1000"))
+	decodeProblem(t, rec, http.StatusTooManyRequests, "too_many_requests")
+
+	e.clock.Advance(14 * time.Minute)
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), withRemote(attacker)); rec.Code != http.StatusOK {
+		t.Fatalf("после окна: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Общий лимит неудач на e-mail срабатывает при переборе с многих адресов
+// и не сбрасывается успешным входом.
+func TestLoginFailuresPerEmailAcrossIPs(t *testing.T) {
+	e := newAuthEnv(t, Options{Limits: Limits{LoginFailuresPerEmail: ratelimit.Rule{Limit: 6, Window: time.Hour}}})
+	email := uniqueEmail()
+	e.register(t, email)
+	from := func(i int) reqOption { return withRemote("198.51.100." + strconv.Itoa(i) + ":1000") }
+
+	for i := range 3 {
+		e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"), from(i))
+	}
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), from(100)); rec.Code != http.StatusOK {
+		t.Fatalf("вход до лимита: %d", rec.Code)
+	}
+	for i := 3; i < 6; i++ {
+		decodeProblem(t, e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "wrong password"), from(i)),
+			http.StatusUnauthorized, "invalid_credentials")
+	}
+	// 6 неудач с 6 адресов (успех между ними счёт не сбросил) — блокируется любой адрес.
+	rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), from(200))
+	decodeProblem(t, rec, http.StatusTooManyRequests, "too_many_requests")
+	if rec.Header().Get("Retry-After") == "" {
+		t.Fatal("нет Retry-After")
+	}
+	// Другие аккаунты не затронуты.
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(uniqueEmail(), "x"), from(200)); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("другой e-mail: %d", rec.Code)
 	}
 
-	e.clock.Advance(14 * time.Minute)
-	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword)); rec.Code != http.StatusOK {
+	e.clock.Advance(time.Hour)
+	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, testPassword), from(200)); rec.Code != http.StatusOK {
 		t.Fatalf("после окна: %d %s", rec.Code, rec.Body)
 	}
+}
+
+// Управляющие символы (NUL и др.) в имени и e-mail — 422 по полю, а не 500
+// от Postgres; при входе они не расходуют лимиты по e-mail.
+func TestControlCharsRejected(t *testing.T) {
+	e := newAuthEnv(t, Options{Limits: Limits{LoginPerEmailIP: ratelimit.Rule{Limit: 1, Window: time.Hour}}})
+	for _, c := range []struct {
+		name, path, body, want string
+	}{
+		{"имя с NUL", "/api/v1/auth/register",
+			`{"email":"` + uniqueEmail() + `","password":"12345678","name":"a\u0000b","timezone":"Europe/Moscow","acceptTerms":true}`, "name:invalid_format"},
+		{"имя с переводом строки", "/api/v1/auth/register",
+			`{"email":"` + uniqueEmail() + `","password":"12345678","name":"Иван\nПетров","timezone":"Europe/Moscow","acceptTerms":true}`, "name:invalid_format"},
+		{"e-mail с NUL при регистрации", "/api/v1/auth/register",
+			`{"email":"a\u0000b@example.com","password":"12345678","name":"Иван","timezone":"Europe/Moscow","acceptTerms":true}`, "email:invalid_format"},
+		{"e-mail с NUL при входе", "/api/v1/auth/login", `{"email":"a\u0000b@example.com","password":"x"}`, "email:invalid_format"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			body := decodeProblem(t, e.send(http.MethodPost, c.path, c.body), http.StatusUnprocessableEntity, "validation_failed")
+			if got := fieldErrors(t, body); !reflect.DeepEqual(got, []string{c.want}) {
+				t.Fatalf("errors = %v", got)
+			}
+		})
+	}
+	// Отклонённые входы не потратили лимит (он здесь — 1 попытка): обычная
+	// попытка для того же e-mail проходит до проверки пароля.
+	decodeProblem(t, e.send(http.MethodPost, "/api/v1/auth/login", loginBody("ab@example.com", "x")),
+		http.StatusUnauthorized, "invalid_credentials")
 }
 
 func TestCSRF(t *testing.T) {

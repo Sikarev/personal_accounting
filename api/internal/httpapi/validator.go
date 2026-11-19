@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -28,11 +29,18 @@ func init() {
 	// format: email kin-openapi по умолчанию не проверяет. Пробелы по краям
 	// допускаем: сервер их обрезает (normalizeEmail), ошибкой они не считаются.
 	openapi3.DefineStringFormatCallback("email", func(s string) error {
-		if !validEmail.MatchString(strings.TrimSpace(s)) {
+		if !validEmail.MatchString(strings.TrimSpace(s)) || hasControlChars(s) {
 			return errors.New("invalid email")
 		}
 		return nil
 	})
+}
+
+// hasControlChars сообщает, есть ли в строке управляющие символы (NUL, перевод
+// строки, табуляция и т. п.). Им не место в имени и e-mail, а NUL-байт
+// Postgres вообще не принимает в text — запрос упал бы с 500.
+func hasControlChars(s string) bool {
+	return strings.ContainsFunc(s, unicode.IsControl)
 }
 
 // validEmail — грубая проверка «что-то@домен.зона» без пробелов. Строже
@@ -78,9 +86,8 @@ func (rs specRoutes) find(r *http.Request) (*routers.Route, bool) {
 // requestValidator возвращает middleware, которое проверяет запрос по контракту
 // (kin-openapi): параметры пути и query, обязательные поля тела, типы, enum,
 // длины, лишние поля (при additionalProperties: false). Ответы не проверяются.
-// prefix — префикс, под которым смонтированы пути спецификации ("/api/v1").
-func requestValidator(logger *slog.Logger, doc *openapi3.T, prefix string) func(http.Handler) http.Handler {
-	routes := newSpecRoutes(doc, prefix)
+// routes — таблица операций контракта (newSpecRoutes), общая с другими middleware.
+func requestValidator(logger *slog.Logger, routes specRoutes) func(http.Handler) http.Handler {
 	opts := &openapi3filter.Options{
 		MultiError: true, // собрать ошибки по всем полям сразу, а не только первую
 		// RejectWhenRequestBodyNotSpecified не используем: в kin-openapi v0.142.0

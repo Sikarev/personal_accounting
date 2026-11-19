@@ -50,6 +50,31 @@ func (l *Limiter) Allow(key string) (retryAfter time.Duration, ok bool) {
 	return 0, true
 }
 
+// Check сообщает, исчерпан ли лимит, не учитывая событие. Вместе с Add —
+// для случаев, когда событие (неудачная попытка) известно только потом.
+func (l *Limiter) Check(key string) (retryAfter time.Duration, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.now()
+	l.sweep(now)
+	events := l.prune(key, now)
+	if len(events) >= l.rule.Limit {
+		return events[0].Add(l.rule.Window).Sub(now), false
+	}
+	return 0, true
+}
+
+// Add учитывает событие без проверки лимита.
+func (l *Limiter) Add(key string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.now()
+	l.sweep(now)
+	l.events[key] = append(l.prune(key, now), now)
+}
+
 // Reset забывает события ключа (например, после успешного входа).
 func (l *Limiter) Reset(key string) {
 	l.mu.Lock()

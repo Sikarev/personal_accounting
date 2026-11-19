@@ -7,11 +7,21 @@
  * Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
  * `/currencies` обслуживается по адресу `/api/v1/currencies`.
  *
+ * Авторизация — cookie сессии `pa_session` (см. `cookieAuth`). По умолчанию
+ * каждая операция требует входа; публичные помечены `security: []`.
+ * Без действующей сессии защищённая операция отвечает 401 `unauthorized`.
+ *
  * OpenAPI spec version: 1.0.0
  */
 
 export * from './currency'
 export * from './currencyList'
+export * from './familyRole'
 export * from './fieldError'
+export * from './loginRequest'
+export * from './me'
+export * from './meFamily'
+export * from './meUser'
 export * from './problem'
 export * from './problemResponse'
+export * from './registerRequest'

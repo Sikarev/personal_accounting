@@ -7,6 +7,10 @@
  * Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
  * `/currencies` обслуживается по адресу `/api/v1/currencies`.
  *
+ * Авторизация — cookie сессии `pa_session` (см. `cookieAuth`). По умолчанию
+ * каждая операция требует входа; публичные помечены `security: []`.
+ * Без действующей сессии защищённая операция отвечает 401 `unauthorized`.
+ *
  * OpenAPI spec version: 1.0.0
  */
 
@@ -16,7 +20,10 @@ export interface FieldError {
    * или имя параметра запроса.
    */
   field: string
-  /** Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...). */
+  /**
+   * Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
+   * Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован.
+   */
   code: string
   /** Пояснение на русском. */
   message: string

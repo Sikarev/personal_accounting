@@ -7,6 +7,10 @@
  * Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
  * `/currencies` обслуживается по адресу `/api/v1/currencies`.
  *
+ * Авторизация — cookie сессии `pa_session` (см. `cookieAuth`). По умолчанию
+ * каждая операция требует входа; публичные помечены `security: []`.
+ * Без действующей сессии защищённая операция отвечает 401 `unauthorized`.
+ *
  * OpenAPI spec version: 1.0.0
  */
 import type { FieldError } from './fieldError'
@@ -27,7 +31,8 @@ export interface Problem {
   /**
    * Машиночитаемый код ошибки. Список может расширяться — неизвестный код
    * клиент обрабатывает по HTTP-статусу. Известные значения:
-   * `bad_request`, `validation_failed`, `not_found`, `method_not_allowed`, `internal`.
+   * `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
+   * `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`.
    */
   code: string
   /** Ошибки по полям; только при `code = validation_failed`. */

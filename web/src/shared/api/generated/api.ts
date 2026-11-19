@@ -7,27 +7,63 @@
  * Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
  * `/currencies` обслуживается по адресу `/api/v1/currencies`.
  *
+ * Авторизация — cookie сессии `pa_session` (см. `cookieAuth`). По умолчанию
+ * каждая операция требует входа; публичные помечены `security: []`.
+ * Без действующей сессии защищённая операция отвечает 401 `unauthorized`.
+ *
  * OpenAPI spec version: 1.0.0
  */
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type { CurrencyList, ProblemResponse } from './model'
+import type { CurrencyList, LoginRequest, Me, ProblemResponse, RegisterRequest } from './model'
 
 import { apiFetch } from '../http'
 import type { ErrorType } from '../http'
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
+
+const getHeaders = (
+  ...sources: (RequestInit['headers'] | Record<string, string | undefined>)[]
+) => {
+  const seen = new Set<string>()
+  const layers: [string, string | readonly string[]][][] = []
+  for (const source of sources.reverse()) {
+    if (!source) continue
+    const entries =
+      source instanceof Headers
+        ? source.entries()
+        : Symbol.iterator in source
+          ? Array.from(
+              source as Iterable<Iterable<string>>,
+              (entry) => Array.from(entry) as [string, string],
+            )
+          : Object.entries<string | readonly string[] | undefined>(source)
+    const layer: [string, string | readonly string[]][] = []
+    for (const [name, value] of entries) {
+      if (value !== undefined && !seen.has(name.toLowerCase())) layer.push([name, value])
+    }
+    for (const [name] of layer) seen.add(name.toLowerCase())
+    layers.push(layer)
+  }
+  return Object.fromEntries(layers.reverse().flat()) as Extract<
+    RequestInit['headers'],
+    Record<string, unknown>
+  >
+}
 
 const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
   const result = { queryKey } as T & { queryKey: K }
@@ -162,6 +198,366 @@ export function useListCurrencies<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getListCurrenciesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getRegisterUrl = () => {
+  return `/api/v1/auth/register`
+}
+
+/**
+ * Создаёт пользователя, его семью (роль `owner`) с категориями по умолчанию,
+ * отмечает согласие с документами и сразу открывает сессию.
+ *
+ * E-mail сервер обрезает от пробелов и приводит к нижнему регистру.
+ * Ошибки: 422 `validation_failed` (в т. ч. `email_taken` у поля `email`,
+ * неизвестный часовой пояс у поля `timezone`), 429 `too_many_requests`.
+ * @summary Регистрация по e-mail и паролю
+ */
+export const register = async (
+  registerRequest: RegisterRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Me> => {
+  return apiFetch<Me>(getRegisterUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(registerRequest),
+  })
+}
+
+export const getRegisterMutationKey = () => ['register'] as const
+
+export const getRegisterMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof register>>,
+    TError,
+    RegisterMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  RegisterMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRegisterMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof register>>,
+    RegisterMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return register(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RegisterMutationResult = NonNullable<Awaited<ReturnType<typeof register>>>
+export type RegisterMutationBody = RegisterRequest
+export type RegisterMutationError = ErrorType<ProblemResponse>
+export type RegisterMutationVariables = { data: RegisterRequest }
+
+/**
+ * Создаёт пользователя, его семью (роль `owner`) с категориями по умолчанию,
+ * отмечает согласие с документами и сразу открывает сессию.
+ *
+ * E-mail сервер обрезает от пробелов и приводит к нижнему регистру.
+ * Ошибки: 422 `validation_failed` (в т. ч. `email_taken` у поля `email`,
+ * неизвестный часовой пояс у поля `timezone`), 429 `too_many_requests`.
+ * @summary Регистрация по e-mail и паролю
+ */
+export const useRegister = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof register>>,
+      TError,
+      RegisterMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  RegisterMutationVariables,
+  TContext
+> => {
+  return useMutation(getRegisterMutationOptions(options), queryClient)
+}
+
+export const getLoginUrl = () => {
+  return `/api/v1/auth/login`
+}
+
+/**
+ * Неверный e-mail и неверный пароль дают один и тот же ответ —
+ * 401 `invalid_credentials`. При превышении лимитов — 429 `too_many_requests`
+ * с заголовком `Retry-After`: 5 попыток за 15 минут для пары «e-mail + IP»,
+ * 50 неудачных попыток в час для e-mail со всех адресов, 20 запросов
+ * в минуту с одного IP.
+ * @summary Вход по e-mail и паролю
+ */
+export const login = async (
+  loginRequest: LoginRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Me> => {
+  return apiFetch<Me>(getLoginUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(loginRequest),
+  })
+}
+
+export const getLoginMutationKey = () => ['login'] as const
+
+export const getLoginMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    LoginMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  LoginMutationVariables,
+  TContext
+> => {
+  const mutationKey = getLoginMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof login>>, LoginMutationVariables> = (
+    props,
+  ) => {
+    const { data } = props ?? {}
+
+    return login(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type LoginMutationResult = NonNullable<Awaited<ReturnType<typeof login>>>
+export type LoginMutationBody = LoginRequest
+export type LoginMutationError = ErrorType<ProblemResponse>
+export type LoginMutationVariables = { data: LoginRequest }
+
+/**
+ * Неверный e-mail и неверный пароль дают один и тот же ответ —
+ * 401 `invalid_credentials`. При превышении лимитов — 429 `too_many_requests`
+ * с заголовком `Retry-After`: 5 попыток за 15 минут для пары «e-mail + IP»,
+ * 50 неудачных попыток в час для e-mail со всех адресов, 20 запросов
+ * в минуту с одного IP.
+ * @summary Вход по e-mail и паролю
+ */
+export const useLogin = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof login>>,
+      TError,
+      LoginMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  LoginMutationVariables,
+  TContext
+> => {
+  return useMutation(getLoginMutationOptions(options), queryClient)
+}
+
+export const getLogoutUrl = () => {
+  return `/api/v1/auth/logout`
+}
+
+/**
+ * Удаляет текущую сессию и стирает cookie. Идемпотентна: без сессии
+ * (или с недействительной) тоже отвечает 204.
+ * @summary Выход
+ */
+export const logout = async (options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+  return apiFetch<void>(getLogoutUrl(), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getLogoutMutationKey = () => ['logout'] as const
+
+export const getLogoutMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+  const mutationKey = getLogoutMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof logout>>, void> = () => {
+    return logout(requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type LogoutMutationResult = NonNullable<Awaited<ReturnType<typeof logout>>>
+
+export type LogoutMutationError = ErrorType<ProblemResponse>
+
+/**
+ * Удаляет текущую сессию и стирает cookie. Идемпотентна: без сессии
+ * (или с недействительной) тоже отвечает 204.
+ * @summary Выход
+ */
+export const useLogout = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof logout>>, TError, void, TContext>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
+  return useMutation(getLogoutMutationOptions(options), queryClient)
+}
+
+export const getGetMeUrl = () => {
+  return `/api/v1/me`
+}
+
+/**
+ * @summary Текущий пользователь и его семья
+ */
+export const getMe = async (options?: Parameters<typeof apiFetch>[1]): Promise<Me> => {
+  return apiFetch<Me>(getGetMeUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetMeQueryKey = () => {
+  return [`/api/v1/me`] as const
+}
+
+export const getGetMeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetMeQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMe>>> = ({ signal }) =>
+    getMe({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMe>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMeQueryResult = NonNullable<Awaited<ReturnType<typeof getMe>>>
+export type GetMeQueryError = ErrorType<ProblemResponse>
+
+/** @summary Текущий пользователь и его семья */
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMe>>,
+          TError,
+          Awaited<ReturnType<typeof getMe>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Текущий пользователь и его семья */
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMe>>,
+          TError,
+          Awaited<ReturnType<typeof getMe>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Текущий пользователь и его семья */
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Текущий пользователь и его семья */
+export function useGetMe<
+  TData = Awaited<ReturnType<typeof getMe>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMeQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>

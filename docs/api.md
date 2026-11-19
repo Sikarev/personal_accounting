@@ -168,6 +168,14 @@ if err := tx.Commit(ctx); err != nil {
 | `oapi-codegen` (strict server для chi + встроенная спецификация) | `internal/oapi/oapi-codegen.yaml` | `internal/oapi/oapi.gen.go` |
 | `sqlc` (pgx/v5) | `sqlc.yaml`; схема — прямо из `migrations/` | `internal/db/dbgen/` |
 
+Клиент для фронтенда генерирует `orval` (devDependency в `web/package.json`): `pnpm generate:api` из `web/`.
+
+| Инструмент | Конфиг | Результат |
+|---|---|---|
+| `orval` (хуки TanStack Query, `fetch`) | `web/orval.config.ts` | `web/src/shared/api/generated/` |
+
+Базовый адрес `/api/v1` задан в конфиге orval (`baseUrl`), пути берутся из `paths`. Имя хука — из `operationId`: `listCurrencies` → `useListCurrencies()`. Запросы идут через свой мутатор `web/src/shared/api/http.ts`: он превращает Problem Details в `ApiError` с полями `status`, `code` (любая строка, не только перечисленные в контракте), `detail`, `fieldErrors` (`errors[]` → `{ поле: текст }`) и `requestId` (из `X-Request-Id`). Сгенерированный код коммитится, CI (`web.yml`) проверяет, что он совпадает с контрактом.
+
 `sqlc` на Windows работает без gcc: при сборке без cgo он использует парсер Postgres, скомпилированный в WebAssembly (`wasilibs/go-pgquery`). CI запускает генерацию так же (`CGO_ENABLED=0`).
 
 ## Прочее

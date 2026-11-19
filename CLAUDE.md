@@ -34,6 +34,7 @@ pnpm install
 pnpm dev                      # http://localhost:5173, /api проксируется на :8080
 pnpm build                    # tsc -b + vite build
 pnpm typecheck                # только tsc -b
+pnpm generate:api             # ../api/openapi.yaml → src/shared/api/generated (orval); результат коммитится
 pnpm lint                     # oxlint
 pnpm format                   # prettier --write; format:check — проверка без записи (CI)
 pnpm test                     # vitest: юнит-тесты форматтеров (src/**/*.test.ts)
@@ -75,7 +76,11 @@ Playwright сам собирает приложение и поднимает `v
   - `features/` — сценарии, которые используются из нескольких экранов (например, `quick-add`: окно быстрого ввода и `useQuickAdd()`);
   - `shared/ui/` — базовые компоненты (`Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo`, `PageHeader`), рядом — `*.stories.tsx` и `*.module.css`;
   - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate` + `todayIn`, `plural`), хуки (`useDelayedLoading`, `useMobileLayout`), логика Ctrl+Z для тостов (`undoShortcut`); рядом — `*.test.ts`;
-  - `shared/i18n/` — словарь `ru.ts` и `useT()`: `const t = useT(); t.nav.home`. Ключи проверяются типами.
+  - `shared/i18n/` — словарь `ru.ts` и `useT()`: `const t = useT(); t.nav.home`. Ключи проверяются типами;
+  - `shared/api/` — клиент API: `generated/` (orval, руками не править), `http.ts` (fetch-мутатор, `ApiError`, `NetworkError`), `queryClient.ts` (`createQueryClient()` с умолчаниями). Импорт — из `shared/api`.
+- Запросы к API — только через сгенерированные хуки (`useListCurrencies()` и т. п.), не через `fetch` (исключение — служебный `/healthz` вне контракта). Новый эндпоинт: контракт → `pnpm generate:api` → хук готов.
+- Ошибки API в хуках: `ApiError` (сервер ответил не 2xx: `status`, `code`, `detail`, `fieldErrors`, `requestId`) или `NetworkError` (ответа нет). Текст пользователю выбирается по `code`, неизвестный код — по `status`; `detail` не показывается. Ошибки полей формы — `form.setErrors(error.fieldErrors)`.
+- `QueryClient`: 4xx не повторяются, сеть и 5xx — один повтор; `staleTime` 30 с; обновление при возврате во вкладку включено; мутации не повторяются.
 - Стили компонентов — CSS-модули рядом с компонентом; в них только `var(--mantine-*)` и `var(--app-*)`. Стили Mantine подключены слоем (`styles.layer.css`), поэтому модули перекрывают их без `!important`.
 - Мобильная раскладка — `useMobileLayout()` / `MOBILE_LAYOUT_QUERY`: ширина < `sm` **или** телефон в альбомной ориентации (`max-height: 30em` и `pointer: coarse`). Это единый источник для оболочки, тостов и `ResponsiveSheet`; брейкпоинты Mantine (`hiddenFrom`, `@mixin smaller-than`) для переключения mobile/desktop не используем — они не знают про альбомную ориентацию.
 - Глобальные правки поверх Mantine — только в `app/global.css` (цвет кольца фокуса, перенос подписей кнопок при крупном шрифте).

@@ -1,9 +1,10 @@
 import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 
 import { QuickAddProvider } from '../features/quick-add/QuickAddProvider'
+import { createQueryClient } from '../shared/api'
 import { useMobileLayout } from '../shared/lib/useMobileLayout'
 import { cssVariablesResolver, theme } from '../theme'
 import classes from './AppProviders.module.css'
@@ -46,7 +47,7 @@ function AppNotifications() {
 export function AppProviders({ children }: { children: ReactNode }) {
   // Клиент создаётся один раз на жизнь приложения (useState, а не модульная переменная —
   // так он не переживает hot reload с устаревшим кэшем).
-  const [queryClient] = useState(() => new QueryClient())
+  const [queryClient] = useState(createQueryClient)
 
   return (
     <ThemeProviders>

@@ -39,7 +39,11 @@ func run(args []string) error {
 		return goose.RunContext(context.Background(), command, nil, "migrations", rest...)
 	}
 
-	db, err := sql.Open("pgx", config.Load().DatabaseURL)
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	db, err := sql.Open("pgx", cfg.DatabaseURL)
 	if err != nil {
 		return err
 	}

@@ -10,6 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	// Встраивает базу часовых поясов IANA в бинарник: time.LoadLocation
+	// работает и на Windows, и в минимальном контейнере без /usr/share/zoneinfo.
+	_ "time/tzdata"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -28,7 +31,10 @@ func main() {
 }
 
 func run() error {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 
 	// Логгер передаём в роутер явно. slog.SetDefault нужен для того, что пишет
 	// в лог без явного логгера (в т. ч. ошибки в main выше) — формат будет тем же.
@@ -45,7 +51,11 @@ func run() error {
 	}
 	defer db.Close()
 
-	router, err := httpapi.NewRouter(logger, db)
+	router, err := httpapi.NewRouter(logger, db, httpapi.Options{
+		CookieSecure:       cfg.CookieSecure,
+		TrustedProxies:     cfg.TrustedProxies,
+		CSRFTrustedOrigins: cfg.CSRFTrustedOrigins,
+	})
 	if err != nil {
 		return err
 	}
@@ -60,7 +70,8 @@ func run() error {
 	// а ошибку передаём через канал.
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("api listening", "addr", cfg.Addr, "env", cfg.Env)
+		logger.Info("api listening", "addr", cfg.Addr, "env", cfg.Env,
+			"cookie_secure", cfg.CookieSecure, "trusted_proxies", len(cfg.TrustedProxies))
 		errCh <- srv.ListenAndServe()
 	}()
 

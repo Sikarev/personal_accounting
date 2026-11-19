@@ -25,18 +25,31 @@ import (
 func init() {
 	openapi3.DefineStringFormatValidator("uuid", openapi3.NewRegexpFormatValidator(
 		`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`))
+	// format: email kin-openapi по умолчанию не проверяет. Пробелы по краям
+	// допускаем: сервер их обрезает (normalizeEmail), ошибкой они не считаются.
+	openapi3.DefineStringFormatCallback("email", func(s string) error {
+		if !validEmail.MatchString(strings.TrimSpace(s)) {
+			return errors.New("invalid email")
+		}
+		return nil
+	})
 }
 
-// requestValidator возвращает middleware, которое проверяет запрос по контракту
-// (kin-openapi): параметры пути и query, обязательные поля тела, типы, enum,
-// длины, лишние поля (при additionalProperties: false). Ответы не проверяются.
+// validEmail — грубая проверка «что-то@домен.зона» без пробелов. Строже
+// проверять незачем: существование адреса подтвердит письмо.
+var validEmail = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+// specRoutes — операции контракта по ключу «МЕТОД /api/v1/шаблон/{пути}».
 //
-// Middleware ставится на маршруты, уже найденные chi, поэтому операцию из
+// Middleware ставятся на маршруты, уже найденные chi, поэтому операцию из
 // спецификации ищем по шаблону маршрута chi (у chi и OpenAPI одинаковый синтаксис
 // параметров: /accounts/{accountId}), а не роутером kin-openapi.
-// prefix — префикс, под которым смонтированы пути спецификации ("/api/v1").
-func requestValidator(logger *slog.Logger, doc *openapi3.T, prefix string) func(http.Handler) http.Handler {
-	routes := map[string]*routers.Route{}
+type specRoutes map[string]*routers.Route
+
+// newSpecRoutes строит таблицу операций. prefix — префикс, под которым
+// смонтированы пути спецификации ("/api/v1").
+func newSpecRoutes(doc *openapi3.T, prefix string) specRoutes {
+	routes := specRoutes{}
 	for path, item := range doc.Paths.Map() {
 		for method, op := range item.Operations() {
 			routes[method+" "+prefix+path] = &routers.Route{
@@ -44,30 +57,49 @@ func requestValidator(logger *slog.Logger, doc *openapi3.T, prefix string) func(
 			}
 		}
 	}
+	return routes
+}
+
+// find возвращает операцию контракта для запроса, уже сопоставленного chi.
+func (rs specRoutes) find(r *http.Request) (*routers.Route, bool) {
+	rctx := chi.RouteContext(r.Context())
+	if rctx == nil {
+		return nil, false
+	}
+	// Для HEAD middleware.GetHead маршрутизирует запрос как GET.
+	method := rctx.RouteMethod
+	if method == "" {
+		method = r.Method
+	}
+	route, ok := rs[method+" "+rctx.RoutePattern()]
+	return route, ok
+}
+
+// requestValidator возвращает middleware, которое проверяет запрос по контракту
+// (kin-openapi): параметры пути и query, обязательные поля тела, типы, enum,
+// длины, лишние поля (при additionalProperties: false). Ответы не проверяются.
+// prefix — префикс, под которым смонтированы пути спецификации ("/api/v1").
+func requestValidator(logger *slog.Logger, doc *openapi3.T, prefix string) func(http.Handler) http.Handler {
+	routes := newSpecRoutes(doc, prefix)
 	opts := &openapi3filter.Options{
 		MultiError: true, // собрать ошибки по всем полям сразу, а не только первую
 		// RejectWhenRequestBodyNotSpecified не используем: в kin-openapi v0.142.0
 		// он срабатывает на любое тело, даже описанное в контракте. Проверяем сами ниже.
-		// Схем безопасности в контракте пока нет; авторизацию проверяет свой
-		// middleware (этап 1), а не валидатор.
+		// Сессию проверяет свой middleware (authenticate) до валидатора,
+		// поэтому здесь проверка схем безопасности — пустая.
 		AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,
 	}
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rctx := chi.RouteContext(r.Context())
-			// Для HEAD middleware.GetHead маршрутизирует запрос как GET.
-			method := rctx.RouteMethod
-			if method == "" {
-				method = r.Method
-			}
-			route, ok := routes[method+" "+rctx.RoutePattern()]
+			route, ok := routes.find(r)
 			if !ok {
 				// Маршрут есть в chi, но не в спецификации — ошибка сборки роутера,
 				// а не клиента: молча пропустить её нельзя.
-				responseErrorHandler(logger)(w, r, fmt.Errorf("операция %s %s не найдена в спецификации", method, rctx.RoutePattern()))
+				responseErrorHandler(logger)(w, r, fmt.Errorf("операция %s %s не найдена в спецификации", r.Method, r.URL.Path))
 				return
 			}
+			rctx := chi.RouteContext(r.Context())
 
 			// Тело у операции без requestBody в контракте — ошибка клиента.
 			if route.Operation.RequestBody == nil && r.ContentLength > 0 {

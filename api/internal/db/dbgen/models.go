@@ -445,6 +445,8 @@ type User struct {
 	Timezone        string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	TermsAcceptedAt *time.Time
+	TermsVersion    *string
 }
 
 type UserIdentity struct {

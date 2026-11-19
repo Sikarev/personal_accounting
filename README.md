@@ -18,7 +18,10 @@ api/                Go-бэкенд
   cmd/api/          HTTP-сервер
   cmd/migrate/      применение миграций БД
   internal/         код приложения (не импортируется извне — правило Go для папки internal)
+    config/         настройки из переменных окружения
     httpapi/        роутер, middleware, обработчики эндпоинтов
+    auth/           хеширование паролей (argon2id), токены сессий
+    ratelimit/      ограничение частоты запросов в памяти процесса
     oapi/           сгенерировано oapi-codegen из openapi.yaml
     db/queries/     SQL-запросы для sqlc
     db/dbgen/       сгенерировано sqlc
@@ -74,7 +77,19 @@ cd web && pnpm dev --host   # Vite покажет адрес Network: http://192
 
 Проверяй на телефоне то, что не проверяют автотесты: работу одной рукой, клавиатуру при вводе, поворот экрана, крупный системный шрифт, тёмную тему.
 
-Настройки по умолчанию совпадают с `docker-compose.yml`. `APP_ENV=production` переключает логи API в JSON (по умолчанию — текст). Чтобы их переопределить, скопируй `.env.example` в `.env` (его читает docker compose) и задай переменные окружения для API.
+Настройки по умолчанию совпадают с `docker-compose.yml`. Чтобы их переопределить, скопируй `.env.example` в `.env` (его читает docker compose) и задай переменные окружения для API.
+
+| Переменная | По умолчанию | Что делает |
+|---|---|---|
+| `APP_ENV` | `development` | `production` — логи в JSON, cookie с `Secure` |
+| `API_ADDR` | `:8080` | адрес HTTP-сервера |
+| `DATABASE_URL` | Postgres из `docker-compose.yml` | строка подключения к БД |
+| `COOKIE_SECURE` | `true` в production, `false` в development | флаг `Secure` у cookie сессии; в production без HTTPS вход не заработает |
+| `TRUSTED_PROXIES` | пусто | CIDR или IP обратных прокси через запятую; только им API верит в `X-Forwarded-For` |
+| `CSRF_TRUSTED_ORIGINS` | пусто | origin через запятую, с которых разрешены запросы, меняющие данные (нужен, только если фронт на другом origin) |
+| `TEST_DATABASE_URL` | Postgres из `docker-compose.yml` | сервер для временных БД тестов |
+
+Подробнее о сессиях, CSRF, лимитах и реальном IP — в [docs/api.md](docs/api.md#авторизация).
 
 ## Бэкенд: генерация кода и тесты
 

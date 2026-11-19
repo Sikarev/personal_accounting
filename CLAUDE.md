@@ -27,7 +27,8 @@ gofmt -l .                    # должно быть пусто
 go generate ./...             # openapi.yaml → internal/oapi, queries/*.sql → internal/db/dbgen; результат коммитится
 go test ./...                 # реальный Postgres: временная БД на пакет (TEST_DATABASE_URL)
 go run ./cmd/migrate up
-go run ./cmd/api              # http://localhost:8080, APP_ENV=production — JSON-логи
+go run ./cmd/api              # http://localhost:8080, APP_ENV=production — JSON-логи и Secure-cookie
+                              # COOKIE_SECURE, TRUSTED_PROXIES, CSRF_TRUSTED_ORIGINS — см. README
 
 # web/ — только pnpm, не npm/yarn
 pnpm install

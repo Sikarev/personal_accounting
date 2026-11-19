@@ -8,12 +8,23 @@ info:
     Пути ниже указаны относительно `servers[0].url` (`/api/v1`):
     `/currencies` обслуживается по адресу `/api/v1/currencies`.
 
+    Авторизация — cookie сессии `pa_session` (см. `cookieAuth`). По умолчанию
+    каждая операция требует входа; публичные помечены `security: []`.
+    Без действующей сессии защищённая операция отвечает 401 `unauthorized`.
+
 servers:
   - url: /api/v1
+
+# Глобально все операции требуют сессии. Публичные операции явно
+# переопределяют это пустым списком: security: [].
+security:
+  - cookieAuth: []
 
 tags:
   - name: reference
     description: Справочники
+  - name: auth
+    description: Регистрация, вход, выход, текущий пользователь
 
 paths:
   /currencies:
@@ -22,6 +33,7 @@ paths:
       summary: Список активных валют
       description: Валюты, доступные для новых счетов. Публичный справочник, авторизация не нужна.
       tags: [reference]
+      security: []
       responses:
         "200":
           description: Активные валюты, отсортированные по коду.
@@ -32,7 +44,125 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/register:
+    post:
+      operationId: register
+      summary: Регистрация по e-mail и паролю
+      description: |
+        Создаёт пользователя, его семью (роль `owner`) с категориями по умолчанию,
+        отмечает согласие с документами и сразу открывает сессию.
+
+        E-mail сервер обрезает от пробелов и приводит к нижнему регистру.
+        Ошибки: 422 `validation_failed` (в т. ч. `email_taken` у поля `email`,
+        неизвестный часовой пояс у поля `timezone`), 429 `too_many_requests`.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Пользователь создан, сессия открыта.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Вход по e-mail и паролю
+      description: |
+        Неверный e-mail и неверный пароль дают один и тот же ответ —
+        401 `invalid_credentials`. После 5 неудачных попыток за 15 минут
+        для этого e-mail, как и после 20 запросов в минуту с одного IP, —
+        429 `too_many_requests` с заголовком `Retry-After`.
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Вход выполнен, сессия открыта.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Выход
+      description: |
+        Удаляет текущую сессию и стирает cookie. Идемпотентна: без сессии
+        (или с недействительной) тоже отвечает 204.
+      tags: [auth]
+      security: []
+      responses:
+        "204":
+          description: Сессия завершена.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/ClearSessionCookie"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /me:
+    get:
+      operationId: getMe
+      summary: Текущий пользователь и его семья
+      tags: [auth]
+      responses:
+        "200":
+          description: Текущий пользователь.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: pa_session
+      description: |
+        Случайный токен сессии. Cookie выставляет сервер при регистрации и входе:
+        `HttpOnly`, `SameSite=Lax`, `Path=/api`, `Secure` (в production).
+        Срок — 30 дней, продлевается при активности (не чаще раза в час,
+        тогда новый `Set-Cookie` приходит в ответе на любой запрос).
+
+  headers:
+    SetSessionCookie:
+      description: |
+        Cookie сессии: `pa_session=<токен>; Path=/api; Expires=...; Max-Age=2592000; HttpOnly; SameSite=Lax`
+        (+ `Secure` в production).
+      schema:
+        type: string
+    ClearSessionCookie:
+      description: "Стирает cookie сессии: `pa_session=; Path=/api; Max-Age=0; ...`."
+      schema:
+        type: string
+
   responses:
     Problem:
       description: Ошибка в формате RFC 9457 (Problem Details).
@@ -69,7 +199,8 @@ components:
           description: |
             Машиночитаемый код ошибки. Список может расширяться — неизвестный код
             клиент обрабатывает по HTTP-статусу. Известные значения:
-            `bad_request`, `validation_failed`, `not_found`, `method_not_allowed`, `internal`.
+            `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
+            `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`.
           example: not_found
         errors:
           type: array
@@ -89,7 +220,9 @@ components:
           example: amount
         code:
           type: string
-          description: Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
+          description: |
+            Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
+            Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован.
           example: required
         message:
           type: string
@@ -123,3 +256,103 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Currency"
+
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, name, timezone, acceptTerms]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          # Обычная строка, а не openapi_types.Email: тот при разборе JSON проверяет
+          # формат сам, без обрезки пробелов. Формат проверяет валидатор контракта.
+          x-go-type: string
+          example: ivan@example.com
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: 8–128 символов, без требований к составу.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Имя; пробелы по краям обрезаются, пустое после обрезки — ошибка.
+          example: Иван
+        timezone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Часовой пояс IANA (браузер определяет его сам).
+          example: Europe/Moscow
+        acceptTerms:
+          type: boolean
+          enum: [true]
+          description: Согласие на обработку ПДн и с пользовательским соглашением. Только `true`.
+
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          # Обычная строка, а не openapi_types.Email: тот при разборе JSON проверяет
+          # формат сам, без обрезки пробелов. Формат проверяет валидатор контракта.
+          x-go-type: string
+          example: ivan@example.com
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+
+    FamilyRole:
+      type: string
+      enum: [owner, member]
+
+    MeUser:
+      type: object
+      required: [id, email, name, timezone, emailVerified]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          example: ivan@example.com
+        name:
+          type: string
+          example: Иван
+        timezone:
+          type: string
+          example: Europe/Moscow
+        emailVerified:
+          type: boolean
+          description: Подтверждён ли e-mail.
+
+    MeFamily:
+      type: object
+      required: [id, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Семья
+        role:
+          $ref: "#/components/schemas/FamilyRole"
+
+    Me:
+      type: object
+      description: Текущий пользователь и семья, в которой он состоит.
+      required: [user, family]
+      properties:
+        user:
+          $ref: "#/components/schemas/MeUser"
+        family:
+          $ref: "#/components/schemas/MeFamily"

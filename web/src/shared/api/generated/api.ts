@@ -29,7 +29,16 @@ import type {
   UseQueryResult,
 } from '@tanstack/react-query'
 
-import type { CurrencyList, LoginRequest, Me, ProblemResponse, RegisterRequest } from './model'
+import type {
+  CurrencyList,
+  LoginRequest,
+  Me,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
+  ProblemResponse,
+  RegisterRequest,
+  VerifyEmailRequest,
+} from './model'
 
 import { apiFetch } from '../http'
 import type { ErrorType } from '../http'
@@ -453,6 +462,382 @@ export const useLogout = <TError = ErrorType<ProblemResponse>, TContext = unknow
   queryClient?: QueryClient,
 ): UseMutationResult<Awaited<ReturnType<typeof logout>>, TError, void, TContext> => {
   return useMutation(getLogoutMutationOptions(options), queryClient)
+}
+
+export const getVerifyEmailUrl = () => {
+  return `/api/v1/auth/verify-email`
+}
+
+/**
+ * Публичная: ссылку из письма могут открыть в другом браузере, без сессии.
+ * Токен одноразовый, действует 24 часа и только для того адреса, на который
+ * отправлено письмо. Неверный, просроченный или использованный токен —
+ * 422 `validation_failed` с ошибкой `invalid_token` у поля `token`.
+ * Лимит — 20 запросов в минуту с одного IP (429 `too_many_requests`).
+ * @summary Подтверждение e-mail по токену из письма
+ */
+export const verifyEmail = async (
+  verifyEmailRequest: VerifyEmailRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getVerifyEmailUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(verifyEmailRequest),
+  })
+}
+
+export const getVerifyEmailMutationKey = () => ['verifyEmail'] as const
+
+export const getVerifyEmailMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyEmail>>,
+    TError,
+    VerifyEmailMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyEmail>>,
+  TError,
+  VerifyEmailMutationVariables,
+  TContext
+> => {
+  const mutationKey = getVerifyEmailMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyEmail>>,
+    VerifyEmailMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return verifyEmail(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type VerifyEmailMutationResult = NonNullable<Awaited<ReturnType<typeof verifyEmail>>>
+export type VerifyEmailMutationBody = VerifyEmailRequest
+export type VerifyEmailMutationError = ErrorType<ProblemResponse>
+export type VerifyEmailMutationVariables = { data: VerifyEmailRequest }
+
+/**
+ * Публичная: ссылку из письма могут открыть в другом браузере, без сессии.
+ * Токен одноразовый, действует 24 часа и только для того адреса, на который
+ * отправлено письмо. Неверный, просроченный или использованный токен —
+ * 422 `validation_failed` с ошибкой `invalid_token` у поля `token`.
+ * Лимит — 20 запросов в минуту с одного IP (429 `too_many_requests`).
+ * @summary Подтверждение e-mail по токену из письма
+ */
+export const useVerifyEmail = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof verifyEmail>>,
+      TError,
+      VerifyEmailMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof verifyEmail>>,
+  TError,
+  VerifyEmailMutationVariables,
+  TContext
+> => {
+  return useMutation(getVerifyEmailMutationOptions(options), queryClient)
+}
+
+export const getResendVerificationEmailUrl = () => {
+  return `/api/v1/auth/verify-email/resend`
+}
+
+/**
+ * Отправляет новое письмо на текущий e-mail пользователя; ссылка из прежнего
+ * письма перестаёт действовать. Если e-mail уже подтверждён, отвечает 204
+ * и письмо не отправляет. Лимит — раз в минуту и 5 раз в час на пользователя
+ * (429 `too_many_requests` с `Retry-After`).
+ * @summary Отправить письмо подтверждения ещё раз
+ */
+export const resendVerificationEmail = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getResendVerificationEmailUrl(), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getResendVerificationEmailMutationKey = () => ['resendVerificationEmail'] as const
+
+export const getResendVerificationEmailMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendVerificationEmail>>,
+    TError,
+    void,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendVerificationEmail>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = getResendVerificationEmailMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendVerificationEmail>>,
+    void
+  > = () => {
+    return resendVerificationEmail(requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ResendVerificationEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendVerificationEmail>>
+>
+
+export type ResendVerificationEmailMutationError = ErrorType<ProblemResponse>
+
+/**
+ * Отправляет новое письмо на текущий e-mail пользователя; ссылка из прежнего
+ * письма перестаёт действовать. Если e-mail уже подтверждён, отвечает 204
+ * и письмо не отправляет. Лимит — раз в минуту и 5 раз в час на пользователя
+ * (429 `too_many_requests` с `Retry-After`).
+ * @summary Отправить письмо подтверждения ещё раз
+ */
+export const useResendVerificationEmail = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof resendVerificationEmail>>,
+      TError,
+      void,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof resendVerificationEmail>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getResendVerificationEmailMutationOptions(options), queryClient)
+}
+
+export const getRequestPasswordResetUrl = () => {
+  return `/api/v1/auth/password-reset`
+}
+
+/**
+ * Всегда отвечает 202 без тела — есть такой аккаунт или нет, чтобы ответ
+ * не выдавал, зарегистрирован ли e-mail. Письмо со ссылкой (действует 1 час)
+ * уходит, только если аккаунт есть и на адрес отправлено меньше 3 писем
+ * за час. Лимит по IP — 20 запросов в час (429 `too_many_requests`).
+ * @summary Запросить письмо для сброса пароля
+ */
+export const requestPasswordReset = async (
+  passwordResetRequest: PasswordResetRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getRequestPasswordResetUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(passwordResetRequest),
+  })
+}
+
+export const getRequestPasswordResetMutationKey = () => ['requestPasswordReset'] as const
+
+export const getRequestPasswordResetMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof requestPasswordReset>>,
+    TError,
+    RequestPasswordResetMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof requestPasswordReset>>,
+  TError,
+  RequestPasswordResetMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRequestPasswordResetMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof requestPasswordReset>>,
+    RequestPasswordResetMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return requestPasswordReset(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RequestPasswordResetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof requestPasswordReset>>
+>
+export type RequestPasswordResetMutationBody = PasswordResetRequest
+export type RequestPasswordResetMutationError = ErrorType<ProblemResponse>
+export type RequestPasswordResetMutationVariables = { data: PasswordResetRequest }
+
+/**
+ * Всегда отвечает 202 без тела — есть такой аккаунт или нет, чтобы ответ
+ * не выдавал, зарегистрирован ли e-mail. Письмо со ссылкой (действует 1 час)
+ * уходит, только если аккаунт есть и на адрес отправлено меньше 3 писем
+ * за час. Лимит по IP — 20 запросов в час (429 `too_many_requests`).
+ * @summary Запросить письмо для сброса пароля
+ */
+export const useRequestPasswordReset = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof requestPasswordReset>>,
+      TError,
+      RequestPasswordResetMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof requestPasswordReset>>,
+  TError,
+  RequestPasswordResetMutationVariables,
+  TContext
+> => {
+  return useMutation(getRequestPasswordResetMutationOptions(options), queryClient)
+}
+
+export const getConfirmPasswordResetUrl = () => {
+  return `/api/v1/auth/password-reset/confirm`
+}
+
+/**
+ * Меняет пароль, завершает **все** сессии пользователя, подтверждает e-mail
+ * (владение адресом доказано) и открывает новую сессию.
+ * Неверный, просроченный или использованный токен — 422 `validation_failed`
+ * с ошибкой `invalid_token` у поля `token`. Лимит — 20 запросов в минуту
+ * с одного IP (429 `too_many_requests`).
+ * @summary Задать новый пароль по токену из письма
+ */
+export const confirmPasswordReset = async (
+  passwordResetConfirmRequest: PasswordResetConfirmRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Me> => {
+  return apiFetch<Me>(getConfirmPasswordResetUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(passwordResetConfirmRequest),
+  })
+}
+
+export const getConfirmPasswordResetMutationKey = () => ['confirmPasswordReset'] as const
+
+export const getConfirmPasswordResetMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmPasswordReset>>,
+    TError,
+    ConfirmPasswordResetMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmPasswordReset>>,
+  TError,
+  ConfirmPasswordResetMutationVariables,
+  TContext
+> => {
+  const mutationKey = getConfirmPasswordResetMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmPasswordReset>>,
+    ConfirmPasswordResetMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return confirmPasswordReset(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ConfirmPasswordResetMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmPasswordReset>>
+>
+export type ConfirmPasswordResetMutationBody = PasswordResetConfirmRequest
+export type ConfirmPasswordResetMutationError = ErrorType<ProblemResponse>
+export type ConfirmPasswordResetMutationVariables = { data: PasswordResetConfirmRequest }
+
+/**
+ * Меняет пароль, завершает **все** сессии пользователя, подтверждает e-mail
+ * (владение адресом доказано) и открывает новую сессию.
+ * Неверный, просроченный или использованный токен — 422 `validation_failed`
+ * с ошибкой `invalid_token` у поля `token`. Лимит — 20 запросов в минуту
+ * с одного IP (429 `too_many_requests`).
+ * @summary Задать новый пароль по токену из письма
+ */
+export const useConfirmPasswordReset = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof confirmPasswordReset>>,
+      TError,
+      ConfirmPasswordResetMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof confirmPasswordReset>>,
+  TError,
+  ConfirmPasswordResetMutationVariables,
+  TContext
+> => {
+  return useMutation(getConfirmPasswordResetMutationOptions(options), queryClient)
 }
 
 export const getGetMeUrl = () => {

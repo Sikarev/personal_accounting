@@ -8,6 +8,8 @@ import {
   type Icon,
 } from '@tabler/icons-react'
 
+import { matchPath } from 'react-router'
+
 import type { Messages } from '../shared/i18n'
 
 /** Адреса экранов. Ссылки строим только через эти константы. */
@@ -18,7 +20,45 @@ export const paths = {
   accounts: '/accounts',
   settings: '/settings',
   more: '/more',
+  login: '/login',
+  register: '/register',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
+  verifyEmail: '/verify-email',
+  legalPrivacy: '/legal/privacy',
+  legalTerms: '/legal/terms',
 } as const
+
+/**
+ * Страницы, доступные без входа (маршруты вне `RequireAuth` в App.tsx). На них 401 от API
+ * не уводит на экран входа: иначе экран входа (он сам спрашивает `/me`) зациклился бы.
+ * Новый публичный маршрут добавляется и сюда.
+ */
+export const publicPaths: readonly string[] = [
+  paths.login,
+  paths.register,
+  paths.forgotPassword,
+  paths.resetPassword,
+  paths.verifyEmail,
+  paths.legalPrivacy,
+  paths.legalTerms,
+]
+
+/**
+ * Публичная ли страница. Сравнение — тем же `matchPath`, которым роутер выбирает маршрут:
+ * он, как и роутер, не различает регистр и принимает завершающий `/` (`/LOGIN`,
+ * `/verify-email/`). Буквальное сравнение строк сочло бы такие адреса защищёнными,
+ * и 401 от `/me` увёл бы со страницы подтверждения на вход.
+ */
+export function isPublicPath(pathname: string): boolean {
+  return publicPaths.some((path) => matchPath({ path, caseSensitive: false, end: true }, pathname))
+}
+
+/** Адрес экрана входа, после которого пользователь вернётся на `next`. */
+export function loginPath(next?: string): string {
+  if (!next || next === paths.home) return paths.login
+  return `${paths.login}?${new URLSearchParams({ next })}`
+}
 
 export type NavItem = {
   to: string

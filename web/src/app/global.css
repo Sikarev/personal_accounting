@@ -16,9 +16,25 @@
   height: auto;
   min-height: var(--button-height);
   padding-block: var(--mantine-spacing-xs);
+  /* С height: auto подпись по вертикали центрирует только <button>; кнопка-ссылка
+     (component={Link}) прижала бы её к верху. Флекс центрирует в обоих случаях. */
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.mantine-Button-root[data-block] {
+  display: flex;
 }
 
 .mantine-Button-label {
   white-space: normal;
   text-align: center;
+}
+
+/* Поля ввода размера md (формы входа и далее) — высотой в зону касания 44 px (ux.md,
+   раздел 6) вместо 42 px Mantine. Переменная Mantine задана на :root в слое mantine,
+   наше правило вне слоя её перекрывает. */
+:root {
+  --input-height-md: var(--app-touch-target);
 }

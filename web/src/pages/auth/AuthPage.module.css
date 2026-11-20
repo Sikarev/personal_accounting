@@ -1,0 +1,59 @@
+/* Переключатель «Вход / Регистрация»: две ссылки в виде сегментов. Ссылки, а не радиокнопки:
+   переключение меняет адрес. */
+.switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-xs);
+  margin-bottom: var(--mantine-spacing-lg);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+  background-color: var(--app-color-surface);
+}
+
+.switchItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-md);
+  font-weight: 500;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mantine-color-text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* Активный сегмент — как активный пункт бокового меню: подложка primary-light, акцентный
+     текст и жирность. Фоны подложек близки (до 1.2:1), поэтому состояние держит рамка
+     акцентного цвета: ≥ 3:1 к подложке переключателя и к неактивному сегменту
+     в обеих темах (WCAG 1.4.11). */
+  &[data-active] {
+    font-weight: 600;
+    color: var(--app-color-accent-text);
+    background-color: var(--mantine-primary-color-light);
+    border-color: var(--app-color-accent-text);
+  }
+}
+
+/* Ссылка «Забыли пароль?» — с зоной касания 44 px по высоте. */
+.forgot {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+}
+
+.consentLabel {
+  overflow-wrap: anywhere;
+}

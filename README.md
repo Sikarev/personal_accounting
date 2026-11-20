@@ -56,6 +56,15 @@ cd api && go run ./cmd/api
 cd web && pnpm install && pnpm dev
 ```
 
+Откроется экран входа: зарегистрируйся (письмо подтверждения придёт в Mailpit, см. ниже) — и попадёшь в приложение.
+
+API на другом порту (например, во втором worktree, где :8080 занят) — адрес для прокси задаёт `API_PROXY_TARGET`, а `APP_BASE_URL` API должен указывать на этот dev-сервер, иначе ссылки из писем уведут на чужой фронт:
+
+```bash
+cd api && API_ADDR=:8091 APP_BASE_URL=http://localhost:5191 go run ./cmd/api
+cd web && API_PROXY_TARGET=http://localhost:8091 pnpm dev --port 5191
+```
+
 ### Письма в разработке
 
 Письма API (подтверждение e-mail, сброс пароля) уходят в [Mailpit](https://mailpit.axllent.org/) из `docker-compose.yml`: он принимает их по SMTP на порту 1025 и никуда дальше не отправляет. Посмотреть письма — http://localhost:8025 (или API Mailpit: `http://localhost:8025/api/v1/messages`). Ссылки в письмах ведут на `APP_BASE_URL` — по умолчанию dev-сервер фронта `http://localhost:5173`. Ящик хранится в памяти контейнера и очищается при его перезапуске.

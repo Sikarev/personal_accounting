@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, apiFetch, INVALID_RESPONSE_CODE, NetworkError, UNKNOWN_ERROR_CODE } from './http'
+import {
+  ApiError,
+  apiFetch,
+  INVALID_RESPONSE_CODE,
+  NetworkError,
+  parseRetryAfter,
+  UNKNOWN_ERROR_CODE,
+} from './http'
 import { shouldRetry } from './queryClient'
 
 const fetchMock = vi.fn<typeof fetch>()
@@ -118,6 +125,33 @@ describe('apiFetch', () => {
     expect(err).toMatchObject({ status: 401, code: 'unauthorized', detail: undefined })
   })
 
+  it('429 too_many_requests: секунды из Retry-After', async () => {
+    fetchMock.mockResolvedValue(
+      problem(
+        429,
+        { type: 'about:blank', title: 'Too Many Requests', status: 429, code: 'too_many_requests' },
+        { 'Retry-After': '125' },
+      ),
+    )
+    const err = await caught(apiFetch('/api/v1/auth/login', { method: 'POST' }))
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ status: 429, code: 'too_many_requests', retryAfterSeconds: 125 })
+  })
+
+  it('429 без тела (от прокси): Retry-After всё равно разобран', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(null, { status: 429, headers: { 'Retry-After': '30' } }),
+    )
+    const err = await caught(apiFetch('/api/v1/auth/login', { method: 'POST' }))
+    expect(err).toMatchObject({ status: 429, code: UNKNOWN_ERROR_CODE, retryAfterSeconds: 30 })
+  })
+
+  it('без Retry-After: retryAfterSeconds не задан', async () => {
+    fetchMock.mockResolvedValue(problem(404, { status: 404, code: 'not_found' }))
+    const err = await caught(apiFetch('/api/v1/x', { method: 'GET' }))
+    expect((err as ApiError).retryAfterSeconds).toBeUndefined()
+  })
+
   it('500 без тела: ApiError с неизвестным кодом', async () => {
     fetchMock.mockResolvedValue(
       new Response(null, { status: 500, headers: { 'X-Request-Id': 'r5' } }),
@@ -190,6 +224,32 @@ describe('apiFetch', () => {
     const err = await caught(apiFetch('/api/v1/currencies', { signal: controller.signal }))
 
     expect(err).toBe(abortError)
+  })
+})
+
+describe('parseRetryAfter', () => {
+  const now = Date.parse('2026-11-21T10:00:00Z')
+
+  it.each([
+    ['секунды', '120', 120],
+    ['ноль', '0', 0],
+    ['пробелы по краям', ' 60 ', 60],
+    ['HTTP-дата в будущем', 'Sat, 21 Nov 2026 10:02:30 GMT', 150],
+    ['HTTP-дата ровно сейчас', 'Sat, 21 Nov 2026 10:00:00 GMT', 0],
+    ['HTTP-дата в прошлом', 'Sat, 21 Nov 2026 09:00:00 GMT', 0],
+  ])('%s: %s → %s', (_, value, expected) => {
+    expect(parseRetryAfter(value, now)).toBe(expected)
+  })
+
+  it.each([
+    ['нет заголовка', null],
+    ['пусто', ''],
+    ['отрицательное', '-5'],
+    ['дробное', '1.5'],
+    ['мусор', 'soon'],
+    ['ISO вместо HTTP-даты', '2026-11-21T10:05:00Z'],
+  ])('%s → undefined', (_, value) => {
+    expect(parseRetryAfter(value, now)).toBeUndefined()
   })
 })
 

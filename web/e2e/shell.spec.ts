@@ -1,30 +1,29 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 
 // Тексты берём из словаря: тест не ломается от правки формулировки.
 import { ru as t } from '../src/shared/i18n/ru.ts'
+import {
+  enlargeFont,
+  expectNoAxeViolations,
+  fontsReady,
+  horizontalOverflow,
+  mockSignedIn,
+} from './support.ts'
 
 // Оболочка приложения: главная, открытый быстрый ввод, экран «Ещё».
 // Проекты (mobile/desktop × light/dark) заданы в playwright.config.ts.
+
+// Оболочка — только для вошедшего пользователя: подменяем /me (e-mail подтверждён,
+// плашки нет — она проверяется в auth.spec.ts).
+test.beforeEach(async ({ page }) => {
+  await mockSignedIn(page)
+})
 
 async function openPage(page: Page, path: string) {
   await page.goto(path)
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   // Скриншот до загрузки Inter дал бы системный шрифт и нестабильный эталон.
-  await page.evaluate(() => document.fonts.ready)
-}
-
-/** На сколько пикселей страница шире экрана (0 — горизонтального скролла нет). */
-function horizontalOverflow(page: Page) {
-  return page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  )
-}
-
-/** Увеличенный системный шрифт (ux.md, раздел 6: до 200 % без поломки вёрстки). */
-async function enlargeFont(page: Page) {
-  await page.addStyleTag({ content: 'html { font-size: 200% }' })
-  await page.evaluate(() => document.fonts.ready)
+  await fontsReady(page)
 }
 
 /** Кнопка добавления операции из навигации: «+» на mobile, кнопка в боковом меню на desktop. */
@@ -39,18 +38,6 @@ async function openQuickAdd(page: Page) {
   const dialog = page.getByRole('dialog', { name: t.quickAdd.title })
   await expect(dialog).toBeVisible()
   return dialog
-}
-
-async function expectNoAxeViolations(page: Page) {
-  const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
-    .analyze()
-  // Список нарушений в сообщении об ошибке понятнее, чем «expected 2 to be 0».
-  expect(
-    results.violations.map(
-      (v) => `${v.id}: ${v.help} (${v.nodes.map((n) => n.target.join(' ')).join('; ')})`,
-    ),
-  ).toEqual([])
 }
 
 test.describe('главная', () => {

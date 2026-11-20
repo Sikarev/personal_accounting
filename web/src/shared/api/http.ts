@@ -54,6 +54,11 @@ export class ApiError extends Error {
   readonly requestId: string | undefined
   /** Исходное тело, если это был Problem Details. */
   readonly problem: ProblemBody | undefined
+  /**
+   * Через сколько секунд можно повторить (`Retry-After`, обычно у 429 `too_many_requests`).
+   * `undefined` — заголовка нет или он не разобран.
+   */
+  readonly retryAfterSeconds: number | undefined
 
   constructor(init: {
     status: number
@@ -62,6 +67,7 @@ export class ApiError extends Error {
     fieldErrors?: Record<string, string>
     requestId?: string
     problem?: ProblemBody
+    retryAfterSeconds?: number
   }) {
     super(init.detail ?? `HTTP ${init.status} (${init.code})`)
     this.status = init.status
@@ -70,6 +76,7 @@ export class ApiError extends Error {
     this.fieldErrors = init.fieldErrors ?? {}
     this.requestId = init.requestId
     this.problem = init.problem
+    this.retryAfterSeconds = init.retryAfterSeconds
   }
 }
 
@@ -138,7 +145,15 @@ async function readText(res: Response, signal: AbortSignal | null | undefined): 
 
 function toApiError(res: Response, text: string, requestId: string | undefined): ApiError {
   const problem = parseProblem(res, text)
-  if (!problem) return new ApiError({ status: res.status, code: UNKNOWN_ERROR_CODE, requestId })
+  const retryAfterSeconds = parseRetryAfter(res.headers.get('Retry-After'))
+  if (!problem) {
+    return new ApiError({
+      status: res.status,
+      code: UNKNOWN_ERROR_CODE,
+      requestId,
+      retryAfterSeconds,
+    })
+  }
 
   return new ApiError({
     status: res.status,
@@ -147,7 +162,28 @@ function toApiError(res: Response, text: string, requestId: string | undefined):
     fieldErrors: toFieldErrors(problem.errors),
     requestId,
     problem,
+    retryAfterSeconds,
   })
+}
+
+/**
+ * Значение `Retry-After` в секундах (RFC 9110, 10.2.3): либо целое число секунд
+ * (так отвечает наш API), либо HTTP-дата (так может ответить прокси).
+ * Нераспознанное значение — `undefined`: лучше общий текст «попробуйте позже», чем неверное время.
+ */
+export function parseRetryAfter(
+  value: string | null | undefined,
+  now: number = Date.now(),
+): number | undefined {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  if (/^\d+$/.test(trimmed)) return Number(trimmed)
+  // Date.parse понимает и «Wed, 21 Oct 2026 07:28:00 GMT», и ISO — ISO в заголовке
+  // не по стандарту, поэтому требуем название дня недели, как в IMF-fixdate.
+  if (!/^[A-Za-z]{3},/.test(trimmed)) return undefined
+  const at = Date.parse(trimmed)
+  if (Number.isNaN(at)) return undefined
+  return Math.max(0, Math.ceil((at - now) / 1000))
 }
 
 function parseProblem(res: Response, text: string): ProblemBody | undefined {

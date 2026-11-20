@@ -1,9 +1,10 @@
 import { Box, NavLink, Paper, ThemeIcon } from '@mantine/core'
-import { IconChevronRight } from '@tabler/icons-react'
+import { IconChevronRight, IconLogout } from '@tabler/icons-react'
 import { Link } from 'react-router'
 
 import { moreItems } from '../app/navigation'
 import { ApiStatus } from '../app/layout/ApiStatus'
+import { useLogoutAction } from '../features/auth/useLogoutAction'
 import { useT } from '../shared/i18n'
 import { PageHeader } from '../shared/ui'
 import { icons } from '../theme'
@@ -12,6 +13,7 @@ import classes from './MorePage.module.css'
 /** Экран «Ещё» (mobile): разделы, которым не хватило места в нижней панели. */
 export function MorePage() {
   const t = useT()
+  const { logout, isPending: loggingOut } = useLogoutAction()
   const descriptions: Record<string, string> = {
     accounts: t.pages.more.accountsDescription,
     settings: t.pages.more.settingsDescription,
@@ -49,6 +51,22 @@ export function MorePage() {
             }}
           />
         ))}
+      </Paper>
+      <Paper withBorder radius="lg" mt="lg" className={classes.list}>
+        <NavLink
+          component="button"
+          type="button"
+          label={t.auth.logout}
+          onClick={logout}
+          disabled={loggingOut}
+          leftSection={
+            <ThemeIcon variant="light" color="gray" size="lg" radius="md" aria-hidden>
+              <IconLogout size={icons.size.md} stroke={icons.stroke} />
+            </ThemeIcon>
+          }
+          className={classes.item}
+          classNames={{ body: classes.body, label: classes.label }}
+        />
       </Paper>
       {import.meta.env.DEV && (
         <Box mt="lg">

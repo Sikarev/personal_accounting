@@ -36,4 +36,6 @@
 
 .footer {
   padding-top: var(--mantine-spacing-md);
+  /* Как у .links: пункт «Выйти» выровнен по пунктам меню. */
+  margin-inline: calc(var(--mantine-spacing-xs) * -1);
 }

@@ -1,6 +1,6 @@
 # Handoff: состояние проекта и следующие задачи
 
-> Обновлено: 2026-11-19, после слияния `feat/web-api-client` и `feat/api-auth` (`88286c7`).
+> Обновлено: 2026-11-21, после слияния `feat/api-auth-email` (`27c05d2`).
 > Документ ведёт PM (основной поток). Обновляется после каждого слияния в `main`.
 
 Для кого:
@@ -13,17 +13,18 @@
 |---|---|
 | 0. Фундамент | ✅ влит в `main` |
 | 0+. API-клиент на фронте (orval) | ✅ влит в `main` |
-| 1. Авторизация | 🔄 `feat/api-auth` ✅ влит; следующая — `feat/api-auth-email` (постановка в 5.3), затем `feat/web-auth` (5.4) |
+| 1. Авторизация | 🔄 `feat/api-auth` и `feat/api-auth-email` ✅ влиты; следующая — `feat/web-auth` (5.4) |
 
 **Что есть в `main`:**
 - **API:**
-  - контракт `api/openapi.yaml`: `GET /currencies` (публичный), `POST /auth/register`, `/auth/login`, `/auth/logout`, `GET /me`;
+  - контракт `api/openapi.yaml`: `GET /currencies` (публичный), `POST /auth/register`, `/auth/login`, `/auth/logout`, `GET /me`, `POST /auth/verify-email`, `/auth/verify-email/resend`, `/auth/password-reset`, `/auth/password-reset/confirm`;
   - авторизация (docs/api.md → «Авторизация»):
     - сессии в Postgres, cookie `pa_session`, argon2id;
     - обязательность входа задана в контракте (`security`), текущий пользователь — `currentUser(ctx)`;
     - CSRF через `http.CrossOriginProtection`;
     - лимиты частоты в памяти: вход — «e-mail + IP» 5/15 мин и e-mail 50 неудач/час;
     - реальный IP через `TRUSTED_PROXIES`;
+  - подтверждение e-mail и сброс пароля (docs/api.md → «Письма»): одноразовые токены `email_tokens` (SHA-256, привязка к адресу), сброс завершает все сессии; пакет `internal/mail` (SMTP на `net/smtp`, in-memory, фоновая отправка `mail.Background` с `Close`/`Wait` при остановке); Mailpit в docker-compose (`:8025`); переменные `APP_BASE_URL`, `SMTP_*`, `MAIL_FROM`;
   - регистрация в одной транзакции: пользователь, семья «Семья», роль `owner`, категории по умолчанию (`defaultcategories.go`), согласие с ПДн (`terms_accepted_at`, `terms_version`);
   - генерация: oapi-codegen strict server + sqlc;
   - проверка запросов по контракту (kin-openapi);
@@ -36,7 +37,7 @@
   - окно быстрого ввода (пока заглушка);
   - компоненты `Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo` (+Ctrl+Z), `PageHeader`;
   - форматтеры сумм и дат, словарь `ru.ts`;
-  - клиент API (orval → `shared/api/generated`), `ApiError` / `NetworkError`, `createQueryClient()`; хуки авторизации сгенерированы, но экранов входа ещё нет;
+  - клиент API (orval → `shared/api/generated`), `ApiError` / `NetworkError`, `createQueryClient()`; хуки авторизации и писем сгенерированы, но экранов входа ещё нет;
   - Vitest, Storybook, Playwright (скриншоты + axe);
   - CI `.github/workflows/web.yml` (с проверкой актуальности клиента API).
 - **Экраны с данными:** пока нет, все разделы — заглушки через `EmptyState`.
@@ -96,6 +97,13 @@
 | 14 | Каждая проверка пароля (argon2id) берёт ~19 МиБ памяти; одновременные входы ограничены только лимитом по IP | этап 6, нагрузочная проверка |
 | 15 | Распределённая атака (50 неудачных входов в час на e-mail с разных IP) может заблокировать владельцу вход. Риск принят, описан в api.md | — |
 | 16 | В CI `api.yml` нет `go mod tidy` / `go mod verify` | когда появится GitHub |
+| 17 | Очереди писем (outbox) нет: письмо, не ушедшее до падения процесса, теряется; ошибка SMTP и ошибка создания токена сброса (он создаётся в фоне) видны только в логе | после MVP / при первых жалобах на недоставку |
+| 18 | Лимиты сброса пароля, `resend`, `verify-email` и `confirm` — тоже в памяти процесса (как №12) | вместе с №12 |
+| 19 | Таблица `email_tokens` не чистится: просроченные токены лежат до следующего письма того же назначения | этап 6, вместе с №13 |
+| 20 | Сроки ссылок заданы дважды: константы в `internal/httpapi/email.go` и тексты в `internal/mail/templates.go` | при изменении сроков |
+| 21 | SMTP для production: STARTTLS только если сервер предлагает (нет режима «только TLS» и неявного TLS :465), EHLO отправляется как `localhost`, `SMTP_HOST` и `MAIL_FROM` в production не обязательны (умолчание `no-reply@localhost`) | этап 6, выбор почтового провайдера |
+| 22 | Кириллические адреса (нужен SMTPUTF8) не поддерживаются при отправке: регистрация их пропускает, письма не уйдут | этап 6 |
+| 23 | Ожидание писем при остановке не проверено вживую (на Windows фоновому процессу не послать сигнал), только юнит-тестами | при первом деплое |
 
 ## 4. Как PM ведёт задачу
 
@@ -128,7 +136,7 @@
 
 ### 5.2 Этап 1 — декомпозиция
 
-Порядок: `feat/api-auth` (✅ влита, `2a37b6e`) → `feat/api-auth-email` (постановка в 5.3) → `feat/web-auth` (5.4).
+Порядок: `feat/api-auth` (✅ влита, `2a37b6e`) → `feat/api-auth-email` (✅ влита, `27c05d2`) → `feat/web-auth` (5.4).
 
 | Ветка | Содержание |
 |---|---|
@@ -142,9 +150,14 @@
 
 От пользователя для этапа 1 ничего не нужно: политика ПДн и соглашение пока заглушки, ответы на Q1–Q4 утверждены по умолчанию (2026-11-19, [requirements.md](requirements.md#9-открытые-вопросы)).
 
-### 5.3 `feat/api-auth-email` — подтверждение e-mail и сброс пароля (готовая постановка)
+### 5.3 `feat/api-auth-email` — ✅ влита (`27c05d2`)
 
-Стартует после слияния `feat/api-auth`. Перед запуском сверить с тем, что реально получилось в `feat/api-auth` (имена пакетов, rate limiter, помощник текущего пользователя).
+Постановка ниже сохранена для истории; итог — в docs/api.md («Письма», «Ограничение частоты»). Отличия от постановки:
+- токен сброса создаётся в фоне вместе с письмом (ради одинакового времени ответа);
+- формат `email` дополнительно проверяется через `net/mail.ParseAddress` — на всех операциях, а не только при регистрации;
+- после сброса очищаются счётчики неудачных входов по e-mail и «e-mail + IP» для текущего IP.
+
+Ревью (Opus, безопасность): блокеров нет; 4 мелочи исправлены, TLS-режим SMTP отложен (техдолг №21).
 
 **Цель.** Пользователь подтверждает e-mail по ссылке из письма и может восстановить доступ, если забыл пароль. Письма в dev видны в Mailpit.
 
@@ -193,7 +206,7 @@
 
 ### 5.4 `feat/web-auth` — экраны входа (черновик постановки)
 
-Стартует после слияния `feat/web-api-client`, `feat/api-auth` и `feat/api-auth-email`. Перед запуском сверить с реальными именами хуков orval и эндпоинтов.
+Можно запускать: все зависимости влиты. Хуки orval: `useRegister`, `useLogin`, `useLogout`, `useGetMe`, `useVerifyEmail`, `useResendVerificationEmail`, `useRequestPasswordReset`, `useConfirmPasswordReset`. Коды ошибок: `invalid_credentials`, `email_taken`, `invalid_token` (поле `token`), `too_many_requests` (секунды — в `Retry-After`), `validation_failed` — см. docs/api.md. `password-reset` всегда отвечает 202: экран показывает «если аккаунт есть, письмо отправлено». `confirm` возвращает `Me` и cookie — после него пользователь сразу внутри.
 
 **Цель.** Человек регистрируется, входит, восстанавливает пароль и подтверждает e-mail. Неавторизованного пользователя приложение не пускает дальше экрана входа.
 

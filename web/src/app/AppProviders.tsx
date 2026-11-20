@@ -1,8 +1,10 @@
 import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router'
 
+import { handleUnauthorized } from '../features/auth/unauthorized'
 import { QuickAddProvider } from '../features/quick-add/QuickAddProvider'
 import { createQueryClient } from '../shared/api'
 import { useMobileLayout } from '../shared/lib/useMobileLayout'
@@ -43,11 +45,29 @@ function AppNotifications() {
   )
 }
 
-/** Все провайдеры приложения. Роутер — снаружи (main.tsx), чтобы тесты могли подставить свой. */
+/**
+ * Все провайдеры приложения. Роутер — снаружи (main.tsx), чтобы тесты могли подставить свой;
+ * он обязателен: при 401 отсюда выполняется переход на экран входа.
+ */
 export function AppProviders({ children }: { children: ReactNode }) {
+  // navigate — через ref: клиент создаётся один раз, а функция из хука может смениться.
+  const navigate = useNavigate()
+  const navigateRef = useRef(navigate)
+  useEffect(() => {
+    navigateRef.current = navigate
+  }, [navigate])
+
   // Клиент создаётся один раз на жизнь приложения (useState, а не модульная переменная —
   // так он не переживает hot reload с устаревшим кэшем).
-  const [queryClient] = useState(createQueryClient)
+  // Ref читается не при рендере, а позже, когда придёт ошибка, — линтер этого не различает.
+  // oxlint-disable-next-line react/refs
+  const [queryClient] = useState(() => {
+    const client = createQueryClient({
+      // 401 на любом запросе — сессия кончилась: на экран входа (features/auth/unauthorized.ts).
+      onUnauthorized: () => handleUnauthorized(client, navigateRef.current),
+    })
+    return client
+  })
 
   return (
     <ThemeProviders>

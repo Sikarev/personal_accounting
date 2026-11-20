@@ -1,0 +1,23 @@
+/* Скелетон «пока проверяем сессию»: форма — как у заголовка экрана и карточек под ним. */
+.skeleton {
+  min-height: 100dvh;
+  padding: calc(var(--mantine-spacing-lg) + env(safe-area-inset-top)) var(--mantine-spacing-md);
+}
+
+.skeletonColumn {
+  max-width: var(--app-content-max-width);
+  margin-inline: auto;
+}
+
+.skeletonTitle {
+  width: 40%;
+  height: var(--mantine-font-size-xl);
+}
+
+.skeletonCard {
+  height: 10rem;
+}
+
+.skeletonCardSmall {
+  height: 6rem;
+}

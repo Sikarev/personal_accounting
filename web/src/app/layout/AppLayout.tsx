@@ -1,6 +1,7 @@
 import { AppShell } from '@mantine/core'
 import { Outlet } from 'react-router'
 
+import { EmailVerificationBanner } from '../../features/auth/EmailVerificationBanner'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { layout } from '../../theme'
 import classes from './AppLayout.module.css'
@@ -32,6 +33,7 @@ export function AppLayout() {
 
       <AppShell.Main className={classes.main} data-mobile={mobile || undefined}>
         <div className={classes.content}>
+          <EmailVerificationBanner />
           <Outlet />
         </div>
       </AppShell.Main>

@@ -20,6 +20,10 @@ export const layout = {
   contentMaxWidth: 1040,
   /** Минимальная зона касания (ux.md, раздел 6). */
   touchTarget: 44,
+  /** Ширина формы входа и регистрации на desktop (на mobile — во всю ширину). */
+  authFormWidth: 420,
+  /** Ширина текстовой страницы (документы): длина строки удобна для чтения. */
+  readingWidth: 680,
 } as const
 
 /**
@@ -143,6 +147,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     '--app-bottom-nav-height': rem(layout.bottomNavHeight),
     '--app-content-max-width': rem(layout.contentMaxWidth),
     '--app-touch-target': rem(layout.touchTarget),
+    '--app-auth-form-width': rem(layout.authFormWidth),
+    '--app-reading-width': rem(layout.readingWidth),
   },
   light: {
     '--mantine-color-dimmed': '#656c73', // 5.4:1 на белом, 5.1:1 на gray-0
@@ -155,6 +161,10 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     // Кольцо фокуса (WCAG 1.4.11, ≥ 3:1): 4.98 на белом, 4.73 на gray-0,
     // 3.93 на подложке активного пункта меню (indigo-1).
     '--app-focus-ring': `var(--mantine-color-${t.primaryColor}-7)`,
+    // Наведение на кнопку variant="light": у Mantine фон indigo-2, и текст indigo-9 на нём —
+    // 4.1:1, ниже AA. Середина между indigo-1 и indigo-2 даёт 4.7:1 и остаётся заметной.
+    [`--mantine-color-${t.primaryColor}-light-hover`]: `color-mix(in srgb, var(--mantine-color-${t.primaryColor}-1), var(--mantine-color-${t.primaryColor}-2))`,
+    '--mantine-primary-color-light-hover': `var(--mantine-color-${t.primaryColor}-light-hover)`,
   },
   dark: {
     '--mantine-color-dimmed': '#a3a3a3', // 6.5:1 на dark-7, 5.4:1 на dark-6

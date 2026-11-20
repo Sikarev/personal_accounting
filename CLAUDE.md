@@ -32,7 +32,7 @@ go run ./cmd/api              # http://localhost:8080, APP_ENV=production — JS
 
 # web/ — только pnpm, не npm/yarn
 pnpm install
-pnpm dev                      # http://localhost:5173, /api проксируется на :8080
+pnpm dev                      # http://localhost:5173, /api проксируется на :8080 (другой адрес — API_PROXY_TARGET, см. README)
 pnpm build                    # tsc -b + vite build
 pnpm typecheck                # только tsc -b
 pnpm generate:api             # ../api/openapi.yaml → src/shared/api/generated (orval); результат коммитится
@@ -73,20 +73,24 @@ Playwright сам собирает приложение и поднимает `v
   - `main.tsx` — точка входа: шрифт, стили Mantine, роутер, провайдеры;
   - `theme.ts` — дизайн-токены: тема Mantine, `semanticColors` (доход, проблема, акцент), `layout` (размеры каркаса), `icons` (размеры и толщина иконок), CSS-переменные `--app-*`;
   - `app/` — оболочка: `App.tsx` (маршруты), `AppProviders.tsx`, `navigation.ts` (адреса и пункты меню), `layout/` (AppShell, боковое меню, нижняя панель, статус API);
-  - `pages/` — экраны, по одному файлу на маршрут;
-  - `features/` — сценарии, которые используются из нескольких экранов (например, `quick-add`: окно быстрого ввода и `useQuickAdd()`);
-  - `shared/ui/` — базовые компоненты (`Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo`, `PageHeader`), рядом — `*.stories.tsx` и `*.module.css`;
-  - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate` + `todayIn`, `plural`), хуки (`useDelayedLoading`, `useMobileLayout`), логика Ctrl+Z для тостов (`undoShortcut`); рядом — `*.test.ts`;
+  - `pages/` — экраны, по одному файлу на маршрут; `pages/auth/` — вход и регистрация (`AuthPage`, один компонент на `/login` и `/register`), восстановление пароля, подтверждение e-mail и их общая форма (`AuthForm`, `submitErrorState`); `LegalPage` — документы;
+  - `features/` — сценарии, которые используются из нескольких экранов:
+    - `quick-add`: окно быстрого ввода и `useQuickAdd()`;
+    - `auth`: защита маршрутов (`RequireAuth`, `RedirectIfAuthenticated`), реакция на 401 (`handleUnauthorized`, подключена в `AppProviders` через `createQueryClient({ onUnauthorized })`), выход (`useLogoutAction`), плашка «Подтвердите e-mail», часовой пояс и «сегодня» пользователя (`useTimezone`, `useToday` — «сегодня» считать только через них);
+  - `shared/ui/` — базовые компоненты (`Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo`, `PageHeader`, `AuthLayout`, `PasswordField`), рядом — `*.stories.tsx` и `*.module.css`;
+  - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate` + `todayIn`, `plural`), хуки (`useDelayedLoading`, `useMobileLayout`, `useFormState`), безопасный адрес возврата после входа (`safeNextPath`), логика Ctrl+Z для тостов (`undoShortcut`); рядом — `*.test.ts`;
   - `shared/i18n/` — словарь `ru.ts` и `useT()`: `const t = useT(); t.nav.home`. Ключи проверяются типами;
-  - `shared/api/` — клиент API: `generated/` (orval, руками не править), `http.ts` (fetch-мутатор, `ApiError`, `NetworkError`), `queryClient.ts` (`createQueryClient()` с умолчаниями). Импорт — из `shared/api`.
+  - `shared/api/` — клиент API: `generated/` (orval, руками не править), `http.ts` (fetch-мутатор, `ApiError` с `retryAfterSeconds`, `NetworkError`), `queryClient.ts` (`createQueryClient()` с умолчаниями и `isUnauthorizedError`), `errorText.ts` (тексты ошибок: `apiErrorText`, `fieldErrorTexts`, `tooManyRequestsText`). Импорт — из `shared/api`.
 - Запросы к API — только через сгенерированные хуки (`useListCurrencies()` и т. п.), не через `fetch` (исключение — служебный `/healthz` вне контракта). Новый эндпоинт: контракт → `pnpm generate:api` → хук готов.
-- Ошибки API в хуках: `ApiError` (сервер ответил не 2xx: `status`, `code`, `detail`, `fieldErrors`, `requestId`) или `NetworkError` (ответа нет). Текст пользователю выбирается по `code`, неизвестный код — по `status`; `detail` не показывается. Ошибки полей формы — `form.setErrors(error.fieldErrors)`.
+- Ошибки API в хуках: `ApiError` (сервер ответил не 2xx: `status`, `code`, `detail`, `fieldErrors`, `requestId`, `retryAfterSeconds`) или `NetworkError` (ответа нет). Текст пользователю — `apiErrorText(error, t)`: по `code`, неизвестный код — по `status`; `detail` не показывается. Ошибки полей формы — `form.setErrors(fieldErrorTexts(error, t, overrides))`: текст по коду нарушения из словаря, а не `message` сервера.
+- Вход: источник правды — `GET /me` в кэше (`useGetMe()`). 401 на любом запросе (кроме `invalid_credentials`) сбрасывает кэш и ведёт на `/login?next=…`; на публичных страницах (`isPublicPath` в `app/navigation.ts`) — нет. Новый публичный маршрут добавляется и в `isPublicPath`. `next` — только через `safeNextPath` (защита от open redirect).
 - `QueryClient`: 4xx не повторяются, сеть и 5xx — один повтор; `staleTime` 30 с; обновление при возврате во вкладку включено; мутации не повторяются.
 - Стили компонентов — CSS-модули рядом с компонентом; в них только `var(--mantine-*)` и `var(--app-*)`. Стили Mantine подключены слоем (`styles.layer.css`), поэтому модули перекрывают их без `!important`.
 - Мобильная раскладка — `useMobileLayout()` / `MOBILE_LAYOUT_QUERY`: ширина < `sm` **или** телефон в альбомной ориентации (`max-height: 30em` и `pointer: coarse`). Это единый источник для оболочки, тостов и `ResponsiveSheet`; брейкпоинты Mantine (`hiddenFrom`, `@mixin smaller-than`) для переключения mobile/desktop не используем — они не знают про альбомную ориентацию.
-- Глобальные правки поверх Mantine — только в `app/global.css` (цвет кольца фокуса, перенос подписей кнопок при крупном шрифте).
+- Глобальные правки поверх Mantine — только в `app/global.css` (цвет кольца фокуса, перенос подписей кнопок при крупном шрифте и центрирование подписи у кнопок-ссылок, высота полей `md` 44 px).
 - Иконки: размеры — `icons.size.*` (rem, растут со шрифтом), толщина — только `icons.stroke`.
-- Новый базовый компонент — сразу с историей в Storybook во всех состояниях; новый экран — в `e2e/` (скриншот + axe).
+- Новый базовый компонент — сразу с историей в Storybook во всех состояниях; новый экран — в `e2e/` (скриншот + axe). Бэкенда под `vite preview` нет: API подменяется `page.route`, помощники (`mockSignedIn`, `mockSignedOut`, `problem`, `expectNoAxeViolations`) — в `e2e/support.ts`. Экраны внутри оболочки требуют входа — в тесте сначала `mockSignedIn(page)`.
+- Плейсхолдеры в полях не используем, только подписи (`label`): цвет placeholder Mantine не проходит AA (техдолг №6). Поля форм — `size="md"` (шрифт 16 px: iOS не масштабирует страницу при фокусе; высота 44 px — `global.css`).
 
 ## Git
 

@@ -1,7 +1,8 @@
 import { AppShell, Button, Group, NavLink, Stack, Text, ThemeIcon } from '@mantine/core'
-import { IconHomeDollar, IconPlus } from '@tabler/icons-react'
+import { IconHomeDollar, IconLogout, IconPlus } from '@tabler/icons-react'
 import { NavLink as RouterNavLink, useLocation } from 'react-router'
 
+import { useLogoutAction } from '../../features/auth/useLogoutAction'
 import { useQuickAdd } from '../../features/quick-add/quickAddContext'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
@@ -14,6 +15,7 @@ export function Sidebar() {
   const t = useT()
   const quickAdd = useQuickAdd()
   const { pathname } = useLocation()
+  const { logout, isPending: loggingOut } = useLogoutAction()
 
   return (
     // AppShell.Navbar — это <nav>. В мобильной раскладке AppLayout его не рендерит вовсе.
@@ -60,11 +62,20 @@ export function Sidebar() {
         </Stack>
       </AppShell.Section>
 
-      {import.meta.env.DEV && (
-        <AppShell.Section className={classes.footer}>
-          <ApiStatus />
-        </AppShell.Section>
-      )}
+      <AppShell.Section className={classes.footer}>
+        <Stack gap="md">
+          <NavLink
+            component="button"
+            type="button"
+            label={t.auth.logout}
+            leftSection={<IconLogout size={icons.size.md} stroke={icons.stroke} />}
+            onClick={logout}
+            disabled={loggingOut}
+            className={classes.link}
+          />
+          {import.meta.env.DEV && <ApiStatus />}
+        </Stack>
+      </AppShell.Section>
     </AppShell.Navbar>
   )
 }

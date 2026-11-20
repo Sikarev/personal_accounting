@@ -18,7 +18,37 @@ export const paths = {
   accounts: '/accounts',
   settings: '/settings',
   more: '/more',
+  login: '/login',
+  register: '/register',
+  forgotPassword: '/forgot-password',
+  resetPassword: '/reset-password',
+  verifyEmail: '/verify-email',
+  legalPrivacy: '/legal/privacy',
+  legalTerms: '/legal/terms',
 } as const
+
+/**
+ * Страницы, доступные без входа. На них 401 от API не уводит на экран входа:
+ * иначе экран входа (он сам спрашивает `/me`) зациклился бы.
+ */
+const publicPaths: readonly string[] = [
+  paths.login,
+  paths.register,
+  paths.forgotPassword,
+  paths.resetPassword,
+  paths.verifyEmail,
+]
+
+/** Публичная ли страница: см. `publicPaths`, плюс всё под `/legal/`. */
+export function isPublicPath(pathname: string): boolean {
+  return publicPaths.includes(pathname) || pathname.startsWith('/legal/')
+}
+
+/** Адрес экрана входа, после которого пользователь вернётся на `next`. */
+export function loginPath(next?: string): string {
+  if (!next || next === paths.home) return paths.login
+  return `${paths.login}?${new URLSearchParams({ next })}`
+}
 
 export type NavItem = {
   to: string

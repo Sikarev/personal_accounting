@@ -1,0 +1,25 @@
+.root {
+  padding: var(--mantine-spacing-md);
+  margin-bottom: var(--mantine-spacing-lg);
+  background-color: var(--app-color-surface);
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Длинный адрес переносится, а не раздвигает плашку. */
+.description {
+  overflow-wrap: anywhere;
+}
+
+/* Крестик — с зоной касания 44 px (ux.md, раздел 6), иконка внутри прежнего размера. */
+.close {
+  flex-shrink: 0;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+  margin: calc(var(--mantine-spacing-sm) * -1) calc(var(--mantine-spacing-sm) * -1) 0 0;
+}

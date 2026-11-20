@@ -14,6 +14,7 @@ import (
 
 	"personal-accounting/api/internal/auth"
 	"personal-accounting/api/internal/db/dbgen"
+	"personal-accounting/api/internal/mail"
 	"personal-accounting/api/internal/oapi"
 	"personal-accounting/api/internal/problem"
 )
@@ -103,9 +104,18 @@ func (s *server) Register(ctx context.Context, req oapi.RegisterRequestObject) (
 	if err != nil {
 		return nil, err
 	}
+	// Токен подтверждения — в той же транзакции, а письмо — только после
+	// коммита: иначе при откате пришло бы письмо для несуществующего аккаунта.
+	verifyToken, err := s.createEmailToken(ctx, q, userID, email, dbgen.EmailTokenPurposeVerifyEmail, now)
+	if err != nil {
+		return nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit registration: %w", err)
 	}
+	s.sendVerifyLetter(ctx, userID, mail.Letter{
+		Name: name, Email: email, Link: s.emailLink(verifyEmailPath, verifyToken),
+	})
 
 	me, err := s.me(ctx, userID, familyID)
 	if err != nil {

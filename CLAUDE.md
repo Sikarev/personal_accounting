@@ -17,7 +17,7 @@ SaaS «Домашняя бухгалтерия»: учёт личных и се�
 
 ## Команды
 
-Windows, shell — Git Bash / PowerShell. Postgres для разработки и тестов: `docker compose up -d` из корня.
+Windows, shell — Git Bash / PowerShell. Postgres для разработки и тестов и Mailpit (письма API, http://localhost:8025): `docker compose up -d` из корня.
 
 ```bash
 # api/

@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"personal-accounting/api/internal/auth"
+	"personal-accounting/api/internal/mail"
 	"personal-accounting/api/internal/oapi"
 	"personal-accounting/api/internal/ratelimit"
 	"personal-accounting/api/internal/testdb"
@@ -41,11 +42,14 @@ func (c *testClock) Advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-// authEnv — роутер с подменёнными часами и пул тестовой БД.
+// authEnv — роутер с подменёнными часами, пул тестовой БД и почтовый ящик
+// in-memory (письма читаются через e.mails, см. email_test.go).
 type authEnv struct {
-	h     http.Handler
-	pool  *pgxpool.Pool
-	clock *testClock
+	h       http.Handler
+	pool    *pgxpool.Pool
+	clock   *testClock
+	mailbox *mail.Memory
+	mail    *mail.Background
 }
 
 // newAuthEnv создаёт роутер. Лимит по IP по умолчанию поднят, чтобы тесты,
@@ -57,12 +61,14 @@ func newAuthEnv(t *testing.T, opts Options) authEnv {
 	if opts.Limits.AuthPerIP.Limit == 0 {
 		opts.Limits.AuthPerIP = ratelimit.Rule{Limit: 1000, Window: time.Minute}
 	}
+	mailbox := &mail.Memory{}
+	opts.Mail = mail.NewBackground(mailbox, discardLogger, 5*time.Second)
 	pool := testdb.Pool(t)
 	h, err := NewRouter(discardLogger, pool, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return authEnv{h: h, pool: pool, clock: clock}
+	return authEnv{h: h, pool: pool, clock: clock, mailbox: mailbox, mail: opts.Mail}
 }
 
 type reqOption func(*http.Request)
@@ -563,7 +569,12 @@ func TestContractSecurity(t *testing.T) {
 	for _, route := range newSpecRoutes(doc, apiPrefix) {
 		public[operationID(route)] = isPublic(route)
 	}
-	want := map[string]bool{"listCurrencies": true, "register": true, "login": true, "logout": true, "getMe": false}
+	want := map[string]bool{
+		"listCurrencies": true, "register": true, "login": true, "logout": true, "getMe": false,
+		// Ссылку из письма могут открыть в другом браузере, без сессии.
+		"verifyEmail": true, "requestPasswordReset": true, "confirmPasswordReset": true,
+		"resendVerificationEmail": false,
+	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)
 	}

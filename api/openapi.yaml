@@ -125,6 +125,100 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      summary: Подтверждение e-mail по токену из письма
+      description: |
+        Публичная: ссылку из письма могут открыть в другом браузере, без сессии.
+        Токен одноразовый, действует 24 часа и только для того адреса, на который
+        отправлено письмо. Неверный, просроченный или использованный токен —
+        422 `validation_failed` с ошибкой `invalid_token` у поля `token`.
+        Лимит — 20 запросов в минуту с одного IP (429 `too_many_requests`).
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "204":
+          description: E-mail подтверждён.
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/verify-email/resend:
+    post:
+      operationId: resendVerificationEmail
+      summary: Отправить письмо подтверждения ещё раз
+      description: |
+        Отправляет новое письмо на текущий e-mail пользователя; ссылка из прежнего
+        письма перестаёт действовать. Если e-mail уже подтверждён, отвечает 204
+        и письмо не отправляет. Лимит — раз в минуту и 5 раз в час на пользователя
+        (429 `too_many_requests` с `Retry-After`).
+      tags: [auth]
+      responses:
+        "204":
+          description: Письмо поставлено на отправку (или e-mail уже подтверждён).
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/password-reset:
+    post:
+      operationId: requestPasswordReset
+      summary: Запросить письмо для сброса пароля
+      description: |
+        Всегда отвечает 202 без тела — есть такой аккаунт или нет, чтобы ответ
+        не выдавал, зарегистрирован ли e-mail. Письмо со ссылкой (действует 1 час)
+        уходит, только если аккаунт есть и на адрес отправлено меньше 3 писем
+        за час. Лимит по IP — 20 запросов в час (429 `too_many_requests`).
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "202":
+          description: Запрос принят.
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /auth/password-reset/confirm:
+    post:
+      operationId: confirmPasswordReset
+      summary: Задать новый пароль по токену из письма
+      description: |
+        Меняет пароль, завершает **все** сессии пользователя, подтверждает e-mail
+        (владение адресом доказано) и открывает новую сессию.
+        Неверный, просроченный или использованный токен — 422 `validation_failed`
+        с ошибкой `invalid_token` у поля `token`. Лимит — 20 запросов в минуту
+        с одного IP (429 `too_many_requests`).
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetConfirmRequest"
+      responses:
+        "200":
+          description: Пароль изменён, сессия открыта.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetSessionCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+
   /me:
     get:
       operationId: getMe
@@ -223,7 +317,8 @@ components:
           type: string
           description: |
             Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
-            Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован.
+            Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован;
+            `invalid_token` — токен из письма неверный, просрочен или уже использован.
           example: required
         message:
           type: string
@@ -310,6 +405,50 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+
+    VerifyEmailRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          $ref: "#/components/schemas/EmailToken"
+
+    PasswordResetRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          # Обычная строка, а не openapi_types.Email: тот при разборе JSON проверяет
+          # формат сам, без обрезки пробелов. Формат проверяет валидатор контракта.
+          x-go-type: string
+          example: ivan@example.com
+
+    PasswordResetConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          $ref: "#/components/schemas/EmailToken"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: Новый пароль, 8–128 символов (те же правила, что при регистрации).
+
+    EmailToken:
+      type: string
+      minLength: 1
+      maxLength: 256
+      description: |
+        Токен из ссылки в письме (параметр `token`), передаётся как есть.
+        Формат не проверяется схемой: любой неподходящий токен — ошибка
+        `invalid_token` у поля `token`.
 
     FamilyRole:
       type: string

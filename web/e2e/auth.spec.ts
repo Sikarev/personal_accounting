@@ -160,12 +160,6 @@ test.describe('вход', () => {
     const box = await toggle.boundingBox()
     expect(box!.width).toBeGreaterThanOrEqual(44)
   })
-
-  test('шрифт 200 %: нет горизонтального скролла', { tag: '@a11y' }, async ({ page }) => {
-    await openLogin(page)
-    await enlargeFont(page)
-    expect(await horizontalOverflow(page)).toBe(0)
-  })
 })
 
 test.describe('регистрация', () => {
@@ -518,6 +512,34 @@ test.describe('подтверждение e-mail', () => {
     await expect(page.getByText(t.auth.banner.title)).toHaveCount(0)
   })
 
+  test(
+    'адрес с «/» на конце — тоже публичный, на вход не уводит',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await page.route(`**${API}/auth/verify-email`, (route) => route.fulfill({ status: 204 }))
+      await page.goto('/verify-email/?token=abc')
+      await ready(page, t.auth.verify.successTitle)
+      await expect(page).toHaveURL(/\/verify-email\/\?token=abc$/)
+    },
+  )
+
+  test(
+    'старая ссылка у уже подтвердившего — «адрес уже подтверждён»',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockSignedIn(page)
+      await page.route(`**${API}/auth/verify-email`, (route) =>
+        problem(route, 422, 'validation_failed', {
+          errors: [{ field: 'token', code: 'invalid_token', message: 'x' }],
+        }),
+      )
+      await page.goto('/verify-email?token=old')
+      await ready(page, t.auth.verify.alreadyTitle)
+      await expect(page.getByRole('link', { name: t.auth.verify.toHome })).toBeVisible()
+      await expectNoAxeViolations(page)
+    },
+  )
+
   test('недействительная ссылка: скриншот', { tag: '@visual' }, async ({ page }) => {
     await openVerify(page, 'invalid')
     await expect(page).toHaveScreenshot('verify-email-invalid.png')
@@ -605,4 +627,140 @@ test.describe('документы', () => {
       await expectNoAxeViolations(page)
     })
   }
+})
+
+test.describe('шрифт 200 %: нет горизонтального скролла', () => {
+  /** Экран и как его открыть (с подменой нужных ответов API). */
+  const screens: { name: string; open: (page: Page) => Promise<void> }[] = [
+    { name: 'вход', open: (page) => openLogin(page) },
+    { name: 'регистрация', open: (page) => openRegister(page) },
+    {
+      name: 'восстановление пароля',
+      open: async (page) => {
+        await page.goto('/forgot-password')
+        await ready(page, t.auth.forgot.title)
+      },
+    },
+    {
+      name: 'письмо отправлено',
+      open: async (page) => {
+        await page.route(`**${API}/auth/password-reset`, (route) => route.fulfill({ status: 202 }))
+        await page.goto('/forgot-password')
+        await emailField(page).fill('very.long.address.for.layout.check@example.com')
+        await page.getByRole('button', { name: t.auth.forgot.submit }).click()
+        await ready(page, t.auth.forgot.sentTitle)
+      },
+    },
+    {
+      name: 'новый пароль',
+      open: async (page) => {
+        await page.goto('/reset-password?token=abc')
+        await ready(page, t.auth.reset.title)
+      },
+    },
+    {
+      name: 'ссылка сброса недействительна',
+      open: async (page) => {
+        await page.goto('/reset-password')
+        await ready(page, t.auth.reset.invalidTitle)
+      },
+    },
+    {
+      name: 'e-mail подтверждён',
+      open: async (page) => {
+        await page.route(`**${API}/auth/verify-email`, (route) => route.fulfill({ status: 204 }))
+        await page.goto('/verify-email?token=abc')
+        await ready(page, t.auth.verify.successTitle)
+      },
+    },
+    {
+      name: 'ссылка подтверждения недействительна',
+      open: async (page) => {
+        await page.goto('/verify-email')
+        await ready(page, t.auth.verify.invalidTitle)
+      },
+    },
+    {
+      name: 'соглашение',
+      open: async (page) => {
+        await page.goto('/legal/terms')
+        await ready(page, t.legal.terms.title)
+      },
+    },
+    {
+      name: 'политика ПДн',
+      open: async (page) => {
+        await page.goto('/legal/privacy')
+        await ready(page, t.legal.privacy.title)
+      },
+    },
+    {
+      name: 'плашка «Подтвердите e-mail»',
+      open: async (page) => {
+        await page.unrouteAll()
+        await mockSignedIn(
+          page,
+          meFixture({ emailVerified: false, email: 'very.long.address.for.layout@example.com' }),
+        )
+        await page.goto('/')
+        await expect(page.getByText(t.auth.banner.title)).toBeVisible()
+      },
+    },
+  ]
+
+  test.beforeEach(async ({ page }) => {
+    await mockSignedOut(page)
+  })
+
+  for (const screen of screens) {
+    test(screen.name, { tag: '@a11y' }, async ({ page }) => {
+      await screen.open(page)
+      await enlargeFont(page)
+      expect(await horizontalOverflow(page)).toBe(0)
+    })
+  }
+
+  test('скриншот: восстановление пароля', { tag: '@visual' }, async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Крупный шрифт важен на узком экране')
+    await page.goto('/forgot-password')
+    await ready(page, t.auth.forgot.title)
+    await enlargeFont(page)
+    await expect(page).toHaveScreenshot('forgot-password-font-200.png', { fullPage: true })
+  })
+})
+
+test.describe('сессия кончилась при открытом быстром вводе', () => {
+  async function expire(page: Page) {
+    // Часы — свои: «прошло 31 с», и /me устарел (staleTime 30 с).
+    await page.clock.install()
+    await mockSignedIn(page)
+    await page.goto('/accounts')
+    await expect(page.getByRole('heading', { level: 1, name: t.nav.accounts })).toBeVisible()
+    await page
+      .getByRole('navigation', { name: t.nav.label })
+      .getByRole('button', { name: t.nav.addTransaction })
+      .click()
+    await expect(page.getByRole('dialog', { name: t.quickAdd.title })).toBeVisible()
+
+    await mockSignedOut(page)
+    await page.clock.fastForward(31_000)
+    // Возврат во вкладку: TanStack Query перезапрашивает устаревший /me и получает 401.
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event('visibilitychange', { bubbles: true })),
+    )
+    await expect(page).toHaveURL(/\/login\?next=%2Faccounts$/)
+    await ready(page, t.auth.login.title)
+  }
+
+  test('окно закрывается вместе с оболочкой', { tag: '@a11y' }, async ({ page }) => {
+    await expire(page)
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(passwordField(page)).toBeVisible()
+    await expectNoAxeViolations(page)
+  })
+
+  test('скриншот экрана входа после 401', { tag: '@visual' }, async ({ page }) => {
+    await expire(page)
+    await expect(page).toHaveScreenshot('quick-add-session-expired.png')
+  })
 })

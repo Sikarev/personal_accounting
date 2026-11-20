@@ -46,7 +46,7 @@ pnpm test:a11y                # только @a11y — то, что идёт в 
 pnpm test:e2e:update          # переснять эталоны скриншотов после намеренного изменения UI
 ```
 
-Playwright сам собирает приложение и поднимает `vite preview` на :4180; порт меняется переменной `E2E_PORT` (например, `E2E_PORT=4181 pnpm test:e2e` в соседнем worktree). Чужой сервер на этом порту не переиспользуется — тест упадёт с ошибкой «порт занят», а не проверит чужую сборку. Эталоны скриншотов (`web/e2e/*-snapshots/*-win32.png`) сняты на Windows: рендеринг шрифтов зависит от ОС, поэтому в CI (Linux, `.github/workflows/web.yml`) запускаются только `@a11y`-тесты. Меняешь UI — переснимай эталоны локально и смотри диф глазами.
+Playwright сам собирает приложение и поднимает `vite preview` на :4180; порт меняется переменной `E2E_PORT` (например, `E2E_PORT=4181 pnpm test:e2e` в соседнем worktree). Чужой сервер на этом порту не переиспользуется — тест упадёт с ошибкой «порт занят», а не проверит чужую сборку. Эталоны скриншотов (`web/e2e/*-snapshots/*-win32.png`) сняты на Windows: рендеринг шрифтов зависит от ОС, поэтому в CI (Linux, `.github/workflows/web.yml`) запускаются только `@a11y`-тесты. Меняешь UI — переснимай эталоны локально и смотри диф глазами. Сравнение строгое: `maxDiffPixels: 0` и `threshold: 0.005` (порог цвета пикселя; при умолчании Playwright 0.2 устаревшие эталоны проходили) — см. комментарий в `playwright.config.ts`.
 
 Если добавляешь команду (тесты, генерация, Storybook) — допиши её сюда.
 
@@ -75,7 +75,7 @@ Playwright сам собирает приложение и поднимает `v
   - `app/` — оболочка: `App.tsx` (маршруты), `AppProviders.tsx`, `navigation.ts` (адреса и пункты меню), `layout/` (AppShell, боковое меню, нижняя панель, статус API);
   - `pages/` — экраны, по одному файлу на маршрут; `pages/auth/` — вход и регистрация (`AuthPage`, один компонент на `/login` и `/register`), восстановление пароля, подтверждение e-mail и их общая форма (`AuthForm`, `submitErrorState`); `LegalPage` — документы;
   - `features/` — сценарии, которые используются из нескольких экранов:
-    - `quick-add`: окно быстрого ввода и `useQuickAdd()`;
+    - `quick-add`: окно быстрого ввода и `useQuickAdd()`; провайдер стоит в `AppLayout` (только у вошедшего), поэтому при выходе или 401 окно закрывается вместе с оболочкой;
     - `auth`: защита маршрутов (`RequireAuth`, `RedirectIfAuthenticated`), реакция на 401 (`handleUnauthorized`, подключена в `AppProviders` через `createQueryClient({ onUnauthorized })`), выход (`useLogoutAction`), плашка «Подтвердите e-mail», часовой пояс и «сегодня» пользователя (`useTimezone`, `useToday` — «сегодня» считать только через них);
   - `shared/ui/` — базовые компоненты (`Money`, `EmptyState`, `TransactionListSkeleton`, `ResponsiveSheet`, `notifyWithUndo`, `PageHeader`, `AuthLayout`, `PasswordField`), рядом — `*.stories.tsx` и `*.module.css`;
   - `shared/lib/` — форматтеры (`formatMoney`, `formatOpDate` + `todayIn`, `plural`), хуки (`useDelayedLoading`, `useMobileLayout`, `useFormState`), безопасный адрес возврата после входа (`safeNextPath`), логика Ctrl+Z для тостов (`undoShortcut`); рядом — `*.test.ts`;

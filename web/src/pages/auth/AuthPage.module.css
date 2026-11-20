@@ -35,14 +35,15 @@
     outline-offset: 2px;
   }
 
-  /* Активный сегмент — фон, рамка, тень и жирность: заметен не только цветом
-     и в тёмной теме, где фоны близки. */
+  /* Активный сегмент — как активный пункт бокового меню: подложка primary-light, акцентный
+     текст и жирность. Фоны подложек близки (до 1.2:1), поэтому состояние держит рамка
+     акцентного цвета: ≥ 3:1 к подложке переключателя и к неактивному сегменту
+     в обеих темах (WCAG 1.4.11). */
   &[data-active] {
     font-weight: 600;
-    color: var(--mantine-color-text);
-    background-color: var(--mantine-color-default);
-    border-color: var(--mantine-color-default-border);
-    box-shadow: var(--mantine-shadow-xs);
+    color: var(--app-color-accent-text);
+    background-color: var(--mantine-primary-color-light);
+    border-color: var(--app-color-accent-text);
   }
 }
 

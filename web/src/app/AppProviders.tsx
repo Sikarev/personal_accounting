@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 
 import { handleUnauthorized } from '../features/auth/unauthorized'
-import { QuickAddProvider } from '../features/quick-add/QuickAddProvider'
 import { createQueryClient } from '../shared/api'
 import { useMobileLayout } from '../shared/lib/useMobileLayout'
 import { cssVariablesResolver, theme } from '../theme'
@@ -71,9 +70,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProviders>
-      <QueryClientProvider client={queryClient}>
-        <QuickAddProvider>{children}</QuickAddProvider>
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </ThemeProviders>
   )
 }

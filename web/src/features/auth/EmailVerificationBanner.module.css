@@ -4,19 +4,57 @@
   background-color: var(--app-color-surface);
 }
 
-.body {
-  flex: 1;
-  min-width: 0;
+/* Крестик — только в строке заголовка; текст и кнопка под заголовком — до правого края. */
+.grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon title close'
+    'icon text text'
+    'icon action action';
+  column-gap: var(--mantine-spacing-md);
+  align-items: start;
+
+  /* Мобильная раскладка — без иконки. */
+  &[data-mobile] {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'title close'
+      'text text'
+      'action action';
+  }
 }
 
-/* Длинный адрес переносится, а не раздвигает плашку. */
+.icon {
+  grid-area: icon;
+}
+
+/* Заголовок по центру строки с крестиком (44 px), а не прижат к её верху. */
+.title {
+  grid-area: title;
+  align-self: center;
+}
+
+/* Длинный адрес и слова при крупном шрифте переносятся, а не раздвигают плашку. */
+.title,
 .description {
+  hyphens: auto;
   overflow-wrap: anywhere;
 }
 
-/* Крестик — с зоной касания 44 px (ux.md, раздел 6), иконка внутри прежнего размера. */
+.description {
+  grid-area: text;
+}
+
+.action {
+  grid-area: action;
+  padding-top: var(--mantine-spacing-sm);
+}
+
+/* Крестик — с зоной касания 44 px (ux.md, раздел 6), иконка внутри прежнего размера.
+   Отрицательные отступы выравнивают сам значок по краю плашки. */
 .close {
-  flex-shrink: 0;
+  grid-area: close;
   width: var(--app-touch-target);
   height: var(--app-touch-target);
   min-width: var(--app-touch-target);

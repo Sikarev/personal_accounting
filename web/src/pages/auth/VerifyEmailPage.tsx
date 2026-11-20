@@ -93,6 +93,23 @@ export function VerifyEmailPage() {
   }
 
   const tokenInvalid = !token || 'token' in fieldErrorTexts(verify.error, t)
+  // Старая ссылка у того, кто уже подтвердил адрес (например, из второго письма):
+  // «недействительна» напугала бы зря — сообщаем, что всё уже в порядке. Пока /me
+  // не ответил, не показываем ничего, чтобы экран не сменился у пользователя на глазах.
+  if (tokenInvalid && me.isPending) return null
+  if (tokenInvalid && me.data?.user.emailVerified) {
+    return (
+      <AuthLayout>
+        <EmptyState
+          icon={IconCircleCheck}
+          titleOrder={1}
+          title={t.auth.verify.alreadyTitle}
+          description={t.auth.verify.alreadyDescription}
+          action={homeOrLogin}
+        />
+      </AuthLayout>
+    )
+  }
   if (tokenInvalid) {
     return (
       <AuthLayout>

@@ -22,6 +22,7 @@ api/                Go-бэкенд
     httpapi/        роутер, middleware, обработчики эндпоинтов
     auth/           хеширование паролей (argon2id), токены сессий
     ratelimit/      ограничение частоты запросов в памяти процесса
+    mail/           письма: SMTP (net/smtp), фоновая отправка, шаблоны
     oapi/           сгенерировано oapi-codegen из openapi.yaml
     db/queries/     SQL-запросы для sqlc
     db/dbgen/       сгенерировано sqlc
@@ -30,7 +31,7 @@ api/                Go-бэкенд
   migrations/       SQL-миграции (goose), встраиваются в бинарник
 web/                React + TypeScript + Vite + Mantine
 docs/               документация
-docker-compose.yml  Postgres для разработки
+docker-compose.yml  Postgres и Mailpit для разработки
 ```
 
 ## Требования
@@ -42,7 +43,7 @@ docker-compose.yml  Postgres для разработки
 ## Запуск в разработке
 
 ```bash
-# 1. Postgres
+# 1. Postgres и Mailpit (перехват писем, http://localhost:8025)
 docker compose up -d
 
 # 2. Миграции
@@ -54,6 +55,12 @@ cd api && go run ./cmd/api
 # 4. Фронт (http://localhost:5173, запросы /api проксируются на API)
 cd web && pnpm install && pnpm dev
 ```
+
+### Письма в разработке
+
+Письма API (подтверждение e-mail, сброс пароля) уходят в [Mailpit](https://mailpit.axllent.org/) из `docker-compose.yml`: он принимает их по SMTP на порту 1025 и никуда дальше не отправляет. Посмотреть письма — http://localhost:8025 (или API Mailpit: `http://localhost:8025/api/v1/messages`). Ссылки в письмах ведут на `APP_BASE_URL` — по умолчанию dev-сервер фронта `http://localhost:5173`. Ящик хранится в памяти контейнера и очищается при его перезапуске.
+
+Если Mailpit не запущен, API работает, но письма не уходят: ошибка отправки пишется в лог (`mail: send failed`).
 
 Перед шагом 1 должен быть запущен **Docker Desktop**. Если он не запущен, `docker compose` сообщает `failed to connect to the docker API`, а тесты API падают с сообщением `testdb: нет тестовой БД`. Запусти Docker Desktop и повтори.
 
@@ -87,9 +94,13 @@ cd web && pnpm dev --host   # Vite покажет адрес Network: http://192
 | `COOKIE_SECURE` | `true` в production, `false` в development | флаг `Secure` у cookie сессии; в production без HTTPS вход не заработает |
 | `TRUSTED_PROXIES` | пусто | CIDR или IP обратных прокси через запятую; только им API верит в `X-Forwarded-For` |
 | `CSRF_TRUSTED_ORIGINS` | пусто | origin через запятую, с которых разрешены запросы, меняющие данные (нужен, только если фронт на другом origin) |
+| `APP_BASE_URL` | `http://localhost:5173`; в production **обязателен** | адрес фронтенда, из него собираются ссылки в письмах (`/verify-email?token=…`, `/reset-password?token=…`) |
+| `SMTP_HOST`, `SMTP_PORT` | `localhost`, `1025` (Mailpit) | SMTP-сервер для писем; STARTTLS включается, если сервер его предлагает |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | пусто | логин SMTP; пустой — без входа. С логином нужен TLS (STARTTLS): по открытому соединению `net/smtp` пароль не передаст (кроме localhost) |
+| `MAIL_FROM` | `Домашняя бухгалтерия <no-reply@localhost>` | отправитель писем |
 | `TEST_DATABASE_URL` | Postgres из `docker-compose.yml` | сервер для временных БД тестов |
 
-Подробнее о сессиях, CSRF, лимитах и реальном IP — в [docs/api.md](docs/api.md#авторизация).
+Подробнее о сессиях, CSRF, лимитах, реальном IP и письмах — в [docs/api.md](docs/api.md#авторизация).
 
 ## Бэкенд: генерация кода и тесты
 

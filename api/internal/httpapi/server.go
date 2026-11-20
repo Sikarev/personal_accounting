@@ -7,6 +7,7 @@ import (
 
 	"personal-accounting/api/internal/auth"
 	"personal-accounting/api/internal/db/dbgen"
+	"personal-accounting/api/internal/mail"
 	"personal-accounting/api/internal/oapi"
 	"personal-accounting/api/internal/ratelimit"
 )
@@ -22,10 +23,19 @@ type server struct {
 
 	now          func() time.Time // источник времени; в тестах подменяется
 	cookieSecure bool
+	// mail — фоновая отправка писем; appBaseURL — адрес фронтенда для ссылок в них.
+	mail       *mail.Background
+	appBaseURL string
 	// loginAttempts — попытки входа по ключу «e-mail + IP» (см. Login).
 	loginAttempts *ratelimit.Limiter
 	// loginFailures — неудачные попытки входа по e-mail со всех адресов.
 	loginFailures *ratelimit.Limiter
+	// resetPerEmail — письма сброса пароля на один адрес.
+	resetPerEmail *ratelimit.Limiter
+	// resendPerMinute и resendPerHour — повторные письма подтверждения
+	// на одного пользователя.
+	resendPerMinute *ratelimit.Limiter
+	resendPerHour   *ratelimit.Limiter
 	// dummyHash — хеш для проверки пароля, когда пользователя нет (см. checkPassword).
 	// Считается сразу при создании сервера: если считать лениво, первый вход
 	// с несуществующим e-mail был бы дольше остальных и выдавал бы это по времени.
@@ -38,12 +48,17 @@ var _ oapi.StrictServerInterface = (*server)(nil)
 
 func newServer(pool *pgxpool.Pool, opts Options) *server {
 	return &server{
-		pool:          pool,
-		q:             dbgen.New(pool),
-		now:           opts.Now,
-		cookieSecure:  opts.CookieSecure,
-		loginAttempts: ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
-		loginFailures: ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
-		dummyHash:     auth.HashPassword("dummy password for timing equalization"),
+		pool:            pool,
+		q:               dbgen.New(pool),
+		now:             opts.Now,
+		cookieSecure:    opts.CookieSecure,
+		mail:            opts.Mail,
+		appBaseURL:      opts.AppBaseURL,
+		loginAttempts:   ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
+		loginFailures:   ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
+		resetPerEmail:   ratelimit.New(opts.Limits.PasswordResetPerEmail, opts.Now),
+		resendPerMinute: ratelimit.New(opts.Limits.ResendPerMinute, opts.Now),
+		resendPerHour:   ratelimit.New(opts.Limits.ResendPerHour, opts.Now),
+		dummyHash:       auth.HashPassword("dummy password for timing equalization"),
 	}
 }

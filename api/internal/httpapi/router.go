@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"personal-accounting/api/internal/mail"
 	"personal-accounting/api/internal/oapi"
 	"personal-accounting/api/internal/problem"
 	"personal-accounting/api/internal/ratelimit"
@@ -40,6 +41,12 @@ type Options struct {
 	Now func() time.Time
 	// Limits — лимиты частоты; нулевые поля заменяются значениями по умолчанию.
 	Limits Limits
+	// Mail — фоновая отправка писем. nil — письма выбрасываются (для тестов,
+	// которым письма не нужны); cmd/api всегда передаёт настоящую.
+	Mail *mail.Background
+	// AppBaseURL — адрес фронтенда без «/» в конце, из него собираются ссылки
+	// в письмах. Пусто — http://localhost:5173 (dev-сервер Vite).
+	AppBaseURL string
 }
 
 // Limits — ограничения частоты запросов (в памяти процесса).
@@ -52,6 +59,18 @@ type Limits struct {
 	// LoginFailuresPerEmail — неудачные попытки входа в один аккаунт со всех
 	// адресов вместе: защита от распределённого перебора. Успешный вход его не сбрасывает.
 	LoginFailuresPerEmail ratelimit.Rule
+	// PasswordResetPerIP — запросы письма сброса пароля с одного IP; превышение — 429.
+	PasswordResetPerIP ratelimit.Rule
+	// PasswordResetPerEmail — письма сброса пароля на один адрес. Превышение
+	// ответ не меняет (всё равно 202), письмо просто не отправляется.
+	PasswordResetPerEmail ratelimit.Rule
+	// EmailTokenPerIP — запросы с токеном из письма (подтверждение e-mail
+	// и новый пароль) с одного IP.
+	EmailTokenPerIP ratelimit.Rule
+	// ResendPerMinute и ResendPerHour — повторная отправка письма подтверждения
+	// одним пользователем.
+	ResendPerMinute ratelimit.Rule
+	ResendPerHour   ratelimit.Rule
 }
 
 // defaultLimits — лимиты по умолчанию (docs/api.md, «Ограничение частоты»).
@@ -59,23 +78,47 @@ var defaultLimits = Limits{
 	AuthPerIP:             ratelimit.Rule{Limit: 20, Window: time.Minute},
 	LoginPerEmailIP:       ratelimit.Rule{Limit: 5, Window: 15 * time.Minute},
 	LoginFailuresPerEmail: ratelimit.Rule{Limit: 50, Window: time.Hour},
+	PasswordResetPerIP:    ratelimit.Rule{Limit: 20, Window: time.Hour},
+	PasswordResetPerEmail: ratelimit.Rule{Limit: 3, Window: time.Hour},
+	EmailTokenPerIP:       ratelimit.Rule{Limit: 20, Window: time.Minute},
+	ResendPerMinute:       ratelimit.Rule{Limit: 1, Window: time.Minute},
+	ResendPerHour:         ratelimit.Rule{Limit: 5, Window: time.Hour},
 }
 
-// authRateLimitedOps — операции (operationId), к которым применяется лимит AuthPerIP.
-var authRateLimitedOps = map[string]bool{"register": true, "login": true}
+// Операции (operationId), к которым применяются лимиты по IP.
+var (
+	// authRateLimitedOps — лимит AuthPerIP.
+	authRateLimitedOps = map[string]bool{"register": true, "login": true}
+	// passwordResetRateLimitedOps — лимит PasswordResetPerIP.
+	passwordResetRateLimitedOps = map[string]bool{"requestPasswordReset": true}
+	// emailTokenRateLimitedOps — лимит EmailTokenPerIP.
+	emailTokenRateLimitedOps = map[string]bool{"verifyEmail": true, "confirmPasswordReset": true}
+)
 
 func (o Options) withDefaults() Options {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	if o.Limits.AuthPerIP.Limit == 0 {
-		o.Limits.AuthPerIP = defaultLimits.AuthPerIP
+	if o.Mail == nil {
+		o.Mail = mail.NewBackground(mail.Discard{}, slog.New(slog.DiscardHandler), time.Second)
 	}
-	if o.Limits.LoginPerEmailIP.Limit == 0 {
-		o.Limits.LoginPerEmailIP = defaultLimits.LoginPerEmailIP
+	if o.AppBaseURL == "" {
+		o.AppBaseURL = "http://localhost:5173"
 	}
-	if o.Limits.LoginFailuresPerEmail.Limit == 0 {
-		o.Limits.LoginFailuresPerEmail = defaultLimits.LoginFailuresPerEmail
+	// Нулевое правило (Limit == 0) заменяется значением по умолчанию.
+	for _, r := range []struct{ rule, def *ratelimit.Rule }{
+		{&o.Limits.AuthPerIP, &defaultLimits.AuthPerIP},
+		{&o.Limits.LoginPerEmailIP, &defaultLimits.LoginPerEmailIP},
+		{&o.Limits.LoginFailuresPerEmail, &defaultLimits.LoginFailuresPerEmail},
+		{&o.Limits.PasswordResetPerIP, &defaultLimits.PasswordResetPerIP},
+		{&o.Limits.PasswordResetPerEmail, &defaultLimits.PasswordResetPerEmail},
+		{&o.Limits.EmailTokenPerIP, &defaultLimits.EmailTokenPerIP},
+		{&o.Limits.ResendPerMinute, &defaultLimits.ResendPerMinute},
+		{&o.Limits.ResendPerHour, &defaultLimits.ResendPerHour},
+	} {
+		if r.rule.Limit == 0 {
+			*r.rule = *r.def
+		}
 	}
 	return o
 }
@@ -111,6 +154,8 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool, opts Options) (http.Handle
 
 	srv := newServer(db, opts)
 	authIPLimiter := ratelimit.New(opts.Limits.AuthPerIP, opts.Now)
+	resetIPLimiter := ratelimit.New(opts.Limits.PasswordResetPerIP, opts.Now)
+	emailTokenIPLimiter := ratelimit.New(opts.Limits.EmailTokenPerIP, opts.Now)
 
 	r := chi.NewRouter()
 	// Порядок важен:
@@ -156,6 +201,8 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool, opts Options) (http.Handle
 				Middlewares: []oapi.MiddlewareFunc{
 					requestValidator(logger, routes),
 					rateLimitByIP(routes, authIPLimiter, authRateLimitedOps),
+					rateLimitByIP(routes, resetIPLimiter, passwordResetRateLimitedOps),
+					rateLimitByIP(routes, emailTokenIPLimiter, emailTokenRateLimitedOps),
 					srv.authenticate(logger, routes),
 				},
 			})

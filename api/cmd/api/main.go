@@ -19,6 +19,15 @@ import (
 	"personal-accounting/api/internal/config"
 	"personal-accounting/api/internal/httpapi"
 	"personal-accounting/api/internal/logging"
+	"personal-accounting/api/internal/mail"
+)
+
+const (
+	// mailSendTimeout — предел на отправку одного письма (соединение, TLS, передача).
+	mailSendTimeout = 30 * time.Second
+	// shutdownTimeout — сколько ждать текущие запросы при остановке;
+	// столько же потом ждём письма, отправка которых уже началась.
+	shutdownTimeout = 10 * time.Second
 )
 
 func main() {
@@ -51,10 +60,20 @@ func run() error {
 	}
 	defer db.Close()
 
+	mailer := mail.NewBackground(mail.SMTP{
+		Host:     cfg.SMTP.Host,
+		Port:     cfg.SMTP.Port,
+		Username: cfg.SMTP.Username,
+		Password: cfg.SMTP.Password,
+		From:     cfg.MailFrom,
+	}, logger, mailSendTimeout)
+
 	router, err := httpapi.NewRouter(logger, db, httpapi.Options{
 		CookieSecure:       cfg.CookieSecure,
 		TrustedProxies:     cfg.TrustedProxies,
 		CSRFTrustedOrigins: cfg.CSRFTrustedOrigins,
+		Mail:               mailer,
+		AppBaseURL:         cfg.AppBaseURL,
 	})
 	if err != nil {
 		return err
@@ -71,7 +90,8 @@ func run() error {
 	errCh := make(chan error, 1)
 	go func() {
 		logger.Info("api listening", "addr", cfg.Addr, "env", cfg.Env,
-			"cookie_secure", cfg.CookieSecure, "trusted_proxies", len(cfg.TrustedProxies))
+			"cookie_secure", cfg.CookieSecure, "trusted_proxies", len(cfg.TrustedProxies),
+			"smtp", cfg.SMTP.Host+":"+cfg.SMTP.Port, "app_base_url", cfg.AppBaseURL)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -84,8 +104,18 @@ func run() error {
 		logger.Info("shutting down")
 	}
 
-	// Даём текущим запросам до 10 секунд на завершение.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Даём текущим запросам до shutdownTimeout на завершение.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-	return srv.Shutdown(shutdownCtx)
+	shutdownErr := srv.Shutdown(shutdownCtx)
+
+	// Запросы завершены, новых писем не появится. Дожидаемся писем, отправка
+	// которых уже началась (очереди нет — иначе они бы потерялись), но не
+	// дольше shutdownTimeout: зависший SMTP-сервер не должен держать остановку.
+	mailCtx, cancelMail := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancelMail()
+	if err := mailer.Wait(mailCtx); err != nil {
+		logger.Warn("shutdown: не все письма отправлены", "err", err)
+	}
+	return shutdownErr
 }

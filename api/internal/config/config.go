@@ -2,8 +2,11 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"net/mail"
 	"net/netip"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,7 +36,28 @@ type Config struct {
 	// запятую, например "http://localhost:5173"), с которых разрешены запросы,
 	// меняющие данные. Обычно не нужен: страница и API на одном origin.
 	CSRFTrustedOrigins []string
+
+	// AppBaseURL — адрес фронтенда без завершающего «/» (APP_BASE_URL), из него
+	// собираются ссылки в письмах: AppBaseURL + "/verify-email?token=…".
+	// В production обязателен: ссылка на localhost в письме бесполезна.
+	AppBaseURL string
+	// SMTP — сервер исходящей почты. Умолчания — Mailpit из docker-compose.yml.
+	SMTP SMTP
+	// MailFrom — отправитель писем (MAIL_FROM), например
+	// "Домашняя бухгалтерия <no-reply@example.com>".
+	MailFrom mail.Address
 }
+
+// SMTP — настройки SMTP-сервера (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD).
+// Пустой Username — без входа (Mailpit входа не требует).
+type SMTP struct {
+	Host     string
+	Port     string
+	Username string
+	Password string
+}
+
+const defaultAppBaseURL = "http://localhost:5173"
 
 // Load возвращает конфигурацию. Значения по умолчанию совпадают
 // с docker-compose.yml, поэтому локально ничего настраивать не нужно.
@@ -59,7 +83,43 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("TRUSTED_PROXIES: %w", err)
 	}
 	cfg.TrustedProxies = proxies
+
+	cfg.SMTP = SMTP{
+		Host:     getEnv("SMTP_HOST", "localhost"),
+		Port:     getEnv("SMTP_PORT", "1025"),
+		Username: os.Getenv("SMTP_USERNAME"),
+		Password: os.Getenv("SMTP_PASSWORD"),
+	}
+	from, err := mail.ParseAddress(getEnv("MAIL_FROM", "Домашняя бухгалтерия <no-reply@localhost>"))
+	if err != nil {
+		return Config{}, fmt.Errorf("MAIL_FROM: %w", err)
+	}
+	cfg.MailFrom = *from
+
+	baseURL := os.Getenv("APP_BASE_URL")
+	if baseURL == "" {
+		if cfg.IsProduction() {
+			return Config{}, errors.New("APP_BASE_URL обязателен в production: из него собираются ссылки в письмах")
+		}
+		baseURL = defaultAppBaseURL
+	}
+	if cfg.AppBaseURL, err = parseBaseURL(baseURL); err != nil {
+		return Config{}, fmt.Errorf("APP_BASE_URL: %w", err)
+	}
 	return cfg, nil
+}
+
+// parseBaseURL проверяет, что s — абсолютный http(s)-адрес без query и fragment,
+// и убирает завершающий «/», чтобы к нему можно было дописать путь.
+func parseBaseURL(s string) (string, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return "", err
+	}
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("ожидается адрес вида https://example.com, получено %q", s)
+	}
+	return strings.TrimRight(s, "/"), nil
 }
 
 // IsProduction сообщает, запущено ли приложение в боевом окружении.

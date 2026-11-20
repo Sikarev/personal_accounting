@@ -19,6 +19,12 @@ type Background struct {
 	timeout time.Duration
 	// wg считает письма в отправке: Wait ждёт, пока счётчик не станет нулём.
 	wg sync.WaitGroup
+	// mu защищает closed и упорядочивает wg.Add с Close: контракт WaitGroup
+	// запрещает Add одновременно с Wait при нулевом счётчике. После Close
+	// новые отправки не начинаются, поэтому Wait после Close безопасен,
+	// даже если какие-то обработчики ещё работают (Shutdown вышел по таймауту).
+	mu     sync.Mutex
+	closed bool
 }
 
 // NewBackground создаёт фоновую отправку. timeout ограничивает отправку
@@ -40,7 +46,16 @@ func (b *Background) Send(msg Message, attrs ...slog.Attr) {
 // в лог, письмо не отправляется. ctx у prepare — тот же, что у отправки
 // (с таймаутом), а не контекст запроса.
 func (b *Background) SendFunc(prepare func(ctx context.Context) (Message, error), attrs ...slog.Attr) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		// Сервер останавливается. Письмо теряется (очереди нет), в лог —
+		// только attrs: без токена, ссылки и адреса.
+		b.logger.LogAttrs(context.Background(), slog.LevelWarn, "mail: dropped, sender closed", attrs...)
+		return
+	}
 	// wg.Go (Go 1.25) — то же, что wg.Add(1) + go func(){ defer wg.Done(); ... }().
+	// Под mu: так Add не может произойти после Close.
 	b.wg.Go(func() {
 		// Свой контекст, а не контекст запроса: тот отменяется, как только
 		// обработчик вернул ответ, и отправка оборвалась бы.
@@ -61,9 +76,19 @@ func (b *Background) SendFunc(prepare func(ctx context.Context) (Message, error)
 	})
 }
 
+// Close запрещает новые отправки: дальнейшие Send/SendFunc только пишут
+// предупреждение в лог. Уже начатые отправки продолжаются — их ждёт Wait.
+// Вызывается при остановке сервера перед Wait. Повторный вызов безопасен.
+func (b *Background) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closed = true
+}
+
 // Wait ждёт окончания всех начатых отправок или отмены ctx (тогда возвращает
-// ctx.Err()). Вызывается при остановке сервера — после того, как HTTP-сервер
-// перестал принимать запросы, — и в тестах, чтобы дождаться писем без time.Sleep.
+// ctx.Err()). При остановке сервера вызывается после Close; в тестах — без
+// Close, между запросами, чтобы дождаться писем без time.Sleep (тогда новых
+// отправок во время Wait нет: обработчик, начавший их, уже вернул ответ).
 func (b *Background) Wait(ctx context.Context) error {
 	done := make(chan struct{})
 	go func() {

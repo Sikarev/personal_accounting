@@ -37,7 +37,7 @@ type SMTP struct {
 }
 
 func (s SMTP) Send(ctx context.Context, msg Message) error {
-	raw, err := build(s.From, msg, time.Now())
+	raw, to, err := build(s.From, msg, time.Now())
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,9 @@ func (s SMTP) Send(ctx context.Context, msg Message) error {
 	if err := c.Mail(s.From.Address); err != nil {
 		return fmt.Errorf("smtp MAIL FROM: %w", err)
 	}
-	if err := c.Rcpt(msg.To); err != nil {
+	// Разобранный адрес, а не msg.To как есть: «<a@x.com>» иначе ушёл бы
+	// как RCPT TO:<<a@x.com>>, а адрес с именем — вовсе не тем получателем.
+	if err := c.Rcpt(to); err != nil {
 		return fmt.Errorf("smtp RCPT TO: %w", err)
 	}
 	w, err := c.Data()
@@ -99,15 +101,16 @@ func (s SMTP) Send(ctx context.Context, msg Message) error {
 // с text/plain и text/html в UTF-8. Тело — в quoted-printable: строки
 // не длиннее 76 символов, кириллица передаётся без потерь через любые
 // SMTP-серверы. Заголовки с кириллицей кодируются encoded-word (RFC 2047).
-func build(from mail.Address, msg Message, now time.Time) ([]byte, error) {
+// Возвращает и адрес получателя для конверта (RCPT TO) — тот же, что в To.
+func build(from mail.Address, msg Message, now time.Time) (raw []byte, rcpt string, err error) {
 	// Перевод строки в заголовке позволил бы дописать свои заголовки
 	// (header injection). Адрес проверяет контракт, но держим защиту здесь.
 	if strings.ContainsAny(msg.To, "\r\n") || strings.ContainsAny(msg.Subject, "\r\n") {
-		return nil, errors.New("mail: перевод строки в заголовке письма")
+		return nil, "", errors.New("mail: перевод строки в заголовке письма")
 	}
 	to, err := mail.ParseAddress(msg.To)
 	if err != nil {
-		return nil, fmt.Errorf("mail: адрес получателя: %w", err)
+		return nil, "", fmt.Errorf("mail: адрес получателя: %w", err)
 	}
 
 	var body bytes.Buffer
@@ -122,24 +125,24 @@ func build(from mail.Address, msg Message, now time.Time) ([]byte, error) {
 			"Content-Transfer-Encoding": {"quoted-printable"},
 		})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		qp := quotedprintable.NewWriter(pw)
 		if _, err := qp.Write([]byte(part.content)); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if err := qp.Close(); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 	if err := mw.Close(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var b bytes.Buffer
 	header := func(k, v string) { b.WriteString(k + ": " + v + "\r\n") }
 	header("From", from.String()) // mail.Address.String кодирует имя по RFC 2047
-	header("To", to.String())
+	header("To", (&mail.Address{Address: to.Address}).String())
 	header("Subject", mime.QEncoding.Encode("utf-8", msg.Subject))
 	header("Date", now.Format(time.RFC1123Z))
 	header("Message-ID", messageID(from.Address))
@@ -147,7 +150,7 @@ func build(from mail.Address, msg Message, now time.Time) ([]byte, error) {
 	header("Content-Type", "multipart/alternative; boundary="+mw.Boundary())
 	b.WriteString("\r\n")
 	b.Write(body.Bytes())
-	return b.Bytes(), nil
+	return b.Bytes(), to.Address, nil
 }
 
 // messageID — уникальный идентификатор письма вида <случайное@домен-отправителя>.

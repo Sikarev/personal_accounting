@@ -25,9 +25,9 @@ func TestBuildMultipartAndCyrillic(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := build(testFrom, msg, time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatal(err)
+	raw, rcpt, err := build(testFrom, msg, time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC))
+	if err != nil || rcpt != "ivan@example.com" {
+		t.Fatal(rcpt, err)
 	}
 
 	// Разбираем письмо так же, как почтовый клиент.
@@ -99,7 +99,7 @@ func TestBuildRejectsHeaderInjection(t *testing.T) {
 		{To: "a@example.com", Subject: "x\nBcc: b@example.com"},
 		{To: "not an address", Subject: "x"},
 	} {
-		if _, err := build(testFrom, msg, time.Now()); err == nil {
+		if _, _, err := build(testFrom, msg, time.Now()); err == nil {
 			t.Errorf("принято: %+v", msg)
 		}
 	}
@@ -156,6 +156,55 @@ func TestBackgroundWait(t *testing.T) {
 	if m.sent != 2 {
 		t.Fatalf("отправлено %d", m.sent)
 	}
+}
+
+// После Close новые письма не запускаются (и не нарушают контракт
+// WaitGroup, даже если Send идёт одновременно с Wait), уже начатые — дожидаются.
+func TestBackgroundClose(t *testing.T) {
+	var buf bytes.Buffer
+	var logMu sync.Mutex
+	logger := slog.New(slog.NewTextHandler(&lockedWriter{w: &buf, mu: &logMu}, nil))
+	m := &blockingMailer{release: make(chan struct{})}
+	b := NewBackground(m, logger, time.Minute)
+	b.Send(Message{To: "a@example.com"})
+	b.Close()
+	b.Close() // повторный вызов безопасен
+
+	// Отправки после Close — одновременно с Wait (сценарий Shutdown по таймауту).
+	var wg sync.WaitGroup
+	for range 10 {
+		wg.Go(func() {
+			b.Send(Message{To: "late@example.com", Text: "secret-token"}, slog.String("kind", "reset_password"))
+		})
+	}
+	waitErr := make(chan error, 1)
+	go func() { waitErr <- b.Wait(context.Background()) }()
+	wg.Wait()
+	close(m.release)
+	if err := <-waitErr; err != nil {
+		t.Fatal(err)
+	}
+	if m.sent != 1 {
+		t.Fatalf("отправлено %d, ожидалось 1 (до Close)", m.sent)
+	}
+	logMu.Lock()
+	out := buf.String()
+	logMu.Unlock()
+	if strings.Count(out, "mail: dropped, sender closed") != 10 || !strings.Contains(out, "kind=reset_password") ||
+		strings.Contains(out, "secret-token") || strings.Contains(out, "late@example.com") {
+		t.Fatalf("лог: %s", out)
+	}
+}
+
+type lockedWriter struct {
+	w  io.Writer
+	mu *sync.Mutex
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 func TestBackgroundLogsErrorWithoutBody(t *testing.T) {
@@ -246,6 +295,24 @@ func TestSMTPSend(t *testing.T) {
 	}
 	if m.Header.Get("To") != "<ivan@example.com>" {
 		t.Fatalf("письмо: %v", m.Header)
+	}
+}
+
+// Адрес в угловых скобках или с именем: в конверт и в To уходит только адрес.
+func TestSMTPSendUsesParsedRecipient(t *testing.T) {
+	for _, to := range []string{"<ivan@example.com>", "Иван <ivan@example.com>"} {
+		addr, got := fakeSMTP(t)
+		host, port, _ := net.SplitHostPort(addr)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := SMTP{Host: host, Port: port, From: testFrom}.Send(ctx, Message{To: to, Subject: "x", Text: "x", HTML: "x"})
+		cancel()
+		if err != nil {
+			t.Fatal(err)
+		}
+		data := <-got
+		if !strings.Contains(data, "RCPT TO:<ivan@example.com>\n") || !strings.Contains(data, "\nTo: <ivan@example.com>\n") {
+			t.Fatalf("%s: %q", to, data)
+		}
 	}
 }
 

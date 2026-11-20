@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -111,8 +113,20 @@ func TestRegisterSendsVerificationAndVerify(t *testing.T) {
 	if !strings.Contains(msgs[0].HTML, `href="https://app.example.com/verify-email?token=`+token+`"`) {
 		t.Fatalf("ссылка в HTML: %s", msgs[0].HTML)
 	}
-	// В БД — только хеш токена.
-	if n := queryInt(t, e.pool, `SELECT count(*) FROM email_tokens WHERE token_hash = convert_to($1, 'UTF8')`, token); n != 0 {
+	// В БД — только SHA-256 токена из письма (не сам токен и не обратимое
+	// преобразование): единственный токен подтверждения пользователя совпадает
+	// с хешем, и ни одна колонка строки не содержит токен.
+	var stored []byte
+	var row string
+	if err := e.pool.QueryRow(context.Background(), `
+		SELECT t.token_hash, t::text FROM email_tokens t JOIN users u ON u.id = t.user_id
+		WHERE u.email = $1 AND t.purpose = 'verify_email'`, email).Scan(&stored, &row); err != nil {
+		t.Fatal(err)
+	}
+	if want := sha256.Sum256([]byte(token)); !bytes.Equal(stored, want[:]) {
+		t.Fatalf("token_hash = %x, ожидался SHA-256 токена %x", stored, want)
+	}
+	if strings.Contains(row, token) {
 		t.Fatal("токен хранится в открытом виде")
 	}
 	if e.emailVerified(t, cookie) {
@@ -546,6 +560,34 @@ func TestPasswordResetClearsLoginLimits(t *testing.T) {
 	}
 	if rec := e.send(http.MethodPost, "/api/v1/auth/login", loginBody(email, "brand new password"), withRemote("203.0.113.50:1")); rec.Code != http.StatusOK {
 		t.Fatalf("вход после сброса: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Адреса, которые проходят грубую проверку, но net/mail разбирает иначе
+// (письмо на них не ушло бы), отклоняются при регистрации ошибкой формата.
+func TestRegisterRejectsUnmailableEmail(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	for _, email := range []string{
+		`a,b@example.com`,
+		`a"b@example.com`,
+		`<a@example.com>`,
+		`Иван <a@example.com>`,
+		`a(comment)@example.com`,
+		`a..b@example.com`,
+	} {
+		t.Run(email, func(t *testing.T) {
+			rec := e.send(http.MethodPost, "/api/v1/auth/register", registerBody(email, testPassword))
+			body := decodeProblem(t, rec, http.StatusUnprocessableEntity, "validation_failed")
+			if got := fieldErrors(t, body); len(got) != 1 || got[0] != "email:invalid_format" {
+				t.Fatalf("%v", got)
+			}
+		})
+	}
+	// Обычные адреса, в т. ч. с «+» и пробелами по краям, по-прежнему принимаются.
+	for _, email := range []string{"ivan+test-" + uniqueEmail(), "  " + uniqueEmail() + " "} {
+		if rec := e.send(http.MethodPost, "/api/v1/auth/register", registerBody(email, testPassword)); rec.Code != http.StatusCreated {
+			t.Fatalf("%q: %d %s", email, rec.Code, rec.Body)
+		}
 	}
 }
 

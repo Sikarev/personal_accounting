@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,7 +30,7 @@ func init() {
 	// format: email kin-openapi по умолчанию не проверяет. Пробелы по краям
 	// допускаем: сервер их обрезает (normalizeEmail), ошибкой они не считаются.
 	openapi3.DefineStringFormatCallback("email", func(s string) error {
-		if !validEmail.MatchString(strings.TrimSpace(s)) || hasControlChars(s) {
+		if !isValidEmail(strings.TrimSpace(s)) || hasControlChars(s) {
 			return errors.New("invalid email")
 		}
 		return nil
@@ -46,6 +47,17 @@ func hasControlChars(s string) bool {
 // validEmail — грубая проверка «что-то@домен.зона» без пробелов. Строже
 // проверять незачем: существование адреса подтвердит письмо.
 var validEmail = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+
+// isValidEmail — грубая проверка плюс требование, чтобы net/mail разбирал
+// строку ровно в тот же адрес: иначе («a,b@x.com», «a"b@x.com», «<a@x.com>»)
+// регистрация прошла бы, а письма на адрес молча не уходили бы.
+func isValidEmail(s string) bool {
+	if !validEmail.MatchString(s) {
+		return false
+	}
+	a, err := mail.ParseAddress(s)
+	return err == nil && a.Address == s
+}
 
 // specRoutes — операции контракта по ключу «МЕТОД /api/v1/шаблон/{пути}».
 //

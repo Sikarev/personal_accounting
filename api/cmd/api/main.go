@@ -109,9 +109,12 @@ func run() error {
 	defer cancel()
 	shutdownErr := srv.Shutdown(shutdownCtx)
 
-	// Запросы завершены, новых писем не появится. Дожидаемся писем, отправка
-	// которых уже началась (очереди нет — иначе они бы потерялись), но не
-	// дольше shutdownTimeout: зависший SMTP-сервер не должен держать остановку.
+	// Закрываем отправку: если Shutdown вышел по таймауту, обработчики ещё
+	// могут работать, и их письма уже не начнутся (будет предупреждение в логе).
+	// Затем дожидаемся писем, отправка которых уже началась (очереди нет —
+	// иначе они бы потерялись), но не дольше shutdownTimeout: зависший
+	// SMTP-сервер не должен держать остановку.
+	mailer.Close()
 	mailCtx, cancelMail := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancelMail()
 	if err := mailer.Wait(mailCtx); err != nil {

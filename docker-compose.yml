@@ -1,5 +1,11 @@
 # Локальное окружение для разработки: только Postgres.
 # API и фронт запускаются на хосте (go run / npm run dev) — так быстрее перезапуск.
+
+# Фиксированное имя проекта: без него compose берёт имя каталога, и
+# `docker compose up -d` из git worktree поднимал бы второй Postgres со своим томом
+# (и падал бы на занятом порту). С ним все worktree используют один общий Postgres.
+name: personal_accounting
+
 services:
   postgres:
     image: postgres:18

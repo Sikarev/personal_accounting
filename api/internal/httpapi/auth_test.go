@@ -574,6 +574,10 @@ func TestContractSecurity(t *testing.T) {
 		// Ссылку из письма могут открыть в другом браузере, без сессии.
 		"verifyEmail": true, "requestPasswordReset": true, "confirmPasswordReset": true,
 		"resendVerificationEmail": false,
+		// Счета — только со входом.
+		"listAccounts": false, "createAccount": false, "updateAccount": false, "deleteAccount": false,
+		"archiveAccount": false, "unarchiveAccount": false, "reorderAccounts": false,
+		"adjustAccountBalance": false,
 		// Категории — только для вошедших.
 		"listCategories": false, "createCategory": false, "updateCategory": false, "moveCategory": false,
 		"archiveCategory": false, "unarchiveCategory": false, "mergeCategory": false,

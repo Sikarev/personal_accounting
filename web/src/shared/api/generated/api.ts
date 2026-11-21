@@ -30,8 +30,13 @@ import type {
 } from '@tanstack/react-query'
 
 import type {
+  Account,
+  AccountList,
+  AdjustBalanceRequest,
+  AdjustBalanceResponse,
   Category,
   CategoryList,
+  CreateAccountRequest,
   CreateCategoryRequest,
   CurrencyList,
   LoginRequest,
@@ -42,6 +47,8 @@ import type {
   PasswordResetRequest,
   ProblemResponse,
   RegisterRequest,
+  ReorderAccountsRequest,
+  UpdateAccountRequest,
   UpdateCategoryRequest,
   VerifyEmailRequest,
 } from './model'
@@ -955,6 +962,771 @@ export function useGetMe<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListAccountsUrl = () => {
+  return `/api/v1/accounts`
+}
+
+/**
+ * Все видимые пользователю счета, **включая архивные** (список короткий,
+ * фильтрует клиент). Порядок: `sortOrder`, затем время создания.
+ * @summary Счета семьи с текущими остатками
+ */
+export const listAccounts = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AccountList> => {
+  return apiFetch<AccountList>(getListAccountsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListAccountsQueryKey = () => {
+  return [`/api/v1/accounts`] as const
+}
+
+export const getListAccountsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAccounts>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListAccountsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAccounts>>> = ({ signal }) =>
+    listAccounts({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAccounts>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof listAccounts>>>
+export type ListAccountsQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Все видимые пользователю счета, **включая архивные** (список короткий,
+ * фильтрует клиент). Порядок: `sortOrder`, затем время создания.
+ * @summary Счета семьи с текущими остатками
+ */
+export function useListAccounts<
+  TData = Awaited<ReturnType<typeof listAccounts>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAccounts>>,
+          TError,
+          Awaited<ReturnType<typeof listAccounts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все видимые пользователю счета, **включая архивные** (список короткий,
+ * фильтрует клиент). Порядок: `sortOrder`, затем время создания.
+ * @summary Счета семьи с текущими остатками
+ */
+export function useListAccounts<
+  TData = Awaited<ReturnType<typeof listAccounts>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAccounts>>,
+          TError,
+          Awaited<ReturnType<typeof listAccounts>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все видимые пользователю счета, **включая архивные** (список короткий,
+ * фильтрует клиент). Порядок: `sortOrder`, затем время создания.
+ * @summary Счета семьи с текущими остатками
+ */
+export function useListAccounts<
+  TData = Awaited<ReturnType<typeof listAccounts>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все видимые пользователю счета, **включая архивные** (список короткий,
+ * фильтрует клиент). Порядок: `sortOrder`, затем время создания.
+ * @summary Счета семьи с текущими остатками
+ */
+export function useListAccounts<
+  TData = Awaited<ReturnType<typeof listAccounts>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listAccounts>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreateAccountUrl = () => {
+  return `/api/v1/accounts`
+}
+
+/**
+ * Новый счёт встаёт в конец своей группы (общие или личные).
+ * Ошибки: 422 `validation_failed` (в т. ч. `invalid_value` у `currency`,
+ * если валюта не активна; `required` у `name`, если имя пустое после обрезки пробелов).
+ * @summary Создать счёт
+ */
+export const createAccount = async (
+  createAccountRequest: CreateAccountRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Account> => {
+  return apiFetch<Account>(getCreateAccountUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createAccountRequest),
+  })
+}
+
+export const getCreateAccountMutationKey = () => ['createAccount'] as const
+
+export const getCreateAccountMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createAccount>>,
+    TError,
+    CreateAccountMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createAccount>>,
+  TError,
+  CreateAccountMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreateAccountMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createAccount>>,
+    CreateAccountMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createAccount(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateAccountMutationResult = NonNullable<Awaited<ReturnType<typeof createAccount>>>
+export type CreateAccountMutationBody = CreateAccountRequest
+export type CreateAccountMutationError = ErrorType<ProblemResponse>
+export type CreateAccountMutationVariables = { data: CreateAccountRequest }
+
+/**
+ * Новый счёт встаёт в конец своей группы (общие или личные).
+ * Ошибки: 422 `validation_failed` (в т. ч. `invalid_value` у `currency`,
+ * если валюта не активна; `required` у `name`, если имя пустое после обрезки пробелов).
+ * @summary Создать счёт
+ */
+export const useCreateAccount = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createAccount>>,
+      TError,
+      CreateAccountMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createAccount>>,
+  TError,
+  CreateAccountMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreateAccountMutationOptions(options), queryClient)
+}
+
+export const getReorderAccountsUrl = () => {
+  return `/api/v1/accounts/order`
+}
+
+/**
+ * `sortOrder` каждого счёта становится равным его позиции в списке (с 0).
+ * Клиент присылает одну группу (общие или личные): группы показываются
+ * раздельно. Если хоть один id не найден среди видимых счетов семьи —
+ * 404, порядок не меняется.
+ * @summary Задать порядок счетов
+ */
+export const reorderAccounts = async (
+  reorderAccountsRequest: ReorderAccountsRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getReorderAccountsUrl(), {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(reorderAccountsRequest),
+  })
+}
+
+export const getReorderAccountsMutationKey = () => ['reorderAccounts'] as const
+
+export const getReorderAccountsMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderAccounts>>,
+    TError,
+    ReorderAccountsMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderAccounts>>,
+  TError,
+  ReorderAccountsMutationVariables,
+  TContext
+> => {
+  const mutationKey = getReorderAccountsMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderAccounts>>,
+    ReorderAccountsMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return reorderAccounts(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ReorderAccountsMutationResult = NonNullable<Awaited<ReturnType<typeof reorderAccounts>>>
+export type ReorderAccountsMutationBody = ReorderAccountsRequest
+export type ReorderAccountsMutationError = ErrorType<ProblemResponse>
+export type ReorderAccountsMutationVariables = { data: ReorderAccountsRequest }
+
+/**
+ * `sortOrder` каждого счёта становится равным его позиции в списке (с 0).
+ * Клиент присылает одну группу (общие или личные): группы показываются
+ * раздельно. Если хоть один id не найден среди видимых счетов семьи —
+ * 404, порядок не меняется.
+ * @summary Задать порядок счетов
+ */
+export const useReorderAccounts = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof reorderAccounts>>,
+      TError,
+      ReorderAccountsMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof reorderAccounts>>,
+  TError,
+  ReorderAccountsMutationVariables,
+  TContext
+> => {
+  return useMutation(getReorderAccountsMutationOptions(options), queryClient)
+}
+
+export const getUpdateAccountUrl = (accountId: string) => {
+  return `/api/v1/accounts/${accountId}`
+}
+
+/**
+ * Полная замена редактируемых полей. Валюта и видимость не меняются.
+ * Архивный счёт редактировать можно.
+ * @summary Изменить счёт
+ */
+export const updateAccount = async (
+  accountId: string,
+  updateAccountRequest: UpdateAccountRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Account> => {
+  return apiFetch<Account>(getUpdateAccountUrl(accountId), {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateAccountRequest),
+  })
+}
+
+export const getUpdateAccountMutationKey = () => ['updateAccount'] as const
+
+export const getUpdateAccountMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateAccount>>,
+    TError,
+    UpdateAccountMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateAccount>>,
+  TError,
+  UpdateAccountMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdateAccountMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateAccount>>,
+    UpdateAccountMutationVariables
+  > = (props) => {
+    const { accountId, data } = props ?? {}
+
+    return updateAccount(accountId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateAccountMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccount>>>
+export type UpdateAccountMutationBody = UpdateAccountRequest
+export type UpdateAccountMutationError = ErrorType<ProblemResponse>
+export type UpdateAccountMutationVariables = { accountId: string; data: UpdateAccountRequest }
+
+/**
+ * Полная замена редактируемых полей. Валюта и видимость не меняются.
+ * Архивный счёт редактировать можно.
+ * @summary Изменить счёт
+ */
+export const useUpdateAccount = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateAccount>>,
+      TError,
+      UpdateAccountMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateAccount>>,
+  TError,
+  UpdateAccountMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdateAccountMutationOptions(options), queryClient)
+}
+
+export const getDeleteAccountUrl = (accountId: string) => {
+  return `/api/v1/accounts/${accountId}`
+}
+
+/**
+ * Удалить можно только счёт без операций. Если на счёт ссылается хоть одна
+ * операция (в т. ч. удалённая или как счёт-получатель перевода) — 409
+ * `account_has_transactions`; такой счёт можно только архивировать.
+ * @summary Удалить счёт
+ */
+export const deleteAccount = async (
+  accountId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeleteAccountUrl(accountId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteAccountMutationKey = () => ['deleteAccount'] as const
+
+export const getDeleteAccountMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteAccount>>,
+    TError,
+    DeleteAccountMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteAccount>>,
+  TError,
+  DeleteAccountMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteAccountMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteAccount>>,
+    DeleteAccountMutationVariables
+  > = (props) => {
+    const { accountId } = props ?? {}
+
+    return deleteAccount(accountId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteAccountMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAccount>>>
+
+export type DeleteAccountMutationError = ErrorType<ProblemResponse>
+export type DeleteAccountMutationVariables = { accountId: string }
+
+/**
+ * Удалить можно только счёт без операций. Если на счёт ссылается хоть одна
+ * операция (в т. ч. удалённая или как счёт-получатель перевода) — 409
+ * `account_has_transactions`; такой счёт можно только архивировать.
+ * @summary Удалить счёт
+ */
+export const useDeleteAccount = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteAccount>>,
+      TError,
+      DeleteAccountMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteAccount>>,
+  TError,
+  DeleteAccountMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteAccountMutationOptions(options), queryClient)
+}
+
+export const getArchiveAccountUrl = (accountId: string) => {
+  return `/api/v1/accounts/${accountId}/archive`
+}
+
+/**
+ * Идемпотентно — повторный вызов не меняет `archivedAt`.
+ * @summary Архивировать счёт
+ */
+export const archiveAccount = async (
+  accountId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Account> => {
+  return apiFetch<Account>(getArchiveAccountUrl(accountId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getArchiveAccountMutationKey = () => ['archiveAccount'] as const
+
+export const getArchiveAccountMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archiveAccount>>,
+    TError,
+    ArchiveAccountMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archiveAccount>>,
+  TError,
+  ArchiveAccountMutationVariables,
+  TContext
+> => {
+  const mutationKey = getArchiveAccountMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archiveAccount>>,
+    ArchiveAccountMutationVariables
+  > = (props) => {
+    const { accountId } = props ?? {}
+
+    return archiveAccount(accountId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ArchiveAccountMutationResult = NonNullable<Awaited<ReturnType<typeof archiveAccount>>>
+
+export type ArchiveAccountMutationError = ErrorType<ProblemResponse>
+export type ArchiveAccountMutationVariables = { accountId: string }
+
+/**
+ * Идемпотентно — повторный вызов не меняет `archivedAt`.
+ * @summary Архивировать счёт
+ */
+export const useArchiveAccount = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof archiveAccount>>,
+      TError,
+      ArchiveAccountMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof archiveAccount>>,
+  TError,
+  ArchiveAccountMutationVariables,
+  TContext
+> => {
+  return useMutation(getArchiveAccountMutationOptions(options), queryClient)
+}
+
+export const getUnarchiveAccountUrl = (accountId: string) => {
+  return `/api/v1/accounts/${accountId}/unarchive`
+}
+
+/**
+ * Идемпотентно.
+ * @summary Вернуть счёт из архива
+ */
+export const unarchiveAccount = async (
+  accountId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Account> => {
+  return apiFetch<Account>(getUnarchiveAccountUrl(accountId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getUnarchiveAccountMutationKey = () => ['unarchiveAccount'] as const
+
+export const getUnarchiveAccountMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unarchiveAccount>>,
+    TError,
+    UnarchiveAccountMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unarchiveAccount>>,
+  TError,
+  UnarchiveAccountMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUnarchiveAccountMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unarchiveAccount>>,
+    UnarchiveAccountMutationVariables
+  > = (props) => {
+    const { accountId } = props ?? {}
+
+    return unarchiveAccount(accountId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UnarchiveAccountMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unarchiveAccount>>
+>
+
+export type UnarchiveAccountMutationError = ErrorType<ProblemResponse>
+export type UnarchiveAccountMutationVariables = { accountId: string }
+
+/**
+ * Идемпотентно.
+ * @summary Вернуть счёт из архива
+ */
+export const useUnarchiveAccount = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof unarchiveAccount>>,
+      TError,
+      UnarchiveAccountMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof unarchiveAccount>>,
+  TError,
+  UnarchiveAccountMutationVariables,
+  TContext
+> => {
+  return useMutation(getUnarchiveAccountMutationOptions(options), queryClient)
+}
+
+export const getAdjustAccountBalanceUrl = (accountId: string) => {
+  return `/api/v1/accounts/${accountId}/adjust-balance`
+}
+
+/**
+ * Пользователь вводит фактический остаток. Сервер создаёт операцию
+ * `adjustment` на разницу (фактический − текущий) с датой «сегодня»
+ * в часовом поясе пользователя. Разница 0 — операция не создаётся,
+ * `transactionId` в ответе нет. Архивный счёт — 409 `account_archived`.
+ * @summary Корректировка остатка
+ */
+export const adjustAccountBalance = async (
+  accountId: string,
+  adjustBalanceRequest: AdjustBalanceRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<AdjustBalanceResponse> => {
+  return apiFetch<AdjustBalanceResponse>(getAdjustAccountBalanceUrl(accountId), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(adjustBalanceRequest),
+  })
+}
+
+export const getAdjustAccountBalanceMutationKey = () => ['adjustAccountBalance'] as const
+
+export const getAdjustAccountBalanceMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adjustAccountBalance>>,
+    TError,
+    AdjustAccountBalanceMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adjustAccountBalance>>,
+  TError,
+  AdjustAccountBalanceMutationVariables,
+  TContext
+> => {
+  const mutationKey = getAdjustAccountBalanceMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adjustAccountBalance>>,
+    AdjustAccountBalanceMutationVariables
+  > = (props) => {
+    const { accountId, data } = props ?? {}
+
+    return adjustAccountBalance(accountId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type AdjustAccountBalanceMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adjustAccountBalance>>
+>
+export type AdjustAccountBalanceMutationBody = AdjustBalanceRequest
+export type AdjustAccountBalanceMutationError = ErrorType<ProblemResponse>
+export type AdjustAccountBalanceMutationVariables = {
+  accountId: string
+  data: AdjustBalanceRequest
+}
+
+/**
+ * Пользователь вводит фактический остаток. Сервер создаёт операцию
+ * `adjustment` на разницу (фактический − текущий) с датой «сегодня»
+ * в часовом поясе пользователя. Разница 0 — операция не создаётся,
+ * `transactionId` в ответе нет. Архивный счёт — 409 `account_archived`.
+ * @summary Корректировка остатка
+ */
+export const useAdjustAccountBalance = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof adjustAccountBalance>>,
+      TError,
+      AdjustAccountBalanceMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof adjustAccountBalance>>,
+  TError,
+  AdjustAccountBalanceMutationVariables,
+  TContext
+> => {
+  return useMutation(getAdjustAccountBalanceMutationOptions(options), queryClient)
 }
 
 export const getListCategoriesUrl = () => {

@@ -1,0 +1,7 @@
+# Сгенерированный код — всегда с LF, независимо от core.autocrlf.
+# Генераторы (orval + prettier, oapi-codegen, sqlc) пишут LF; без этого на
+# Windows с autocrlf=true рабочая копия получает CRLF, и после генерации
+# появляется фиктивный дифф (техдолг №25).
+web/src/shared/api/generated/** text eol=lf
+api/internal/oapi/oapi.gen.go text eol=lf
+api/internal/db/dbgen/** text eol=lf

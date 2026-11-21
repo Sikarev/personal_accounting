@@ -32,7 +32,8 @@ export interface Problem {
    * Машиночитаемый код ошибки. Список может расширяться — неизвестный код
    * клиент обрабатывает по HTTP-статусу. Известные значения:
    * `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
-   * `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`.
+   * `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
+   * `account_has_transactions`, `account_archived`.
    */
   code: string
   /** Ошибки по полям; только при `code = validation_failed`. */

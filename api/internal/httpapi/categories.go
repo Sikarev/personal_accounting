@@ -172,18 +172,27 @@ func (s *server) UpdateCategory(ctx context.Context, req oapi.UpdateCategoryRequ
 	if err != nil {
 		return nil, err
 	}
-	// Одиночный UPDATE: позиции не меняются, блокировка не нужна. Гонку двух
-	// одинаковых имён разрешает уникальный индекс.
-	c, err := s.q.RenameCategory(ctx, dbgen.RenameCategoryParams{
-		Name: name, Now: s.now(), FamilyID: p.FamilyID, ID: req.CategoryId,
+	// Тоже под блокировкой семьи, хотя это один UPDATE: без неё переименование
+	// и параллельный move/merge захватывают строку и кортеж уникального индекса
+	// имени в разном порядке и ловят взаимоблокировку (500 вместо name_taken).
+	var c dbgen.Category
+	err = s.inCategoryTx(ctx, p.FamilyID, func(q *dbgen.Queries) error {
+		var err error
+		c, err = q.RenameCategory(ctx, dbgen.RenameCategoryParams{
+			Name: name, Now: s.now(), FamilyID: p.FamilyID, ID: req.CategoryId,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			return errCategoryNotFound()
+		case isUniqueViolation(err, categoriesNameKey):
+			return errNameTaken("name")
+		case err != nil:
+			return fmt.Errorf("rename category: %w", err)
+		}
+		return nil
 	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return nil, errCategoryNotFound()
-	case isUniqueViolation(err, categoriesNameKey):
-		return nil, errNameTaken("name")
-	case err != nil:
-		return nil, fmt.Errorf("rename category: %w", err)
+	if err != nil {
+		return nil, err
 	}
 	return oapi.UpdateCategory200JSONResponse(categoryToAPI(c)), nil
 }

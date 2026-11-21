@@ -689,3 +689,113 @@ func TestCategoriesFamilyIsolation(t *testing.T) {
 		t.Fatalf("у Боба %d категорий", n)
 	}
 }
+
+// Отдельно архивированная подкатегория при активном родителе возвращается
+// одна: родитель и соседи не меняются.
+func TestUnarchiveSubcategoryWithActiveParent(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := newCatUser(t, e)
+	auto := u.id(t, "expense", "", "Автомобиль")
+	parking := u.id(t, "expense", "Автомобиль", "Парковка")
+	fuel := u.id(t, "expense", "Автомобиль", "Топливо")
+	u.send(http.MethodPost, "/categories/"+fuel+"/archive", "")
+	u.send(http.MethodPost, "/categories/"+parking+"/archive", "")
+
+	code, body := u.send(http.MethodPost, "/categories/"+parking+"/unarchive", "")
+	if code != http.StatusOK || body["archivedAt"] != nil || body["parentId"] != auto {
+		t.Fatalf("разархивация: %d %v", code, body)
+	}
+	if u.find(t, "expense", "", "Автомобиль")["archivedAt"] != nil {
+		t.Fatal("родитель не должен меняться")
+	}
+	if u.find(t, "expense", "Автомобиль", "Топливо")["archivedAt"] == nil {
+		t.Fatal("соседняя архивная подкатегория не должна возвращаться")
+	}
+}
+
+// has_children срабатывает и когда все подкатегории в архиве.
+func TestMoveCategoryWithOnlyArchivedChildren(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := newCatUser(t, e)
+	transport := u.id(t, "expense", "", "Транспорт")
+	pets := u.create(t, "expense", nil, "Животные")["id"].(string)
+	vet := u.create(t, "expense", pets, "Ветеринар")["id"].(string)
+	u.send(http.MethodPost, "/categories/"+vet+"/archive", "")
+
+	code, body := u.send(http.MethodPost, "/categories/"+pets+"/move", moveBody(transport, 0))
+	wantFieldError(t, code, body, "parentId:has_children")
+}
+
+// Одновременные создания в конец одного родителя не дают дублей позиций.
+func TestCreateCategoryConcurrent(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := newCatUser(t, e)
+	transport := u.id(t, "expense", "", "Транспорт")
+	const n = 10
+	done := make(chan int, n)
+	for i := range n {
+		go func() {
+			code, _ := u.send(http.MethodPost, "/categories", createCatBody("expense", transport, "Новая "+string(rune('A'+i))))
+			done <- code
+		}()
+	}
+	for range n {
+		if code := <-done; code != http.StatusCreated {
+			t.Fatalf("создание: %d", code)
+		}
+	}
+	// siblings проверяет и позиции 1..n без дублей.
+	if got := u.siblings(t, "expense", transport); len(got) != n+2 {
+		t.Fatalf("соседи: %v", got)
+	}
+}
+
+// Переименование параллельно с перемещением на то же имя (сценарий ревью).
+// Через HTTP гонку не поймать надёжно, поэтому «перемещение» — транзакция
+// теста с теми же шагами, что у MoveCategory: блокировка семьи → смена
+// родителя (кортеж индекса имени) → перенумерация (строка соседа).
+// PUT в это время ждёт блокировку семьи, не держа строку соседа, и после
+// коммита получает name_taken. Без блокировки в PUT была бы взаимоблокировка.
+func TestRenameWaitsForMove(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := newCatUser(t, e)
+	ctx := context.Background()
+	auto := u.id(t, "expense", "", "Автомобиль")
+	fuel := u.id(t, "expense", "Автомобиль", "Топливо")
+	taxi := u.id(t, "expense", "Транспорт", "Такси")
+
+	tx, err := e.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('categories:' || $1::uuid::text, 0))`, u.familyID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE categories SET parent_id = $1 WHERE id = $2`, auto, taxi); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan int, 1)
+	go func() {
+		code, _ := u.send(http.MethodPut, "/categories/"+fuel, `{"name":"Такси"}`)
+		done <- code
+	}()
+	// Ждём, пока PUT встанет в ожидание блокировки.
+	deadline := time.Now().Add(5 * time.Second)
+	for queryInt(t, e.pool, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`) == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("PUT не ждёт блокировку")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE categories SET sort_order = 99 WHERE id = $1`, fuel); err != nil {
+		t.Fatalf("перенумерация: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if code := <-done; code != http.StatusUnprocessableEntity {
+		t.Fatalf("PUT: %d, ожидался 422 name_taken", code)
+	}
+}

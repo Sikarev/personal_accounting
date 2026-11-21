@@ -1,0 +1,45 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  background-color: var(--mantine-color-body);
+}
+
+/* Наведение подсвечивает всю строку, вместе с ручкой. */
+.item:hover {
+  background-color: var(--mantine-color-default-hover);
+}
+
+.item + .item {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* Перетаскиваемая строка поверх соседей и приподнята тенью — видно, что её держат. */
+.item[data-dragging] {
+  z-index: 1;
+  box-shadow: var(--mantine-shadow-md);
+  border-radius: var(--mantine-radius-md);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+}
+
+.handle {
+  flex: none;
+  /* Ручка забирает жест себе: свайп по ней — перетаскивание, а не прокрутка страницы. */
+  touch-action: none;
+  cursor: grab;
+}
+
+.item[data-dragging] .handle {
+  cursor: grabbing;
+}

@@ -48,6 +48,12 @@ describe('apiErrorText', () => {
     ['forbidden_origin', apiError(403, 'forbidden_origin'), t.errors.forbiddenOrigin],
     ['validation_failed', apiError(422, 'validation_failed'), t.errors.validation],
     ['not_found', apiError(404, 'not_found'), t.errors.notFound],
+    [
+      'account_has_transactions',
+      apiError(409, 'account_has_transactions'),
+      t.errors.accountHasTransactions,
+    ],
+    ['account_archived', apiError(409, 'account_archived'), t.errors.accountArchived],
     ['internal', apiError(500, 'internal'), t.errors.server],
     // Неизвестный код — по статусу.
     ['неизвестный код, 502', apiError(502, UNKNOWN_ERROR_CODE), t.errors.server],

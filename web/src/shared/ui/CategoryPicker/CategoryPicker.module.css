@@ -1,0 +1,39 @@
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Длинное имя не раздвигает ряд: чип не шире контейнера, текст обрезается многоточием. */
+.chipRoot {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Зона касания чипа — не меньше 44 px (ux.md, раздел 6); при крупном шрифте растёт. */
+.chipLabel {
+  height: auto;
+  min-height: var(--app-touch-target);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Варианты списка — тоже не ниже 44 px; длинное имя переносится, а не обрезается:
+   в выпадающем списке важнее прочитать название целиком. */
+.option {
+  min-height: var(--app-touch-target);
+  display: flex;
+  align-items: center;
+}
+
+.optionText {
+  overflow-wrap: anywhere;
+}
+
+.parent {
+  color: var(--mantine-color-dimmed);
+}

@@ -1,0 +1,10 @@
+/* Высота заголовка экрана (h1, шрифт xl) — вёрстка не прыгает, когда экран загрузится. */
+.title {
+  width: 40%;
+  height: var(--mantine-font-size-xl);
+  margin-block: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+}
+
+.block {
+  height: calc(var(--app-touch-target) * 5);
+}

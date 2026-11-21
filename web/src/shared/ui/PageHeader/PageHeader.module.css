@@ -1,0 +1,24 @@
+/* Сужается и переносит заголовок только без действий справа: рядом с кнопкой заголовок
+   сохраняет ширину слова (иначе «Счета» при крупном шрифте рвалось бы по буквам). */
+.start[data-shrink] {
+  min-width: 0;
+}
+
+/* Зона касания 44 px (ux.md, раздел 6); стрелка выровнена по левому краю контента. */
+.back {
+  flex: none;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+  margin-inline-start: calc(var(--mantine-spacing-sm) * -1);
+  color: var(--mantine-color-text);
+}
+
+/* Без действий справа длинное слово при крупном шрифте (и рядом с «Назад») переносится,
+   а не выходит за экран. */
+.start[data-shrink] .title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}

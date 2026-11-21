@@ -1,0 +1,65 @@
+.root {
+  margin-top: var(--mantine-spacing-lg);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  margin-inline-start: calc(var(--mantine-spacing-sm) * -1);
+  border-radius: var(--mantine-radius-md);
+
+  &:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+}
+
+.chevron[data-opened] {
+  transform: rotate(180deg);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-sm));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-xs) var(--mantine-spacing-xs)
+    var(--mantine-spacing-md);
+
+  flex-wrap: wrap;
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.name {
+  /* Не уже 10rem: при крупном шрифте «Вернуть» переносится под название, а не сжимает
+     его до пары букв в строке. */
+  flex: 1 1 10rem;
+  min-width: 0;
+  /* Название переносится по словам, а не обрезается (ux.md, раздел 4). */
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Кнопка компактная, но зона касания — 44 px. */
+.restore {
+  flex: none;
+  margin-inline-start: auto;
+  min-height: var(--app-touch-target);
+}

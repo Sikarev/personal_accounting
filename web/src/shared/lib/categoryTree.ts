@@ -4,7 +4,15 @@ import type { Category, CategoryKind } from '../api'
 // список обоих видов вместе с архивными, дерево и фильтр архива строятся здесь.
 // Глубина — 2: категория верхнего уровня (`parentId: null`) и её подкатегории.
 
-export type CategoryNode = Category & { children: Category[] }
+export type CategoryNode = Category & {
+  /** Активные подкатегории. */
+  children: Category[]
+  /**
+   * Есть подкатегории вообще, включая архивные. Такую категорию нельзя вложить в другую:
+   * сервер считает и архивных детей (`has_children`).
+   */
+  hasChildren: boolean
+}
 
 /** Разделитель «Родитель › Подкатегория» в подписях. */
 export const CATEGORY_PATH_SEPARATOR = ' › '
@@ -32,10 +40,10 @@ export function siblingsOf(
 export function activeTree(list: readonly Category[], kind: CategoryKind): CategoryNode[] {
   return siblingsOf(list, kind, null)
     .filter(isActive)
-    .map((parent) => ({
-      ...parent,
-      children: siblingsOf(list, kind, parent.id).filter(isActive),
-    }))
+    .map((parent) => {
+      const all = siblingsOf(list, kind, parent.id)
+      return { ...parent, children: all.filter(isActive), hasChildren: all.length > 0 }
+    })
 }
 
 export type ArchivedEntry = {

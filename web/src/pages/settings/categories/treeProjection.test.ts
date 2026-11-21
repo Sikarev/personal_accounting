@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { CategoryNode } from '../../../shared/lib/categoryTree'
 import { currentPlace, flattenTree, getProjection, withoutChildrenOf } from './treeProjection'
 
-function node(id: string, children: string[] = []): CategoryNode {
+function node(id: string, children: string[] = [], hasArchived = false): CategoryNode {
   const base = { kind: 'expense' as const, sortOrder: 0, archivedAt: null }
   return {
     ...base,
@@ -11,6 +11,7 @@ function node(id: string, children: string[] = []): CategoryNode {
     name: id,
     parentId: null,
     children: children.map((c) => ({ ...base, id: c, name: c, parentId: id })),
+    hasChildren: children.length > 0 || hasArchived,
   }
 }
 
@@ -100,6 +101,12 @@ describe('getProjection', () => {
     expect(getProjection(withoutChildrenOf(items, 'c'), 'c', 'a2', 0, INDENT)).toEqual({
       valid: false,
     })
+  })
+
+  it('с одними архивными подкатегориями тоже нельзя вложить', () => {
+    const list = flattenTree([node('a', ['a1']), node('d', [], true)])
+    // d на своём месте со сдвигом вправо: остаётся на верхнем уровне.
+    expect(getProjection(list, 'd', 'd', INDENT, INDENT)).toMatchObject({ depth: 0 })
   })
 
   it('первая строка — только верхний уровень', () => {

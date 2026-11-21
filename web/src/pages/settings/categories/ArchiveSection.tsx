@@ -31,6 +31,7 @@ export function ArchiveSection({
         className={classes.toggle}
         aria-expanded={opened}
         aria-controls={panelId}
+        data-archive-toggle
         onClick={() => setOpened((o) => !o)}
       >
         <Text fw={500}>{t.categories.archiveTitle(entries.length)}</Text>
@@ -49,7 +50,7 @@ export function ArchiveSection({
         <ul className={classes.list}>
           {entries.map(({ category, parent }) => (
             <li key={category.id} className={classes.row} data-nested={parent ? true : undefined}>
-              <Text className={classes.name} truncate="end">
+              <Text className={classes.name}>
                 {parent && (
                   <Text span c="dimmed">
                     {parent.name}
@@ -63,6 +64,7 @@ export function ArchiveSection({
                 size="sm"
                 className={classes.restore}
                 aria-label={t.categories.restoreLabel(category.name)}
+                data-restore-id={category.id}
                 onClick={() => onRestore(category.id)}
               >
                 {t.categories.restore}

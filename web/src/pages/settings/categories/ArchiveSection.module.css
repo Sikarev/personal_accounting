@@ -40,18 +40,26 @@
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-xs) var(--mantine-spacing-xs)
     var(--mantine-spacing-md);
 
+  flex-wrap: wrap;
+
   & + & {
     border-top: 1px solid var(--mantine-color-default-border);
   }
 }
 
 .name {
-  flex: 1;
+  /* Не уже 10rem: при крупном шрифте «Вернуть» переносится под название, а не сжимает
+     его до пары букв в строке. */
+  flex: 1 1 10rem;
   min-width: 0;
+  /* Название переносится по словам, а не обрезается (ux.md, раздел 4). */
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 /* Кнопка компактная, но зона касания — 44 px. */
 .restore {
   flex: none;
+  margin-inline-start: auto;
   min-height: var(--app-touch-target);
 }

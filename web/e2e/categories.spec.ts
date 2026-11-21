@@ -89,7 +89,11 @@ const fixture: Category[] = [
  * `unarchive` / создание меняют его (экран после каждого изменения перезапрашивает список —
  * без состояния ответ затёр бы оптимистичное обновление). Запросы изменений — в `writes`.
  */
-async function mockCategories(page: Page, initial: Category[] = fixture) {
+async function mockCategories(
+  page: Page,
+  initial: Category[] = fixture,
+  options: { delayMs?: number; log?: string[] } = {},
+) {
   let items = initial.map((c) => ({ ...c }))
   const writes: Request[] = []
   const siblings = (c: Category, parentId: string | null) =>
@@ -103,6 +107,10 @@ async function mockCategories(page: Page, initial: Category[] = fixture) {
     writes.push(request)
     const [, id, action] =
       new URL(request.url()).pathname.match(/categories\/([^/]+)\/?(\w*)/) ?? []
+    // Медленный сервер: видно, параллельно ли уходят запросы и не «прыгает» ли список.
+    options.log?.push(`start:${action || request.method()}`)
+    if (options.delayMs) await new Promise((r) => setTimeout(r, options.delayMs))
+    options.log?.push(`end:${action || request.method()}`)
     const target = items.find((c) => c.id === id)
     // Тело — по контракту соответствующей операции; поля разбираются ниже по месту.
     const body = (request.postDataJSON() ?? {}) as {
@@ -349,6 +357,13 @@ test.describe('категории: состояния', () => {
     await openCategories(page)
     await enlargeFont(page)
     await expect(page).toHaveScreenshot('categories-font-200.png')
+    // Дерево и архив целиком (на экране помещается только начало): названия переносятся,
+    // ручки в узком списке нет, отступ подкатегории меньше.
+    await expect(tree(page)).toHaveScreenshot('categories-font-200-tree.png')
+    await expandArchive(page, 3)
+    await expect(
+      page.locator('section').filter({ has: page.locator('[data-archive-toggle]') }),
+    ).toHaveScreenshot('categories-font-200-archive.png')
   })
 })
 
@@ -404,6 +419,10 @@ test.describe('категории: окна', () => {
     await dialog.getByRole('button', { name: t.categories.merge.submit }).click()
     await expect(dialog).toBeHidden()
     expect(merged).toEqual({ targetId: dairy.id })
+    // Окно не возвращает фокус на удалённую строку — он на меню следующей.
+    await expect(
+      page.getByRole('button', { name: t.categories.actionsLabel(longName.name) }),
+    ).toBeFocused()
   })
 
   test('переименование: занятое имя — ошибка у поля', { tag: '@a11y' }, async ({ page }) => {
@@ -462,18 +481,88 @@ test.describe('категории: окна', () => {
     expect(await rowNames(page)).toContain('2:Кафе и рестораны')
   })
 
-  test('у категории с подкатегориями вложить нельзя', { tag: '@a11y' }, async ({ page }) => {
+  test('у категории с подкатегориями нет «Переместить в…»', { tag: '@a11y' }, async ({ page }) => {
     await mockCategories(page)
     await openCategories(page)
-    await (
-      await openMenu(page, products.name)
-    )
-      .getByRole('menuitem', { name: t.categories.moveTo })
-      .click()
-    const dialog = page.getByRole('dialog', { name: t.categories.move.title(products.name) })
-    await expect(dialog.getByText(t.categories.move.hasChildren)).toBeVisible()
-    await expect(dialog.getByRole('radio', { name: transport.name })).toBeDisabled()
+    const menu = await openMenu(page, products.name)
+    await expect(menu.getByRole('menuitem', { name: t.categories.rename })).toBeVisible()
+    await expect(menu.getByRole('menuitem', { name: t.categories.moveTo })).toHaveCount(0)
   })
+
+  test(
+    'подкатегории только в архиве — вложить всё равно нельзя',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const pets = cat('Питомцы', { sortOrder: 7 })
+      const food = cat('Корм', { parentId: pets.id, sortOrder: 1, archivedAt: ARCHIVED_AT })
+      const writes = await mockCategories(page, [...fixture, pets, food])
+      await openCategories(page)
+      // Пункта «Переместить в…» нет: доступных родителей нет (сервер ответил бы has_children).
+      const menu = await openMenu(page, pets.name)
+      await expect(menu.getByRole('menuitem', { name: t.categories.moveTo })).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      // Перетаскивание вправо тоже не вкладывает: категория остаётся на месте.
+      await handle(page, pets.name).focus()
+      await page.keyboard.press('Space')
+      await page.keyboard.press('ArrowRight')
+      await page.keyboard.press('Space')
+      await expect(
+        page.getByText(t.categories.dnd.unchanged(pets.name), { exact: true }),
+      ).toBeAttached()
+      expect(writes).toHaveLength(0)
+    },
+  )
+
+  test('меню строки: доступность в обеих темах', { tag: '@a11y' }, async ({ page }) => {
+    await mockCategories(page)
+    await openCategories(page)
+    const menu = await openMenu(page, cafe.name)
+    await expect(menu.getByRole('menuitem', { name: t.categories.remove })).toBeVisible()
+    // aria-required-children — проблема Mantine: в начале role="menu" служебный элемент
+    // для фокуса (<div role="presentation" tabindex="-1">), axe не принимает его из-за
+    // tabindex. Своими средствами не убрать; остальные правила (контраст «Удалить…»,
+    // подписи, ориентиры) проверяются.
+    await expectNoAxeViolations(page, { disableRules: ['aria-required-children'] })
+  })
+
+  test(
+    '«Выше» и «Ниже»: один шаг, тост, фокус на меню строки',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const writes = await mockCategories(page)
+      await openCategories(page)
+      // У первой среди соседей нет «Выше», у последней — «Ниже».
+      let menu = await openMenu(page, products.name)
+      await expect(menu.getByRole('menuitem', { name: t.categories.moveUp })).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      menu = await openMenu(page, metro.name)
+      await expect(menu.getByRole('menuitem', { name: t.categories.moveDown })).toHaveCount(0)
+      await page.keyboard.press('Escape')
+
+      menu = await openMenu(page, cafe.name)
+      await menu.getByRole('menuitem', { name: t.categories.moveDown }).click()
+      await expect.poll(() => writes.length).toBe(1)
+      // Между Транспортом и «Образованием»: индекс среди всех соседей верхнего уровня.
+      expect(bodyOf(writes[0])).toEqual({ parentId: null, index: 2 })
+      expect((await rowNames(page)).filter((r) => r.startsWith('1:'))).toEqual([
+        '1:Продукты',
+        '1:Транспорт',
+        '1:Кафе и рестораны',
+        `1:${longName.name}`,
+        '1:Подарки',
+      ])
+      await expect(page.getByText(t.categories.moved(cafe.name))).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: t.categories.actionsLabel(cafe.name) }),
+      ).toBeFocused()
+
+      menu = await openMenu(page, taxi.name)
+      await menu.getByRole('menuitem', { name: t.categories.moveDown }).click()
+      await expect.poll(() => writes.length).toBe(2)
+      // После Метро; архивный Каршеринг между ними учтён в индексе.
+      expect(bodyOf(writes[1])).toEqual({ parentId: transport.id, index: 2 })
+    },
+  )
 })
 
 test.describe('категории: перетаскивание', () => {
@@ -595,6 +684,75 @@ test.describe('категории: перетаскивание', () => {
   })
 })
 
+test.describe('категории: очередь изменений', () => {
+  test(
+    'два быстрых перемещения при медленном сервере: по очереди, без «прыжков»',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const log: string[] = []
+      const writes = await mockCategories(page, fixture, { delayMs: 700, log })
+      await openCategories(page)
+      const final = [
+        '1:Продукты',
+        '1:Транспорт',
+        `1:${longName.name}`,
+        '1:Кафе и рестораны',
+        '1:Подарки',
+      ]
+      const topLevel = async () => (await rowNames(page)).filter((r) => r.startsWith('1:'))
+
+      for (let i = 0; i < 2; i++) {
+        await page.getByRole('button', { name: t.categories.actionsLabel(cafe.name) }).click()
+        await page.getByRole('menuitem', { name: t.categories.moveDown }).click()
+      }
+      // Оптимистично — сразу итог обоих действий.
+      expect(await topLevel()).toEqual(final)
+      // Пока сервер отвечает, список не откатывается к промежуточному состоянию.
+      for (let i = 0; i < 6; i++) {
+        await page.waitForTimeout(300)
+        expect(await topLevel()).toEqual(final)
+      }
+      await expect.poll(() => writes.length).toBe(2)
+      await expect.poll(() => log.length).toBe(4)
+      // Второй запрос ушёл только после ответа на первый.
+      expect(log).toEqual(['start:move', 'end:move', 'start:move', 'end:move'])
+      expect(writes.map(bodyOf)).toEqual([
+        { parentId: null, index: 2 },
+        // Перед «Подарками»; архивное «Хобби» между ними учтено в индексе.
+        { parentId: null, index: 4 },
+      ])
+      // После перезапроса списка — тот же порядок.
+      await page.waitForTimeout(500)
+      expect(await topLevel()).toEqual(final)
+    },
+  )
+
+  test('ошибка в середине очереди: тост и список с сервера', { tag: '@a11y' }, async ({ page }) => {
+    await mockCategories(page)
+    await openCategories(page)
+    await page.route(`**${API}/categories/${cafe.id}/move`, (route) =>
+      problem(route, 422, 'validation_failed', {
+        errors: [{ field: 'parentId', code: 'name_taken', message: 'x' }],
+      }),
+    )
+    await page.getByRole('button', { name: t.categories.actionsLabel(gifts.name) }).click()
+    await page.getByRole('menuitem', { name: t.categories.moveUp }).click()
+    await page.getByRole('button', { name: t.categories.actionsLabel(cafe.name) }).click()
+    await page.getByRole('menuitem', { name: t.categories.moveDown }).click()
+    await expect(page.getByText(t.categories.errors.nameTaken)).toBeVisible()
+    // Удачное первое действие сохранилось, неудачное — нет (состояние сервера).
+    await expect
+      .poll(async () => (await rowNames(page)).filter((r) => r.startsWith('1:')))
+      .toEqual([
+        '1:Продукты',
+        '1:Кафе и рестораны',
+        '1:Транспорт',
+        '1:Подарки',
+        `1:${longName.name}`,
+      ])
+  })
+})
+
 test.describe('категории: архив', () => {
   test('архив сразу, «Отменить» возвращает', { tag: '@a11y' }, async ({ page }) => {
     const writes = await mockCategories(page)
@@ -606,6 +764,10 @@ test.describe('категории: архив', () => {
     expect(await rowNames(page)).not.toContain('2:Такси')
     await expect(page.getByRole('button', { name: t.categories.archiveTitle(6) })).toBeVisible()
     await expect(page.getByText(t.categories.archived(transport.name))).toBeVisible()
+    // Фокус — на меню следующей строки, а не в никуда.
+    await expect(
+      page.getByRole('button', { name: t.categories.actionsLabel(longName.name) }),
+    ).toBeFocused()
 
     await page.getByRole('button', { name: t.common.undo }).click()
     await expect
@@ -619,10 +781,28 @@ test.describe('категории: архив', () => {
     await openCategories(page)
     await expandArchive(page, 3)
     await page.getByRole('button', { name: t.categories.restoreLabel(fishing.name) }).click()
+    // Хобби и Рыбалка ушли из архива — фокус на предыдущей оставшейся «Вернуть».
+    await expect(
+      page.getByRole('button', { name: t.categories.restoreLabel(carsharing.name) }),
+    ).toBeFocused()
     await expect
       .poll(() => writes.map((w) => w.url()))
       .toEqual([expect.stringContaining(`/categories/${fishing.id}/unarchive`)])
     // Подкатегория возвращается вместе с архивным родителем.
     expect(await rowNames(page)).toEqual(expect.arrayContaining(['1:Хобби', '2:Рыбалка']))
+  })
+})
+
+test.describe('ленивая загрузка экрана', () => {
+  test('чанк не загрузился: понятная ошибка, меню на месте', { tag: '@a11y' }, async ({ page }) => {
+    await mockCategories(page)
+    await page.route('**/assets/CategoriesPage-*.js', (route) => route.abort())
+    await page.goto('/settings/categories')
+    await expect(
+      page.getByRole('heading', { level: 1, name: t.lazyRoute.errorTitle }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: t.lazyRoute.reload })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: t.nav.label })).toBeVisible()
+    await expectNoAxeViolations(page)
   })
 })

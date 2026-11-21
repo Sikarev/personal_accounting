@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type Mutation } from '@tanstack/react-query'
 
 import {
   getListCategoriesQueryKey,
@@ -25,111 +25,101 @@ import { notifyWithUndo } from '../../../shared/ui'
 import { categoryActionErrorText } from './categoryErrors'
 
 /**
+ * Очередь изменений категорий. Мутации с общим `scope` TanStack Query выполняет строго
+ * по одной, в порядке вызова: два быстрых перемещения не уходят параллельно (сервер мог бы
+ * применить их в другом порядке), «Отменить» не обгонит действие, которое отменяет.
+ */
+const SCOPE = { id: 'categories' }
+
+const inScope = (m: Mutation<unknown, unknown, unknown, unknown>) =>
+  m.options.scope?.id === SCOPE.id
+
+/**
  * Изменения категорий с экрана «Категории».
  *
  * Перемещение, архив и возврат — оптимистичные (ux.md, принцип 5): список в кэше меняется
- * сразу, при ошибке возвращается прежний и показывается тост с причиной. После любого
- * ответа список перезапрашивается — источник правды остаётся на сервере (перенумерация
- * соседей, каскад архива).
+ * сразу. Список перезапрашивается, только когда завершилась последняя мутация очереди:
+ * ответ на перезапрос посреди очереди затёр бы оптимистичные изменения, которые ещё
+ * не дошли до сервера, и строки «прыгали» бы туда-обратно.
  *
- * Отмена в тосте отправляет обратное действие только после ответа на исходное: иначе
- * «вернуть» могло бы дойти до сервера раньше «архивировать», и категория осталась бы в архиве.
+ * Ошибка не откатывает кэш к снимку (снимок стёр бы более поздние оптимистичные правки):
+ * показываем тост с причиной, а верное состояние приходит перезапросом в конце очереди.
  */
 export function useCategoryActions() {
   const t = useT()
   const queryClient = useQueryClient()
   const key = getListCategoriesQueryKey()
 
-  const moveMutation = useMoveCategory()
-  const archiveMutation = useArchiveCategory()
-  const unarchiveMutation = useUnarchiveCategory()
-  const createMutation = useCreateCategory()
-  const updateMutation = useUpdateCategory()
-  const mergeMutation = useMergeCategory()
+  const mutation = {
+    scope: SCOPE,
+    // Вызывается, пока сама мутация ещё в счёте `isMutating`: 1 — она последняя в очереди.
+    onSettled: () => {
+      if (queryClient.isMutating({ predicate: inScope }) <= 1) {
+        return queryClient.invalidateQueries({ queryKey: key })
+      }
+    },
+  }
+  const moveMutation = useMoveCategory({ mutation })
+  const archiveMutation = useArchiveCategory({ mutation })
+  const unarchiveMutation = useUnarchiveCategory({ mutation })
+  const createMutation = useCreateCategory({ mutation })
+  const updateMutation = useUpdateCategory({ mutation })
+  const mergeMutation = useMergeCategory({ mutation })
 
   const items = () => queryClient.getQueryData<CategoryList>(key)?.items ?? []
-  const refresh = () => queryClient.invalidateQueries({ queryKey: key })
 
-  /**
-   * Применить изменение к кэшу и отправить запрос (после `after`, если задан).
-   * Ошибка: кэш — к снимку до изменения, тост действия (если был) закрыт, показан тост ошибки.
-   */
-  const optimistic = (
-    change: (list: Category[]) => Category[],
-    request: () => Promise<unknown>,
-    options: { after?: Promise<unknown>; undoToastId?: string } = {},
-  ): Promise<unknown> => {
-    // Ответ на уже идущий запрос списка затёр бы оптимистичное изменение.
+  /** Изменить кэш сразу; ответ уже идущего запроса списка затёр бы изменение — отменяем его. */
+  const applyNow = (change: (list: Category[]) => Category[]) => {
     void queryClient.cancelQueries({ queryKey: key })
-    const before = queryClient.getQueryData<CategoryList>(key)
-    if (before) queryClient.setQueryData<CategoryList>(key, { items: change(before.items) })
-
-    const run = async () => {
-      // Ошибку предыдущего шага уже показали; обратное действие всё равно отправляем.
-      await options.after?.catch(() => undefined)
-      try {
-        await request()
-      } catch (error) {
-        if (before) queryClient.setQueryData<CategoryList>(key, before)
-        if (options.undoToastId) notifications.hide(options.undoToastId)
-        notifications.show({ color: 'red', message: categoryActionErrorText(error, t) })
-        throw error
-      } finally {
-        void refresh()
-      }
-    }
-    const done = run()
-    // Ошибка уже показана пользователю — не даём ей стать «необработанной» в консоли.
-    done.catch(() => undefined)
-    return done
+    queryClient.setQueryData<CategoryList>(key, (old) => old && { items: change(old.items) })
   }
 
-  /** Переместить: `index` — позиция для API (среди всех соседей, с архивными). */
-  const move = (id: string, parentId: string | null, index: number, after?: Promise<unknown>) => {
+  /** Отправить запрос; ошибка — тост с причиной (тост действия с «Отменить» закрываем). */
+  const send = (request: () => Promise<unknown>, undoToastId?: string) => {
+    request().catch((error: unknown) => {
+      if (undoToastId) notifications.hide(undoToastId)
+      notifications.show({ color: 'red', message: categoryActionErrorText(error, t) })
+    })
+  }
+
+  /**
+   * Переместить: `index` — позиция для API (среди всех соседей, с архивными).
+   * `undoable: false` — это само «Отменить», второго тоста не нужно.
+   */
+  const move = (id: string, parentId: string | null, index: number, undoable = true) => {
     const list = items()
     const category = list.find((c) => c.id === id)
     if (!category) return
     // Прежнее место — для отмены; считается до изменения.
     const back = { parentId: category.parentId, index: currentMoveIndex(list, id) }
-    const request = () => moveMutation.mutateAsync({ categoryId: id, data: { parentId, index } })
-
-    if (after) {
-      optimistic((l) => applyMove(l, id, parentId, index), request, { after })
-      return
-    }
-    let done: Promise<unknown> = Promise.resolve()
-    const undoToastId = notifyWithUndo({
-      message: t.categories.moved(category.name),
-      onUndo: () => move(id, back.parentId, back.index, done),
-    })
-    done = optimistic((l) => applyMove(l, id, parentId, index), request, { undoToastId })
+    applyNow((l) => applyMove(l, id, parentId, index))
+    const undoToastId = undoable
+      ? notifyWithUndo({
+          message: t.categories.moved(category.name),
+          onUndo: () => move(id, back.parentId, back.index, false),
+        })
+      : undefined
+    send(() => moveMutation.mutateAsync({ categoryId: id, data: { parentId, index } }), undoToastId)
   }
 
-  const unarchive = (id: string, after?: Promise<unknown>) =>
-    optimistic(
-      (l) => applyUnarchive(l, id),
-      () => unarchiveMutation.mutateAsync({ categoryId: id }),
-      { after },
-    )
+  const unarchive = (id: string) => {
+    applyNow((l) => applyUnarchive(l, id))
+    send(() => unarchiveMutation.mutateAsync({ categoryId: id }))
+  }
 
   const archive = (category: Category) => {
-    let done: Promise<unknown> = Promise.resolve()
+    applyNow((l) => applyArchive(l, category.id, new Date().toISOString()))
     const undoToastId = notifyWithUndo({
       message: t.categories.archived(category.name),
-      onUndo: () => void unarchive(category.id, done),
+      onUndo: () => unarchive(category.id),
     })
-    done = optimistic(
-      (l) => applyArchive(l, category.id, new Date().toISOString()),
-      () => archiveMutation.mutateAsync({ categoryId: category.id }),
-      { undoToastId },
-    )
+    send(() => archiveMutation.mutateAsync({ categoryId: category.id }), undoToastId)
   }
 
   /** Создать; ошибка пробрасывается в форму (она показывает её у поля). */
   const create = async (kind: CategoryKind, parentId: string | null, name: string) => {
     const created = await createMutation.mutateAsync({ data: { kind, parentId, name } })
     queryClient.setQueryData<CategoryList>(key, (old) => old && { items: [...old.items, created] })
-    void refresh()
   }
 
   const rename = async (id: string, name: string) => {
@@ -138,7 +128,6 @@ export function useCategoryActions() {
       key,
       (old) => old && { items: old.items.map((c) => (c.id === id ? updated : c)) },
     )
-    void refresh()
   }
 
   const merge = async (category: Category, targetId: string) => {
@@ -158,7 +147,6 @@ export function useCategoryActions() {
           items: old.items.filter((c) => c.id !== category.id && c.parentId !== category.id),
         },
     )
-    void refresh()
     notifications.show({ message: t.categories.merge.done(category.name, targetLabel) })
   }
 

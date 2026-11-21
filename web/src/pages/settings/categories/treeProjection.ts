@@ -10,7 +10,7 @@ export type FlatItem = {
   name: string
   parentId: string | null
   depth: 0 | 1
-  /** Есть активные подкатегории: такую категорию нельзя вложить в другую. */
+  /** Есть подкатегории (и архивные тоже): такую категорию нельзя вложить в другую. */
   hasChildren: boolean
 }
 
@@ -22,7 +22,7 @@ export function flattenTree(nodes: readonly CategoryNode[]): FlatItem[] {
       name: node.name,
       parentId: null,
       depth: 0 as const,
-      hasChildren: node.children.length > 0,
+      hasChildren: node.hasChildren,
     },
     ...node.children.map((child) => ({
       id: child.id,

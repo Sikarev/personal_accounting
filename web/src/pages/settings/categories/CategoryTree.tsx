@@ -24,6 +24,8 @@ import { ActionIcon, Menu, Text } from '@mantine/core'
 import { useReducedMotion } from '@mantine/hooks'
 import {
   IconArchive,
+  IconArrowDown,
+  IconArrowUp,
   IconArrowsMove,
   IconDotsVertical,
   IconGripVertical,
@@ -48,12 +50,13 @@ import {
 } from './treeProjection'
 
 /**
- * Шаг уровня при перетаскивании, px: сдвиг на столько вправо делает категорию подкатегорией.
- * Совпадает с визуальным отступом подкатегории (`spacing.xl` = 32 px при обычном шрифте).
+ * Шаг уровня при перетаскивании до первого замера, px. Настоящий шаг измеряется в начале
+ * перетаскивания по визуальному отступу подкатегории (`--tree-indent` в CSS): он в rem и
+ * растёт с системным шрифтом, а в узком контейнере уменьшается.
  */
-const INDENT_PX = 32
+const DEFAULT_INDENT_PX = 32
 
-export type CategoryAction = 'rename' | 'addSub' | 'move' | 'archive' | 'merge'
+export type CategoryAction = 'rename' | 'addSub' | 'up' | 'down' | 'move' | 'archive' | 'merge'
 
 export type CategoryMove = {
   id: string
@@ -78,11 +81,12 @@ export type CategoryTreeProps = {
  * - Мышь и касание: тянуть за ручку; сдвиг вправо/влево меняет уровень. У ручки
  *   `touch-action: none`, поэтому прокрутка пальцем по остальной строке работает как обычно.
  * - Клавиатура: пробел/Enter на ручке — взять, стрелки вверх/вниз — место, вправо/влево —
- *   уровень, пробел/Enter — положить, Esc — отменить. Озвучка — по-русски, в своей
- *   живой области (`announcements` @dnd-kit получают тексты из той же функции).
+ *   уровень, пробел/Enter — положить, Esc — отменить. Озвучка (`announcements`
+ *   и инструкции @dnd-kit) — по-русски.
  * - `prefers-reduced-motion`: строки переставляются без анимации.
  *
- * Доступная альтернатива — пункт меню «Переместить в…» (окно выбора родителя).
+ * Без перетаскивания (WCAG 2.5.7) — пункты меню строки «Выше», «Ниже» и «Переместить в…».
+ * В узком контейнере (крупный шрифт на телефоне) ручка скрыта — остаются они.
  */
 export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreeProps) {
   const t = useT()
@@ -92,10 +96,12 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [offsetX, setOffsetX] = useState(0)
+  const [indent, setIndent] = useState(DEFAULT_INDENT_PX)
+  const indentProbe = useRef<HTMLSpanElement>(null)
 
   const items = useMemo(() => withoutChildrenOf(flat, activeId), [flat, activeId])
   const projection =
-    activeId && overId ? getProjection(items, activeId, overId, offsetX, INDENT_PX) : null
+    activeId && overId ? getProjection(items, activeId, overId, offsetX, indent) : null
 
   // Состояние перетаскивания дублируется в ref: @dnd-kit вызывает `announcements` и
   // `coordinateGetter` синхронно, в том же обработчике события, до перерисовки — значения
@@ -104,6 +110,7 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
     activeId: null as string | null,
     overId: null as string | null,
     offsetX: 0,
+    indent: DEFAULT_INDENT_PX,
   })
   const itemsRef = useRef(items)
   useLayoutEffect(() => {
@@ -113,8 +120,8 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
   const lastMessage = useRef<string | undefined>(undefined)
 
   const projectNow = (): Projection | null => {
-    const { activeId: a, overId: o, offsetX: x } = drag.current
-    return a && o ? getProjection(itemsRef.current, a, o, x, INDENT_PX) : null
+    const { activeId: a, overId: o, offsetX: x, indent: step } = drag.current
+    return a && o ? getProjection(itemsRef.current, a, o, x, step) : null
   }
 
   // Стрелки вправо/влево меняют уровень: сдвигаем «курсор» на шаг отступа, но не дальше
@@ -131,7 +138,7 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
         1,
         Math.max(0, current.depth + (event.code === 'ArrowRight' ? 1 : -1)),
       )
-      const offset = (wantedDepth - active.depth) * INDENT_PX
+      const offset = (wantedDepth - active.depth) * drag.current.indent
       return { x: currentCoordinates.x - drag.current.offsetX + offset, y: currentCoordinates.y }
     }
     const next = sortableKeyboardCoordinates(event, args)
@@ -182,7 +189,7 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
   }
 
   const reset = () => {
-    drag.current = { activeId: null, overId: null, offsetX: 0 }
+    drag.current = { ...drag.current, activeId: null, overId: null, offsetX: 0 }
     setActiveId(null)
     setOverId(null)
     setOffsetX(0)
@@ -190,7 +197,10 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
 
   const handleDragStart = ({ active }: DragStartEvent) => {
     const id = String(active.id)
-    drag.current = { activeId: id, overId: id, offsetX: 0 }
+    // Шаг уровня = видимый отступ подкатегории сейчас (шрифт и ширина могли измениться).
+    const measured = indentProbe.current?.getBoundingClientRect().width || DEFAULT_INDENT_PX
+    drag.current = { activeId: id, overId: id, offsetX: 0, indent: measured }
+    setIndent(measured)
     setActiveId(id)
     setOverId(id)
     setOffsetX(0)
@@ -243,26 +253,48 @@ export function CategoryTree({ nodes, label, onMove, onAction }: CategoryTreePro
       onDragCancel={reset}
     >
       <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-        <ul className={classes.list} aria-label={label}>
-          {items.map((item) => (
-            <SortableRow
-              key={item.id}
-              item={item}
-              depth={item.id === activeId && projection?.valid ? projection.depth : item.depth}
-              invalid={item.id === activeId && projection?.valid === false}
-              childCount={
-                item.id === activeId ? flat.filter((i) => i.parentId === item.id).length : 0
-              }
-              reducedMotion={reducedMotion}
-              category={nodeById(nodes, item.id)}
-              onAction={onAction}
-              t={t}
-            />
-          ))}
-        </ul>
+        {/* Обёртка — контейнер для @container в CSS: раскладка строки зависит от ширины
+            списка, а не экрана (крупный шрифт на телефоне). */}
+        <div className={classes.tree}>
+          <span ref={indentProbe} className={classes.indentProbe} aria-hidden />
+          <ul className={classes.list} aria-label={label}>
+            {items.map((item) => (
+              <SortableRow
+                key={item.id}
+                item={item}
+                moves={availableMoves(flat, nodes, item)}
+                depth={item.id === activeId && projection?.valid ? projection.depth : item.depth}
+                invalid={item.id === activeId && projection?.valid === false}
+                childCount={
+                  item.id === activeId ? flat.filter((i) => i.parentId === item.id).length : 0
+                }
+                reducedMotion={reducedMotion}
+                category={nodeById(nodes, item.id)}
+                onAction={onAction}
+                t={t}
+              />
+            ))}
+          </ul>
+        </div>
       </SortableContext>
     </DndContext>
   )
+}
+
+/** Какие перемещения без перетаскивания доступны строке — для пунктов меню. */
+type RowMoves = { up: boolean; down: boolean; moveTo: boolean }
+
+function availableMoves(
+  flat: readonly FlatItem[],
+  nodes: readonly CategoryNode[],
+  item: FlatItem,
+): RowMoves {
+  const siblings = flat.filter((i) => i.parentId === item.parentId && i.depth === item.depth)
+  const at = siblings.indexOf(item)
+  // «Переместить в…» — только если есть куда: подкатегорию — на верхний уровень или к другому
+  // родителю; категорию верхнего уровня — внутрь другой (если у неё нет подкатегорий).
+  const moveTo = item.depth === 1 || (!item.hasChildren && nodes.some((n) => n.id !== item.id))
+  return { up: at > 0, down: at < siblings.length - 1, moveTo }
 }
 
 function nodeById(nodes: readonly CategoryNode[], id: string): Category {
@@ -276,6 +308,7 @@ function nodeById(nodes: readonly CategoryNode[], id: string): Category {
 
 type SortableRowProps = {
   item: FlatItem
+  moves: RowMoves
   /** Уровень для отрисовки: у перетаскиваемой строки — тот, куда она встанет. */
   depth: 0 | 1
   invalid: boolean
@@ -289,6 +322,7 @@ type SortableRowProps = {
 
 function SortableRow({
   item,
+  moves,
   depth,
   invalid,
   childCount,
@@ -338,7 +372,7 @@ function SortableRow({
       >
         <IconGripVertical size={icons.size.md} stroke={icons.stroke} aria-hidden />
       </button>
-      <Text className={classes.name} truncate="end">
+      <Text className={classes.name}>
         {item.name}
         {childCount > 0 && (
           <Text span c="dimmed" size="sm">
@@ -347,24 +381,27 @@ function SortableRow({
           </Text>
         )}
       </Text>
-      <RowMenu category={category} onAction={onAction} t={t} />
+      <RowMenu category={category} moves={moves} onAction={onAction} t={t} />
     </li>
   )
 }
 
 function RowMenu({
   category,
+  moves,
   onAction,
   t,
 }: {
   category: Category
+  moves: RowMoves
   onAction: CategoryTreeProps['onAction']
   t: Messages
 }) {
   const icon = (I: typeof IconPencil) => <I size={icons.size.md} stroke={icons.stroke} />
   const isTopLevel = category.parentId === null
   return (
-    <Menu position="bottom-end" withinPortal>
+    // Без портала: меню остаётся внутри <main> (axe: всё содержимое — в ориентирах).
+    <Menu position="bottom-end" withinPortal={false}>
       <Menu.Target>
         <ActionIcon
           variant="subtle"
@@ -372,6 +409,7 @@ function RowMenu({
           radius="xl"
           className={classes.menuButton}
           aria-label={t.categories.actionsLabel(category.name)}
+          data-category-menu={category.id}
         >
           <IconDotsVertical size={icons.size.md} stroke={icons.stroke} />
         </ActionIcon>
@@ -385,15 +423,29 @@ function RowMenu({
             {t.categories.addSub}
           </Menu.Item>
         )}
-        <Menu.Item leftSection={icon(IconArrowsMove)} onClick={() => onAction('move', category)}>
-          {t.categories.moveTo}
-        </Menu.Item>
+        {moves.up && (
+          <Menu.Item leftSection={icon(IconArrowUp)} onClick={() => onAction('up', category)}>
+            {t.categories.moveUp}
+          </Menu.Item>
+        )}
+        {moves.down && (
+          <Menu.Item leftSection={icon(IconArrowDown)} onClick={() => onAction('down', category)}>
+            {t.categories.moveDown}
+          </Menu.Item>
+        )}
+        {moves.moveTo && (
+          <Menu.Item leftSection={icon(IconArrowsMove)} onClick={() => onAction('move', category)}>
+            {t.categories.moveTo}
+          </Menu.Item>
+        )}
         <Menu.Item leftSection={icon(IconArchive)} onClick={() => onAction('archive', category)}>
           {t.categories.archive}
         </Menu.Item>
-        <Menu.Divider />
+        {/* У Mantine разделитель без роли; внутри role="menu" ему место как separator. */}
+        <Menu.Divider role="separator" />
         <Menu.Item
-          color="red"
+          // Цвет «проблемы» из темы: у color="red" в меню контраст 3.3:1 — ниже AA.
+          className={classes.danger}
           leftSection={icon(IconTrash)}
           onClick={() => onAction('merge', category)}
         >

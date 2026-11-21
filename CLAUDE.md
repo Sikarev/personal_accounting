@@ -72,7 +72,7 @@ Playwright сам собирает приложение и поднимает `v
 - Структура `web/src`:
   - `main.tsx` — точка входа: шрифт, стили Mantine, роутер, провайдеры;
   - `theme.ts` — дизайн-токены: тема Mantine, `semanticColors` (доход, проблема, акцент), `layout` (размеры каркаса), `icons` (размеры и толщина иконок), CSS-переменные `--app-*`;
-  - `app/` — оболочка: `App.tsx` (маршруты), `AppProviders.tsx`, `navigation.ts` (адреса и пункты меню), `layout/` (AppShell, боковое меню, нижняя панель, статус API);
+  - `app/` — оболочка: `App.tsx` (маршруты), `AppProviders.tsx`, `navigation.ts` (адреса и пункты меню), `layout/` (AppShell, боковое меню, нижняя панель, статус API, `RouteBoundary` — скелетон и ошибка загрузки ленивых экранов: новый ленивый экран — просто `lazy()` в `App.tsx`, без своего `Suspense`);
   - `pages/` — экраны, по одному файлу на маршрут; `pages/auth/` — вход и регистрация (`AuthPage`, один компонент на `/login` и `/register`), восстановление пароля, подтверждение e-mail и их общая форма (`AuthForm`, `submitErrorState`); `LegalPage` — документы; `pages/settings/` — меню настроек (`SettingsPage`) и «Категории» (`CategoriesPage`), части экрана категорий — в `settings/categories/` (дерево с перетаскиванием `CategoryTree` на `@dnd-kit` + чистая логика `treeProjection`, формы окон, `useCategoryActions` — оптимистичные изменения с отменой);
   - `features/` — сценарии, которые используются из нескольких экранов:
     - `quick-add`: окно быстрого ввода и `useQuickAdd()`; провайдер стоит в `AppLayout` (только у вошедшего), поэтому при выходе или 401 окно закрывается вместе с оболочкой;

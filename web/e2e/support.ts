@@ -67,9 +67,14 @@ export async function fontsReady(page: Page) {
   await page.evaluate(() => document.fonts.ready)
 }
 
-export async function expectNoAxeViolations(page: Page) {
+/**
+ * Нарушения axe на странице. `disableRules` — только для известных проблем библиотеки,
+ * с комментарием в тесте, почему правило отключено.
+ */
+export async function expectNoAxeViolations(page: Page, options: { disableRules?: string[] } = {}) {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'])
+    .disableRules(options.disableRules ?? [])
     .analyze()
   // Список нарушений в сообщении об ошибке понятнее, чем «expected 2 to be 0».
   expect(

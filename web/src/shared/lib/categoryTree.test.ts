@@ -47,6 +47,14 @@ describe('activeTree', () => {
     expect(ids(tree[0].children)).toEqual(['a1', 'a3'])
     expect(ids(activeTree(list, 'income'))).toEqual(['i'])
   })
+
+  it('hasChildren учитывает и архивные подкатегории', () => {
+    const onlyArchived = [cat('p', 1), cat('p1', 1, 'p', T1), cat('q', 2)]
+    const [p, q] = activeTree(onlyArchived, 'expense')
+    expect(p.children).toEqual([])
+    expect(p.hasChildren).toBe(true)
+    expect(q.hasChildren).toBe(false)
+  })
 })
 
 describe('archivedEntries', () => {

@@ -1,0 +1,94 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-sm));
+  /* Поля по бокам минимальные: у ручки и меню своя зона касания 44 px с воздухом внутри,
+     а при крупном шрифте каждый пиксель ширины уходит названию. */
+  padding: var(--mantine-spacing-xs);
+  background: var(--mantine-color-body);
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+
+  &:first-child {
+    border-start-start-radius: var(--mantine-radius-lg);
+    border-start-end-radius: var(--mantine-radius-lg);
+  }
+
+  &:last-child {
+    border-end-start-radius: var(--mantine-radius-lg);
+    border-end-end-radius: var(--mantine-radius-lg);
+  }
+}
+
+/* Подкатегория — с отступом на один уровень (тот же шаг, что и при перетаскивании). */
+.row[data-depth='1'] {
+  padding-inline-start: calc(var(--mantine-spacing-xs) + var(--mantine-spacing-xl));
+}
+
+/* Перетаскиваемая строка — над остальными, с тенью и рамкой акцентного цвета. */
+.row[data-dragging] {
+  z-index: 1;
+  box-shadow: var(--mantine-shadow-md);
+  outline: 2px solid var(--app-focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-md);
+}
+
+/* Сюда положить нельзя — рамка цвета ошибки и пунктир (не только цвет: форма линии тоже). */
+.row[data-invalid] {
+  outline: 2px dashed var(--mantine-color-error);
+}
+
+/* Ручка: зона касания 44 px; touch-action: none — палец на ручке тянет строку, а не
+   прокручивает страницу; прокрутка за остальную часть строки работает как обычно. */
+.handle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--mantine-radius-md);
+  background: transparent;
+  color: var(--mantine-color-dimmed);
+  cursor: grab;
+  touch-action: none;
+
+  &:hover {
+    background: var(--mantine-color-default-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: -2px;
+  }
+}
+
+.row[data-dragging] .handle {
+  cursor: grabbing;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+}
+
+.menuButton {
+  flex: none;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+}

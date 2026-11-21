@@ -1,0 +1,57 @@
+.root {
+  margin-top: var(--mantine-spacing-lg);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  margin-inline-start: calc(var(--mantine-spacing-sm) * -1);
+  border-radius: var(--mantine-radius-md);
+
+  &:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+}
+
+.chevron[data-opened] {
+  transform: rotate(180deg);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-sm));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-xs) var(--mantine-spacing-xs)
+    var(--mantine-spacing-md);
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Кнопка компактная, но зона касания — 44 px. */
+.restore {
+  flex: none;
+  min-height: var(--app-touch-target);
+}

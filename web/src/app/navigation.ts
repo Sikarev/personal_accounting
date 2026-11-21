@@ -19,6 +19,7 @@ export const paths = {
   reports: '/reports',
   accounts: '/accounts',
   settings: '/settings',
+  settingsCategories: '/settings/categories',
   more: '/more',
   login: '/login',
   register: '/register',

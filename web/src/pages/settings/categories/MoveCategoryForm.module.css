@@ -1,0 +1,16 @@
+/* Каждый вариант — строка с зоной касания не меньше 44 px (ux.md, раздел 6). */
+.option {
+  display: flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+  padding-block: var(--mantine-spacing-xs);
+}
+
+.body {
+  align-items: center;
+  width: 100%;
+}
+
+.label {
+  overflow-wrap: anywhere;
+}

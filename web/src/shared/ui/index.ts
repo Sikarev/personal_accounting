@@ -10,3 +10,7 @@ export {
   TransactionListSkeleton,
   type TransactionListSkeletonProps,
 } from './Skeletons/TransactionListSkeleton'
+// CategoryPicker намеренно не экспортируется отсюда: импорт по пути
+// ('shared/ui/CategoryPicker/CategoryPicker'). Модуль со стилями (CSS-модуль) сборщик
+// не выбрасывает, и через этот файл Select/Combobox Mantine попадали бы в первую
+// загрузку (+13 КБ gzip), хотя пикер нужен только на лениво загружаемых экранах.

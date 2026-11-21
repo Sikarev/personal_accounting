@@ -1,0 +1,21 @@
+.start {
+  min-width: 0;
+}
+
+/* Зона касания 44 px (ux.md, раздел 6); стрелка выровнена по левому краю контента. */
+.back {
+  flex: none;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+  margin-inline-start: calc(var(--mantine-spacing-sm) * -1);
+  color: var(--mantine-color-text);
+}
+
+/* Длинное слово при крупном шрифте переносится, а не выталкивает действия за экран. */
+.title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}

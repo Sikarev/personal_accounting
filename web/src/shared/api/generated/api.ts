@@ -34,16 +34,22 @@ import type {
   AccountList,
   AdjustBalanceRequest,
   AdjustBalanceResponse,
+  Category,
+  CategoryList,
   CreateAccountRequest,
+  CreateCategoryRequest,
   CurrencyList,
   LoginRequest,
   Me,
+  MergeCategoryRequest,
+  MoveCategoryRequest,
   PasswordResetConfirmRequest,
   PasswordResetRequest,
   ProblemResponse,
   RegisterRequest,
   ReorderAccountsRequest,
   UpdateAccountRequest,
+  UpdateCategoryRequest,
   VerifyEmailRequest,
 } from './model'
 
@@ -1721,4 +1727,695 @@ export const useAdjustAccountBalance = <TError = ErrorType<ProblemResponse>, TCo
   TContext
 > => {
   return useMutation(getAdjustAccountBalanceMutationOptions(options), queryClient)
+}
+
+export const getListCategoriesUrl = () => {
+  return `/api/v1/categories`
+}
+
+/**
+ * Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+ * `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+ * Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+ * @summary Все категории семьи
+ */
+export const listCategories = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CategoryList> => {
+  return apiFetch<CategoryList>(getListCategoriesUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListCategoriesQueryKey = () => {
+  return [`/api/v1/categories`] as const
+}
+
+export const getListCategoriesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listCategories>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListCategoriesQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listCategories>>> = ({ signal }) =>
+    listCategories({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listCategories>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listCategories>>>
+export type ListCategoriesQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+ * `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+ * Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+ * @summary Все категории семьи
+ */
+export function useListCategories<
+  TData = Awaited<ReturnType<typeof listCategories>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCategories>>,
+          TError,
+          Awaited<ReturnType<typeof listCategories>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+ * `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+ * Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+ * @summary Все категории семьи
+ */
+export function useListCategories<
+  TData = Awaited<ReturnType<typeof listCategories>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCategories>>,
+          TError,
+          Awaited<ReturnType<typeof listCategories>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+ * `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+ * Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+ * @summary Все категории семьи
+ */
+export function useListCategories<
+  TData = Awaited<ReturnType<typeof listCategories>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+ * `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+ * Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+ * @summary Все категории семьи
+ */
+export function useListCategories<
+  TData = Awaited<ReturnType<typeof listCategories>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listCategories>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListCategoriesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreateCategoryUrl = () => {
+  return `/api/v1/categories`
+}
+
+/**
+ * Новая категория встаёт в конец среди соседей.
+ * Ошибки (422 `validation_failed`): у поля `parentId` — `invalid_parent`
+ * (родителя нет в семье, он другого вида, сам подкатегория или в архиве);
+ * у поля `name` — `name_taken` (у соседей, в т. ч. архивных, уже есть такое имя).
+ * @summary Создать категорию
+ */
+export const createCategory = async (
+  createCategoryRequest: CreateCategoryRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Category> => {
+  return apiFetch<Category>(getCreateCategoryUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(createCategoryRequest),
+  })
+}
+
+export const getCreateCategoryMutationKey = () => ['createCategory'] as const
+
+export const getCreateCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCategory>>,
+    TError,
+    CreateCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCategory>>,
+  TError,
+  CreateCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreateCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCategory>>,
+    CreateCategoryMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createCategory(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof createCategory>>>
+export type CreateCategoryMutationBody = CreateCategoryRequest
+export type CreateCategoryMutationError = ErrorType<ProblemResponse>
+export type CreateCategoryMutationVariables = { data: CreateCategoryRequest }
+
+/**
+ * Новая категория встаёт в конец среди соседей.
+ * Ошибки (422 `validation_failed`): у поля `parentId` — `invalid_parent`
+ * (родителя нет в семье, он другого вида, сам подкатегория или в архиве);
+ * у поля `name` — `name_taken` (у соседей, в т. ч. архивных, уже есть такое имя).
+ * @summary Создать категорию
+ */
+export const useCreateCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createCategory>>,
+      TError,
+      CreateCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createCategory>>,
+  TError,
+  CreateCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreateCategoryMutationOptions(options), queryClient)
+}
+
+export const getUpdateCategoryUrl = (categoryId: string) => {
+  return `/api/v1/categories/${categoryId}`
+}
+
+/**
+ * Ошибки: 404 `not_found` (нет в семье), 422 `name_taken` у поля `name`.
+ * @summary Переименовать категорию
+ */
+export const updateCategory = async (
+  categoryId: string,
+  updateCategoryRequest: UpdateCategoryRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Category> => {
+  return apiFetch<Category>(getUpdateCategoryUrl(categoryId), {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(updateCategoryRequest),
+  })
+}
+
+export const getUpdateCategoryMutationKey = () => ['updateCategory'] as const
+
+export const getUpdateCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateCategory>>,
+    TError,
+    UpdateCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateCategory>>,
+  TError,
+  UpdateCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdateCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateCategory>>,
+    UpdateCategoryMutationVariables
+  > = (props) => {
+    const { categoryId, data } = props ?? {}
+
+    return updateCategory(categoryId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof updateCategory>>>
+export type UpdateCategoryMutationBody = UpdateCategoryRequest
+export type UpdateCategoryMutationError = ErrorType<ProblemResponse>
+export type UpdateCategoryMutationVariables = { categoryId: string; data: UpdateCategoryRequest }
+
+/**
+ * Ошибки: 404 `not_found` (нет в семье), 422 `name_taken` у поля `name`.
+ * @summary Переименовать категорию
+ */
+export const useUpdateCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateCategory>>,
+      TError,
+      UpdateCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateCategory>>,
+  TError,
+  UpdateCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdateCategoryMutationOptions(options), queryClient)
+}
+
+export const getMoveCategoryUrl = (categoryId: string) => {
+  return `/api/v1/categories/${categoryId}/move`
+}
+
+/**
+ * Меняет родителя и/или позицию среди соседей. Вид (`kind`) не меняется.
+ * Позиции старых и новых соседей перенумеровываются.
+ * Ошибки: 404 `not_found`; 422 у поля `parentId`: `invalid_parent`
+ * (родителя нет в семье, он другого вида, это сама категория, подкатегория
+ * или — при смене родителя — архивная категория), `has_children`
+ * (категорию с подкатегориями нельзя сделать подкатегорией), `name_taken`
+ * (у новых соседей уже есть такое имя).
+ * @summary Переместить категорию (перетаскивание)
+ */
+export const moveCategory = async (
+  categoryId: string,
+  moveCategoryRequest: MoveCategoryRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Category> => {
+  return apiFetch<Category>(getMoveCategoryUrl(categoryId), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(moveCategoryRequest),
+  })
+}
+
+export const getMoveCategoryMutationKey = () => ['moveCategory'] as const
+
+export const getMoveCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof moveCategory>>,
+    TError,
+    MoveCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof moveCategory>>,
+  TError,
+  MoveCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getMoveCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof moveCategory>>,
+    MoveCategoryMutationVariables
+  > = (props) => {
+    const { categoryId, data } = props ?? {}
+
+    return moveCategory(categoryId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type MoveCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof moveCategory>>>
+export type MoveCategoryMutationBody = MoveCategoryRequest
+export type MoveCategoryMutationError = ErrorType<ProblemResponse>
+export type MoveCategoryMutationVariables = { categoryId: string; data: MoveCategoryRequest }
+
+/**
+ * Меняет родителя и/или позицию среди соседей. Вид (`kind`) не меняется.
+ * Позиции старых и новых соседей перенумеровываются.
+ * Ошибки: 404 `not_found`; 422 у поля `parentId`: `invalid_parent`
+ * (родителя нет в семье, он другого вида, это сама категория, подкатегория
+ * или — при смене родителя — архивная категория), `has_children`
+ * (категорию с подкатегориями нельзя сделать подкатегорией), `name_taken`
+ * (у новых соседей уже есть такое имя).
+ * @summary Переместить категорию (перетаскивание)
+ */
+export const useMoveCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof moveCategory>>,
+      TError,
+      MoveCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof moveCategory>>,
+  TError,
+  MoveCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getMoveCategoryMutationOptions(options), queryClient)
+}
+
+export const getArchiveCategoryUrl = (categoryId: string) => {
+  return `/api/v1/categories/${categoryId}/archive`
+}
+
+/**
+ * Вместе с категорией архивируются её активные подкатегории с тем же
+ * `archivedAt`. Идемпотентна: архивная категория возвращается как есть.
+ * @summary Архивировать категорию
+ */
+export const archiveCategory = async (
+  categoryId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Category> => {
+  return apiFetch<Category>(getArchiveCategoryUrl(categoryId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getArchiveCategoryMutationKey = () => ['archiveCategory'] as const
+
+export const getArchiveCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof archiveCategory>>,
+    TError,
+    ArchiveCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof archiveCategory>>,
+  TError,
+  ArchiveCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getArchiveCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof archiveCategory>>,
+    ArchiveCategoryMutationVariables
+  > = (props) => {
+    const { categoryId } = props ?? {}
+
+    return archiveCategory(categoryId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type ArchiveCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof archiveCategory>>>
+
+export type ArchiveCategoryMutationError = ErrorType<ProblemResponse>
+export type ArchiveCategoryMutationVariables = { categoryId: string }
+
+/**
+ * Вместе с категорией архивируются её активные подкатегории с тем же
+ * `archivedAt`. Идемпотентна: архивная категория возвращается как есть.
+ * @summary Архивировать категорию
+ */
+export const useArchiveCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof archiveCategory>>,
+      TError,
+      ArchiveCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof archiveCategory>>,
+  TError,
+  ArchiveCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getArchiveCategoryMutationOptions(options), queryClient)
+}
+
+export const getUnarchiveCategoryUrl = (categoryId: string) => {
+  return `/api/v1/categories/${categoryId}/unarchive`
+}
+
+/**
+ * У категории верхнего уровня вместе с ней возвращаются подкатегории
+ * с тем же `archivedAt` (архивированные вместе с ней). Подкатегория
+ * архивного родителя возвращает и родителя (только его, без других
+ * подкатегорий). Идемпотентна.
+ * @summary Вернуть категорию из архива
+ */
+export const unarchiveCategory = async (
+  categoryId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Category> => {
+  return apiFetch<Category>(getUnarchiveCategoryUrl(categoryId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getUnarchiveCategoryMutationKey = () => ['unarchiveCategory'] as const
+
+export const getUnarchiveCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unarchiveCategory>>,
+    TError,
+    UnarchiveCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unarchiveCategory>>,
+  TError,
+  UnarchiveCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUnarchiveCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unarchiveCategory>>,
+    UnarchiveCategoryMutationVariables
+  > = (props) => {
+    const { categoryId } = props ?? {}
+
+    return unarchiveCategory(categoryId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UnarchiveCategoryMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unarchiveCategory>>
+>
+
+export type UnarchiveCategoryMutationError = ErrorType<ProblemResponse>
+export type UnarchiveCategoryMutationVariables = { categoryId: string }
+
+/**
+ * У категории верхнего уровня вместе с ней возвращаются подкатегории
+ * с тем же `archivedAt` (архивированные вместе с ней). Подкатегория
+ * архивного родителя возвращает и родителя (только его, без других
+ * подкатегорий). Идемпотентна.
+ * @summary Вернуть категорию из архива
+ */
+export const useUnarchiveCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof unarchiveCategory>>,
+      TError,
+      UnarchiveCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof unarchiveCategory>>,
+  TError,
+  UnarchiveCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getUnarchiveCategoryMutationOptions(options), queryClient)
+}
+
+export const getMergeCategoryUrl = (categoryId: string) => {
+  return `/api/v1/categories/${categoryId}/merge`
+}
+
+/**
+ * Все операции категории и её подкатегорий (включая удалённые) переносятся
+ * в `targetId`, затем подкатегории и сама категория удаляются. Необратимо.
+ * Ошибки: 404 `not_found`; 422 `invalid_target` у поля `targetId` (цели нет
+ * в семье, она другого вида, в архиве, это сама категория или её подкатегория).
+ * @summary Удалить категорию, перенеся операции в другую
+ */
+export const mergeCategory = async (
+  categoryId: string,
+  mergeCategoryRequest: MergeCategoryRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getMergeCategoryUrl(categoryId), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(mergeCategoryRequest),
+  })
+}
+
+export const getMergeCategoryMutationKey = () => ['mergeCategory'] as const
+
+export const getMergeCategoryMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof mergeCategory>>,
+    TError,
+    MergeCategoryMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof mergeCategory>>,
+  TError,
+  MergeCategoryMutationVariables,
+  TContext
+> => {
+  const mutationKey = getMergeCategoryMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof mergeCategory>>,
+    MergeCategoryMutationVariables
+  > = (props) => {
+    const { categoryId, data } = props ?? {}
+
+    return mergeCategory(categoryId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type MergeCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof mergeCategory>>>
+export type MergeCategoryMutationBody = MergeCategoryRequest
+export type MergeCategoryMutationError = ErrorType<ProblemResponse>
+export type MergeCategoryMutationVariables = { categoryId: string; data: MergeCategoryRequest }
+
+/**
+ * Все операции категории и её подкатегорий (включая удалённые) переносятся
+ * в `targetId`, затем подкатегории и сама категория удаляются. Необратимо.
+ * Ошибки: 404 `not_found`; 422 `invalid_target` у поля `targetId` (цели нет
+ * в семье, она другого вида, в архиве, это сама категория или её подкатегория).
+ * @summary Удалить категорию, перенеся операции в другую
+ */
+export const useMergeCategory = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof mergeCategory>>,
+      TError,
+      MergeCategoryMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof mergeCategory>>,
+  TError,
+  MergeCategoryMutationVariables,
+  TContext
+> => {
+  return useMutation(getMergeCategoryMutationOptions(options), queryClient)
 }

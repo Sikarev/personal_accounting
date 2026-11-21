@@ -27,6 +27,8 @@ tags:
     description: Регистрация, вход, выход, текущий пользователь
   - name: accounts
     description: Счета
+  - name: categories
+    description: Категории расходов и доходов
 
 paths:
   /currencies:
@@ -406,6 +408,173 @@ paths:
         default:
           $ref: "#/components/responses/Problem"
 
+  # --- Категории -------------------------------------------------------------
+  /categories:
+    get:
+      operationId: listCategories
+      summary: Все категории семьи
+      description: |
+        Категории обоих видов, **включая архивные** (фильтрует клиент). Порядок:
+        `kind`, затем позиция среди соседей; дерево клиент собирает по `parentId`.
+        Порядок «соседей» (одинаковые `kind` и `parentId`) — порядок этого списка.
+      tags: [categories]
+      responses:
+        "200":
+          description: Категории семьи.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createCategory
+      summary: Создать категорию
+      description: |
+        Новая категория встаёт в конец среди соседей.
+        Ошибки (422 `validation_failed`): у поля `parentId` — `invalid_parent`
+        (родителя нет в семье, он другого вида, сам подкатегория или в архиве);
+        у поля `name` — `name_taken` (у соседей, в т. ч. архивных, уже есть такое имя).
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Категория создана.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /categories/{categoryId}:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+    put:
+      operationId: updateCategory
+      summary: Переименовать категорию
+      description: |
+        Ошибки: 404 `not_found` (нет в семье), 422 `name_taken` у поля `name`.
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+      responses:
+        "200":
+          description: Категория переименована.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /categories/{categoryId}/move:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+    post:
+      operationId: moveCategory
+      summary: Переместить категорию (перетаскивание)
+      description: |
+        Меняет родителя и/или позицию среди соседей. Вид (`kind`) не меняется.
+        Позиции старых и новых соседей перенумеровываются.
+        Ошибки: 404 `not_found`; 422 у поля `parentId`: `invalid_parent`
+        (родителя нет в семье, он другого вида, это сама категория, подкатегория
+        или — при смене родителя — архивная категория), `has_children`
+        (категорию с подкатегориями нельзя сделать подкатегорией), `name_taken`
+        (у новых соседей уже есть такое имя).
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveCategoryRequest"
+      responses:
+        "200":
+          description: Категория перемещена.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /categories/{categoryId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+    post:
+      operationId: archiveCategory
+      summary: Архивировать категорию
+      description: |
+        Вместе с категорией архивируются её активные подкатегории с тем же
+        `archivedAt`. Идемпотентна: архивная категория возвращается как есть.
+      tags: [categories]
+      responses:
+        "200":
+          description: Категория в архиве.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /categories/{categoryId}/unarchive:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+    post:
+      operationId: unarchiveCategory
+      summary: Вернуть категорию из архива
+      description: |
+        У категории верхнего уровня вместе с ней возвращаются подкатегории
+        с тем же `archivedAt` (архивированные вместе с ней). Подкатегория
+        архивного родителя возвращает и родителя (только его, без других
+        подкатегорий). Идемпотентна.
+      tags: [categories]
+      responses:
+        "200":
+          description: Категория активна.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /categories/{categoryId}/merge:
+    parameters:
+      - $ref: "#/components/parameters/CategoryId"
+    post:
+      operationId: mergeCategory
+      summary: Удалить категорию, перенеся операции в другую
+      description: |
+        Все операции категории и её подкатегорий (включая удалённые) переносятся
+        в `targetId`, затем подкатегории и сама категория удаляются. Необратимо.
+        Ошибки: 404 `not_found`; 422 `invalid_target` у поля `targetId` (цели нет
+        в семье, она другого вида, в архиве, это сама категория или её подкатегория).
+      tags: [categories]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergeCategoryRequest"
+      responses:
+        "204":
+          description: Категория удалена, операции перенесены.
+        default:
+          $ref: "#/components/responses/Problem"
+  # --- /Категории ------------------------------------------------------------
+
 components:
   securitySchemes:
     cookieAuth:
@@ -433,6 +602,14 @@ components:
   parameters:
     AccountId:
       name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    CategoryId:
+      name: categoryId
       in: path
       required: true
       schema:
@@ -500,7 +677,10 @@ components:
           description: |
             Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
             Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован;
-            `invalid_token` — токен из письма неверный, просрочен или уже использован.
+            `invalid_token` — токен из письма неверный, просрочен или уже использован;
+            категории: `invalid_parent`, `has_children`, `name_taken`, `invalid_target`
+            (см. описания операций категорий).
+
           example: required
         message:
           type: string
@@ -858,3 +1038,111 @@ components:
           type: string
           format: uuid
           description: Id созданной операции-корректировки; нет, если остаток не изменился.
+
+    # --- Категории -----------------------------------------------------------
+    CategoryKind:
+      type: string
+      enum: [expense, income]
+
+    CategoryName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: |
+        Пробелы по краям сервер обрезает; после обрезки — 1–60 символов.
+        Ошибки: пустая строка — `too_short`, только пробелы — `required`,
+        длиннее 60 после обрезки — `too_long`, управляющие символы —
+        `invalid_format`. Уникально среди соседей (в т. ч. архивных),
+        сравнение точное, с учётом регистра.
+      example: Продукты
+
+    Category:
+      type: object
+      required: [id, kind, parentId, name, sortOrder, archivedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/CategoryKind"
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Родитель; `null` — категория верхнего уровня. Глубина дерева — 2.
+        name:
+          type: string
+          example: Продукты
+        sortOrder:
+          type: integer
+          description: |
+            Ключ сортировки среди соседей. Значения могут идти с пропусками:
+            их сравнивают, а не используют как индекс.
+        archivedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Момент архивации; `null` — категория активна.
+
+    CategoryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, name]
+      properties:
+        kind:
+          $ref: "#/components/schemas/CategoryKind"
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Родитель — категория верхнего уровня того же вида, не в архиве.
+            Нет или `null` — категория верхнего уровня.
+        name:
+          $ref: "#/components/schemas/CategoryName"
+
+    UpdateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: "#/components/schemas/CategoryName"
+
+    MoveCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [parentId, index]
+      properties:
+        parentId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Новый родитель; `null` — верхний уровень. Может совпадать с текущим.
+        index:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          description: |
+            Позиция среди новых соседей (0 — первая) в порядке `GET /categories`,
+            считая архивных и не считая саму категорию. Больше числа соседей — в конец.
+
+    MergeCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [targetId]
+      properties:
+        targetId:
+          type: string
+          format: uuid
+          description: Категория, в которую переносятся операции.
+    # --- /Категории ----------------------------------------------------------

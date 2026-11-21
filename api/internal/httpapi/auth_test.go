@@ -578,6 +578,9 @@ func TestContractSecurity(t *testing.T) {
 		"listAccounts": false, "createAccount": false, "updateAccount": false, "deleteAccount": false,
 		"archiveAccount": false, "unarchiveAccount": false, "reorderAccounts": false,
 		"adjustAccountBalance": false,
+		// Категории — только для вошедших.
+		"listCategories": false, "createCategory": false, "updateCategory": false, "moveCategory": false,
+		"archiveCategory": false, "unarchiveCategory": false, "mergeCategory": false,
 	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)

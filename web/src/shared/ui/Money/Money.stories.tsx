@@ -96,3 +96,21 @@ export const InheritsParentStyle: Story = {
     </Stack>
   ),
 }
+
+/**
+ * `wrap`: в узком месте огромная сумма переносится по разрядам, а не посреди числа
+ * и не вылезает за край. При копировании текст тот же — `<wbr>` в него не попадает.
+ */
+export const WrapByDigitGroups: Story = {
+  args: { amount: 99999999999999, size: 'xl', fw: 600, variant: 'balance', wrap: true },
+  decorators: [
+    (Story) => (
+      <Stack gap="xs" maw={160}>
+        <Story />
+        <Text size="xs" c="dimmed">
+          Контейнер 160 px
+        </Text>
+      </Stack>
+    ),
+  ],
+}

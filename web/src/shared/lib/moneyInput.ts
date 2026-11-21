@@ -53,7 +53,8 @@ export function parseMoneyInput(
 
   // Ведущие нули отбрасываем, чтобы длина строки честно говорила о величине числа.
   const digits = (intPart + fracPart.padEnd(minorUnits, '0')).replace(/^0+(?=\d)/, '')
-  // Больше 16 цифр — заведомо больше предела; до 16 цифр Number хранит целое точно.
+  // Больше 16 цифр — заведомо больше предела (10^15 — это 16 цифр). Целые до 2^53
+  // (≈ 9·10^15) Number хранит точно; предел 10^15 меньше, так что сравнение ниже точное.
   if (digits.length > 16 || Number(digits) > MAX_MONEY_AMOUNT) {
     return { ok: false, code: 'tooLarge', message: t.moneyInput.tooLarge }
   }

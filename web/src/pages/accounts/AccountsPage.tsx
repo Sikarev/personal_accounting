@@ -12,13 +12,15 @@ import {
   IconAlertCircle,
   IconArchive,
   IconArrowBackUp,
+  IconArrowDown,
+  IconArrowUp,
   IconChevronDown,
   IconPlus,
   IconScale,
   IconTrash,
   IconWallet,
 } from '@tabler/icons-react'
-import { Fragment, useId, useState, type ReactNode } from 'react'
+import { useId, useRef, useState, type ReactNode } from 'react'
 
 import {
   apiErrorText,
@@ -51,6 +53,51 @@ import classes from './AccountsPage.module.css'
 
 type Sheet = { kind: 'create' } | { kind: 'edit'; id: string } | { kind: 'adjust'; id: string }
 
+/** Атрибуты, по которым экран находит, куда поставить фокус после архива и удаления. */
+const FOCUS = {
+  row: (id: string) => `[data-account-row="${id}"]`,
+  archiveToggle: '[data-archive-toggle]',
+  create: '[data-create-account]',
+}
+
+/**
+ * Поставить фокус на первый найденный элемент. Ждём два кадра: оптимистичная правка
+ * кэша перерисовывает список не синхронно.
+ */
+function focusFirst(selectors: string[]) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      for (const selector of selectors) {
+        const el = document.querySelector<HTMLElement>(selector)
+        if (el) {
+          el.focus()
+          return
+        }
+      }
+    }),
+  )
+}
+
+/**
+ * Куда перевести фокус, когда счёт исчезает со своего места (архив, удаление, возврат
+ * из архива): на соседнюю строку той же группы, иначе на «Архив (N)», иначе на «Создать
+ * счёт». Без этого фокус остался бы на удалённом элементе — то есть на `body`.
+ */
+function focusTargets(accounts: Account[], account: Account, extra: string[] = []): string[] {
+  const list =
+    account.archivedAt === null
+      ? groupActiveAccounts(accounts)[account.visibility]
+      : archivedAccounts(accounts)
+  const index = list.findIndex((a) => a.id === account.id)
+  const neighbor = list[index + 1] ?? list[index - 1]
+  return [
+    ...(neighbor ? [FOCUS.row(neighbor.id)] : []),
+    FOCUS.archiveToggle,
+    ...extra,
+    FOCUS.create,
+  ]
+}
+
 /**
  * Экран «Счета» (requirements 5.4, 6): остатки, итог по валютам, общие и личные
  * раздельно, порядок перетаскиванием, архив. Касание строки — окно счёта, где
@@ -67,14 +114,34 @@ export function AccountsPage() {
   // Что показано в окне. Содержимое остаётся, пока окно доигрывает анимацию закрытия.
   const [sheet, setSheet] = useState<Sheet | null>(null)
   const [opened, setOpened] = useState(false)
+  // Действие в окне убрало строку, открывшую окно: фокус ставим сами после закрытия.
+  const [returnFocus, setReturnFocus] = useState(true)
+  const afterClose = useRef<(() => void) | null>(null)
   const openSheet = (next: Sheet) => {
     setSheet(next)
+    setReturnFocus(true)
     setOpened(true)
   }
   const closeSheet = () => setOpened(false)
 
   const accounts = query.data?.items ?? []
-  const hasAccounts = accounts.length > 0
+  const groups = groupActiveAccounts(accounts)
+  const hasActive = groups.shared.length + groups.private.length > 0
+
+  /** Действие из окна счёта, после которого строки на прежнем месте не будет. */
+  const actFromSheet = (account: Account, run: (account: Account) => unknown) => {
+    const targets = focusTargets(accounts, account, [FOCUS.row(account.id)])
+    setReturnFocus(false)
+    afterClose.current = () => focusFirst(targets)
+    closeSheet()
+    run(account)
+  }
+
+  const unarchiveFromList = (account: Account) => {
+    const targets = focusTargets(accounts, account, [FOCUS.row(account.id)])
+    void actions.unarchive(account)
+    focusFirst(targets)
+  }
 
   const createButton = (
     <Button
@@ -82,6 +149,7 @@ export function AccountsPage() {
       className={classes.touchButton}
       leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
       onClick={() => openSheet({ kind: 'create' })}
+      data-create-account
     >
       {t.accounts.create}
     </Button>
@@ -116,7 +184,7 @@ export function AccountsPage() {
         accounts={accounts}
         onOpen={(account) => openSheet({ kind: 'edit', id: account.id })}
         onReorder={actions.reorder}
-        onUnarchive={(account) => void actions.unarchive(account)}
+        onUnarchive={unarchiveFromList}
         emptyAction={createButton}
       />
     )
@@ -124,13 +192,18 @@ export function AccountsPage() {
 
   return (
     <>
-      <PageHeader title={t.nav.accounts} actions={hasAccounts && createButton} />
+      <PageHeader title={t.nav.accounts} actions={hasActive && createButton} />
       {content}
       <ResponsiveSheet
         opened={opened}
         onClose={closeSheet}
         title={sheetTitle(sheet, t)}
         fullHeight={sheet?.kind !== 'adjust'}
+        returnFocus={returnFocus}
+        onExitTransitionEnd={() => {
+          afterClose.current?.()
+          afterClose.current = null
+        }}
       >
         {sheet && (
           <SheetContent
@@ -142,6 +215,7 @@ export function AccountsPage() {
             onClose={closeSheet}
             onAdjust={(account) => setSheet({ kind: 'adjust', id: account.id })}
             actions={actions}
+            onAct={actFromSheet}
           />
         )}
       </ResponsiveSheet>
@@ -163,6 +237,7 @@ function SheetContent({
   onClose,
   onAdjust,
   actions,
+  onAct,
 }: {
   sheet: Sheet
   accounts: Account[]
@@ -170,6 +245,7 @@ function SheetContent({
   onClose: () => void
   onAdjust: (account: Account) => void
   actions: ReturnType<typeof useAccountActions>
+  onAct: (account: Account, run: (account: Account) => unknown) => void
 }) {
   const t = useT()
   if (sheet.kind === 'create') {
@@ -184,10 +260,23 @@ function SheetContent({
   }
 
   const archived = account.archivedAt !== null
-  const act = (run: (account: Account) => unknown) => () => {
-    onClose()
-    run(account)
+  const act = (run: (account: Account) => unknown) => () => onAct(account, run)
+
+  // «Выше» / «Ниже» — порядок без перетаскивания (WCAG 2.5.7): для указателя без
+  // перетаскивания и для экранного диктора на телефоне. Тот же оптимистичный
+  // PUT /accounts/order. Окно остаётся открытым, фокус — на нажатой кнопке; у крайних
+  // позиций кнопка не отключается (`disabled` сбросил бы фокус), а помечается aria-disabled.
+  const group = groupActiveAccounts(accounts)[account.visibility]
+  const index = group.findIndex((a) => a.id === account.id)
+  const move = (delta: -1 | 1) => () => {
+    const target = index + delta
+    if (index < 0 || target < 0 || target >= group.length) return
+    const ids = group.map((a) => a.id)
+    ;[ids[index], ids[target]] = [ids[target], ids[index]]
+    void actions.reorder(ids)
   }
+  const atTop = index <= 0
+  const atBottom = index < 0 || index >= group.length - 1
   return (
     <AccountForm
       account={account}
@@ -195,6 +284,32 @@ function SheetContent({
       onDone={onClose}
       footer={
         <div className={classes.sheetActions}>
+          {!archived && group.length > 1 && (
+            <div role="group" aria-label={t.accounts.actions.orderLabel} className={classes.order}>
+              <Button
+                variant="default"
+                size="md"
+                className={classes.touchButton}
+                leftSection={<IconArrowUp size={icons.size.md} stroke={icons.stroke} />}
+                aria-disabled={atTop || undefined}
+                data-disabled={atTop || undefined}
+                onClick={move(-1)}
+              >
+                {t.accounts.actions.moveUp}
+              </Button>
+              <Button
+                variant="default"
+                size="md"
+                className={classes.touchButton}
+                leftSection={<IconArrowDown size={icons.size.md} stroke={icons.stroke} />}
+                aria-disabled={atBottom || undefined}
+                data-disabled={atBottom || undefined}
+                onClick={move(1)}
+              >
+                {t.accounts.actions.moveDown}
+              </Button>
+            </div>
+          )}
           {!archived && (
             <Button
               variant="default"
@@ -266,22 +381,20 @@ function AccountsContent({
           <Text id={totalId} size="sm" c="dimmed">
             {t.accounts.total}
           </Text>
-          <Text component="p" size="xl" fw={600} className={classes.total}>
-            {totals.length === 0 ? (
-              <Money amount={0} currency="RUB" />
-            ) : (
-              totals.map((total, i) => (
-                <Fragment key={total.currency}>
-                  {i > 0 && <span aria-hidden> · </span>}
-                  <Money
-                    amount={total.amount}
-                    currency={total.currency}
-                    variant="balance"
-                    className={classes.totalAmount}
-                  />
-                </Fragment>
-              ))
-            )}
+          {/* Каждая валюта — отдельный пункт: при нехватке места переносится целиком,
+              а слишком длинная сумма — по разрядам (Money wrap). */}
+          <Text component="ul" size="xl" fw={600} className={classes.totals}>
+            {(totals.length === 0 ? [{ currency: 'RUB', amount: 0 }] : totals).map((total) => (
+              <li key={total.currency}>
+                <Money
+                  amount={total.amount}
+                  currency={total.currency}
+                  variant="balance"
+                  wrap
+                  className={classes.wrapAmount}
+                />
+              </li>
+            ))}
           </Text>
         </Paper>
       ) : (
@@ -374,7 +487,11 @@ function AccountRow({
     </>
   )
   return (
-    <UnstyledButton className={classes.row} onClick={() => onOpen(account)}>
+    <UnstyledButton
+      className={classes.row}
+      onClick={() => onOpen(account)}
+      data-account-row={account.id}
+    >
       <span className={classes.mark}>
         <AccountMark type={account.type} color={account.color} />
       </span>
@@ -399,6 +516,7 @@ function AccountRow({
             currency={account.currency}
             variant={isNegativeBalanceProblem(account) ? 'balance' : 'plain'}
             fw={500}
+            wrap
             className={classes.amount}
           />
         )}
@@ -427,6 +545,7 @@ function ArchiveBlock({
           className={classes.disclosure}
           aria-expanded={expanded}
           aria-controls={listId}
+          data-archive-toggle
           onClick={() => setExpanded((v) => !v)}
         >
           {t.accounts.archive(accounts.length)}

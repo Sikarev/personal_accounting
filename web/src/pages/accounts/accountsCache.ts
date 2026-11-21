@@ -36,6 +36,22 @@ export function upsertAccount(qc: QueryClient, account: Account) {
   )
 }
 
+/**
+ * Опции для всех мутаций счетов (`useXxxAccount(accountMutationOptions(qc))`).
+ *
+ * - `scope` — мутации счетов уходят на сервер строго по очереди, в порядке действий
+ *   пользователя (TanStack Query: мутации одного scope не выполняются параллельно).
+ *   Иначе «Архивировать» и сразу «Вернуть» или два быстрых перетаскивания могли бы
+ *   закоммититься на сервере в обратном порядке, и перезапрос списка молча показал бы
+ *   не последнее действие. Оптимистичная правка кэша при этом применяется сразу.
+ * - `onSettled` — перезапрос списка после последней мутации в очереди.
+ */
+export function accountMutationOptions(qc: QueryClient) {
+  return { mutation: { scope: ACCOUNTS_SCOPE, onSettled: () => refreshAccounts(qc) } }
+}
+
+const ACCOUNTS_SCOPE = { id: 'accounts' }
+
 /** Остановить загрузку списка, чтобы старый ответ не затёр оптимистичную правку. */
 export function cancelAccountsFetch(qc: QueryClient) {
   void qc.cancelQueries({ queryKey: getListAccountsQueryKey() })
@@ -45,7 +61,9 @@ export function cancelAccountsFetch(qc: QueryClient) {
  * Перезапросить список после мутации — но только когда она последняя из идущих:
  * ответ, пришедший посреди серии быстрых действий (архив, тут же перетаскивание),
  * на мгновение вернул бы на экран старое состояние. Вызывается из `onSettled`,
- * где текущая мутация ещё считается идущей, — отсюда `<= 1`.
+ * где текущая мутация ещё считается идущей, — отсюда `<= 1`. Мутации, ждущие своей
+ * очереди в scope, тоже в статусе `pending` (с `isPaused`) и учитываются здесь же:
+ * перезапрос случится только после последней из очереди.
  */
 export function refreshAccounts(qc: QueryClient) {
   const running = qc.isMutating({

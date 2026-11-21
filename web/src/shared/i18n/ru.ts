@@ -117,6 +117,9 @@ export const ru = {
       unarchive: 'Вернуть',
       unarchiveLong: 'Вернуть из архива',
       delete: 'Удалить',
+      moveUp: 'Выше',
+      moveDown: 'Ниже',
+      orderLabel: 'Порядок в группе',
     },
     adjust: {
       title: 'Корректировка остатка',
@@ -131,6 +134,7 @@ export const ru = {
       archived: (name: string) => `Счёт «${name}» в архиве`,
       unarchived: (name: string) => `Счёт «${name}» возвращён из архива`,
       deleted: (name: string) => `Счёт «${name}» удалён`,
+      restoreFailed: (name: string) => `Не удалось вернуть счёт «${name}»`,
       hasTransactions: 'На счёте уже есть операции, удалить его нельзя. Его можно архивировать.',
     },
     loadError: 'Не удалось загрузить счета',

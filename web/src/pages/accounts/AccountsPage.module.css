@@ -10,15 +10,18 @@
   gap: var(--mantine-spacing-sm);
 }
 
-/* Итог по валютам: суммы переносятся целиком, каждая сумма — без разрыва (Money). */
-.total {
+/* Итог по валютам: каждая валюта — пункт списка, пункты переносятся целиком. */
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--mantine-spacing-lg);
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-/* Огромная сумма при крупном шрифте не помещается в строку — пусть переносится,
-   чем вылезает за экран. */
-.totalAmount {
-  white-space: normal;
+/* Запас на случай, если и одного разряда не помещается (Money wrap переносит по разрядам). */
+.wrapAmount {
   overflow-wrap: anywhere;
 }
 
@@ -101,8 +104,14 @@
 
   .amount {
     margin-inline-start: 0;
-    white-space: normal;
+    /* Запас: Money wrap переносит по разрядам, этого хватает почти всегда. */
     overflow-wrap: anywhere;
+  }
+
+  /* Ручка перетаскивания (88 px при шрифте 200 %) съела бы место у названия.
+     Порядок остаётся доступен через «Выше» / «Ниже» в окне счёта. */
+  [data-sortable-handle] {
+    display: none;
   }
 
   /* Архив: «Вернуть» под строкой, иначе название сжимается до пары букв. */
@@ -168,6 +177,12 @@
   gap: var(--mantine-spacing-sm);
   padding-top: var(--mantine-spacing-md);
   border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* «Выше» / «Ниже» — пара кнопок, переносится вместе. */
+.order {
+  display: flex;
+  gap: var(--mantine-spacing-sm);
 }
 
 /* Валюта и видимость существующего счёта — только для чтения. */

@@ -180,6 +180,9 @@ function SortableRow({
           {...attributes}
           {...listeners}
           aria-label={t.sortable.handle(label)}
+          // Экран может скрыть ручку в узкой раскладке, если у него есть другой способ
+          // менять порядок (кнопки «Выше» / «Ниже»).
+          data-sortable-handle
         >
           <IconGripVertical size={icons.size.md} stroke={icons.stroke} />
         </ActionIcon>

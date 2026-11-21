@@ -16,10 +16,10 @@ import { useT } from '../../shared/i18n'
 import { groupActiveAccounts } from '../../shared/lib/accounts'
 import { notifyWithUndo } from '../../shared/ui'
 import {
+  accountMutationOptions,
   cancelAccountsFetch,
   patchAccounts,
   readAccounts,
-  refreshAccounts,
   upsertAccount,
 } from './accountsCache'
 
@@ -32,7 +32,7 @@ import {
 export function useAccountActions() {
   const t = useT()
   const qc = useQueryClient()
-  const mutation = { mutation: { onSettled: () => refreshAccounts(qc) } }
+  const mutation = accountMutationOptions(qc)
   const archiveMutation = useArchiveAccount(mutation)
   const unarchiveMutation = useUnarchiveAccount(mutation)
   const deleteMutation = useDeleteAccount(mutation)
@@ -130,7 +130,7 @@ export function useAccountActions() {
         },
       })
     } catch (error) {
-      notifyError(error)
+      notifyRestoreFailed(account, index, error)
       return
     }
     upsertAccount(qc, created)
@@ -144,6 +144,37 @@ export function useAccountActions() {
       .filter((id) => id !== created.id)
     ids.splice(Math.min(Math.max(index, 0), ids.length), 0, created.id)
     await reorder(ids)
+  }
+
+  /**
+   * Счёт не удалось создать заново (нет связи и т. п.). Тост не закрывается сам:
+   * иначе удалённый счёт потерялся бы безвозвратно. «Повторить» пробует ещё раз.
+   */
+  const notifyRestoreFailed = (account: Account, index: number, error: unknown) => {
+    const id = `restore-failed-${account.id}`
+    notifications.show({
+      id,
+      color: 'red',
+      autoClose: false,
+      title: t.accounts.toasts.restoreFailed(account.name),
+      message: (
+        <Stack gap="sm" align="flex-start">
+          <Text size="sm" c="var(--mantine-color-text)">
+            {apiErrorText(error, t)}
+          </Text>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              notifications.hide(id)
+              void restore(account, index)
+            }}
+          >
+            {t.errors.retry}
+          </Button>
+        </Stack>
+      ),
+    })
   }
 
   /** Тост «есть операции» с предложением архивировать — вместо удаления. */

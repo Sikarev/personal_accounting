@@ -11,7 +11,7 @@ import { useFormState } from '../../shared/lib/useFormState'
 import { Money } from '../../shared/ui'
 import { AuthForm } from '../auth/AuthForm'
 import { submitErrorState } from '../auth/submitErrorState'
-import { refreshAccounts, upsertAccount } from './accountsCache'
+import { accountMutationOptions, upsertAccount } from './accountsCache'
 
 /**
  * Корректировка остатка: пользователь вводит, сколько денег на счёте на самом деле,
@@ -32,7 +32,7 @@ export function AdjustBalanceForm({
   const qc = useQueryClient()
   const form = useFormState({ balance: '' })
   const [formError, setFormError] = useState<{ text: string; retryable: boolean } | null>(null)
-  const adjust = useAdjustAccountBalance({ mutation: { onSettled: () => refreshAccounts(qc) } })
+  const adjust = useAdjustAccountBalance(accountMutationOptions(qc))
   const minorUnits = minorUnitsOf(account.currency, currencies)
 
   const submit = () => {

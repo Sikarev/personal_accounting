@@ -18,7 +18,7 @@ import { useFormState, type FormErrors } from '../../shared/lib/useFormState'
 import { AccountColorPicker } from '../../shared/ui'
 import { AuthForm } from '../auth/AuthForm'
 import { submitErrorState } from '../auth/submitErrorState'
-import { refreshAccounts, upsertAccount } from './accountsCache'
+import { accountMutationOptions, upsertAccount } from './accountsCache'
 import classes from './AccountsPage.module.css'
 
 /** Длина названия из контракта (`AccountName`). */
@@ -93,7 +93,7 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
   const qc = useQueryClient()
   const form = useFormState<Values>(initialValues(account, currencies))
   const [formError, setFormError] = useState<{ text: string; retryable: boolean } | null>(null)
-  const mutation = { mutation: { onSettled: () => refreshAccounts(qc) } }
+  const mutation = accountMutationOptions(qc)
   const create = useCreateAccount(mutation)
   const update = useUpdateAccount(mutation)
   const v = form.values

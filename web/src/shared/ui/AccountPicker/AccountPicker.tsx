@@ -54,6 +54,9 @@ export function AccountPicker({
   const sharedId = useId()
   const privateId = useId()
 
+  // Видимый текст кнопки — он же в доступном имени (WCAG 2.5.3: имя содержит подпись).
+  const buttonText = selected?.name ?? (isEmpty ? t.accounts.picker.empty : t.accounts.picker.title)
+
   const select = (id: string) => {
     onChange(id)
     close()
@@ -107,11 +110,11 @@ export function AccountPicker({
         disabled={disabled}
         aria-haspopup="dialog"
         // Имя кнопки: «Счёт: Карта». Видимый текст — только название, он входит в имя.
-        aria-label={`${title}: ${selected?.name ?? t.accounts.picker.empty}`}
+        aria-label={`${title}: ${buttonText}`}
       >
         {selected && <AccountMark type={selected.type} color={selected.color} size="md" />}
         <Text component="span" className={classes.triggerName} truncate="end">
-          {selected?.name ?? (isEmpty ? t.accounts.picker.empty : t.accounts.picker.title)}
+          {buttonText}
         </Text>
         <IconChevronDown
           aria-hidden

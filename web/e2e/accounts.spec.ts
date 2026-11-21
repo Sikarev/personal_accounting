@@ -84,13 +84,18 @@ type MockApi = {
   accounts: Account[]
   /** Тела запросов `PUT /accounts/order`. */
   orders: string[][]
-  /** Ответить на следующий запрос этим обработчиком вместо обычного. */
-  failNext: Map<string, (route: Route) => Promise<void>>
+  /**
+   * Ответить на следующий запрос этим обработчиком вместо обычного; `proceed` —
+   * обычная обработка (чтобы, например, задержать ответ, а потом ответить как всегда).
+   */
+  failNext: Map<string, (route: Route, proceed: () => Promise<void>) => Promise<void>>
+  /** Ключи запросов («PUT /accounts/order») в порядке прихода — до ответа на них. */
+  received: string[]
 }
 
 /** Подменить API счетов: список, создание, порядок, архив, удаление, корректировка. */
 async function mockAccountsApi(page: Page, accounts: Account[] = fixture()): Promise<MockApi> {
-  const api: MockApi = { accounts, orders: [], failNext: new Map() }
+  const api: MockApi = { accounts, orders: [], failNext: new Map(), received: [] }
   const find = (id: string) => api.accounts.find((a) => a.id === id)!
   const override = (key: string) => {
     const handler = api.failNext.get(key)
@@ -104,10 +109,15 @@ async function mockAccountsApi(page: Page, accounts: Account[] = fixture()): Pro
     const path = new URL(request.url()).pathname.slice(API.length)
     const method = request.method()
     const key = `${method} ${path.replace(/[0-9a-f-]{36}/, ':id')}`
+    api.received.push(key)
     const custom = override(key)
-    if (custom) return custom(route)
-
     const id = path.split('/')[2]
+    const proceed = () => respond(route, key, id)
+    return custom ? custom(route, proceed) : proceed()
+  })
+
+  async function respond(route: Route, key: string, id: string): Promise<void> {
+    const request = route.request()
     switch (key) {
       case 'GET /accounts':
         return route.fulfill({ json: { items: api.accounts } })
@@ -143,7 +153,7 @@ async function mockAccountsApi(page: Page, accounts: Account[] = fixture()): Pro
       }
     }
     return problem(route, 404, 'not_found')
-  })
+  }
   return api
 }
 
@@ -192,6 +202,15 @@ async function press(page: Page, key: string, position: number) {
   await expect(page.getByText(`«Кредитка»: позиция ${position} из 4.`)).toBeAttached()
 }
 
+/** `data-account-row` элемента с фокусом (или имя тега, если фокус не на строке счёта). */
+const focusedRow = (page: Page) =>
+  page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null
+    return el?.dataset.accountRow ?? el?.tagName ?? null
+  })
+
+const idOf = (accounts: Account[], name: string) => accounts.find((a) => a.name === name)!.id
+
 /** Тост — по тексту: у Mantine нет роли у уведомления. */
 const toast = (page: Page, text: string | RegExp) =>
   page.locator('.mantine-Notification-root').filter({ hasText: text })
@@ -212,8 +231,13 @@ test.describe('список', () => {
     await mockAccountsApi(page)
     await openAccounts(page)
     // Итог — по каждой валюте отдельно, без счёта «не в общем балансе».
-    const total = await page.getByText(t.accounts.total).locator('..').textContent()
-    expect(total!.replace(/\s/g, ' ')).toContain('22 220,50 ₽ · 50 $')
+    // Каждая валюта — отдельный пункт списка.
+    const totals = await page
+      .getByRole('region', { name: t.accounts.total })
+      .getByRole('listitem')
+      .allTextContents()
+    expect(totals.map((x) => x.replace(/\s/g, ' '))).toEqual(['22 220,50 ₽', '50 $'])
+    // <wbr> не попадает в текст: копируется та же сумма.
     // Пустых групп нет, у личных — пояснение.
     await expect(page.getByText(t.accounts.privateHint)).toBeVisible()
     // Архив свёрнут, раскрывается кнопкой.
@@ -593,5 +617,178 @@ test.describe('перетаскивание', () => {
         'Карта Сбер',
         'Накопительный счёт на отпуск в следующем году — не трогать до лета',
       ])
+  })
+})
+
+test.describe('очередь мутаций', () => {
+  test('два быстрых перетаскивания: на сервере — последнее', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccountsApi(page)
+    // Ответ на первый PUT задерживается, пока не отпустим.
+    let release!: () => void
+    const held = new Promise<void>((resolve) => (release = resolve))
+    api.failNext.set('PUT /accounts/order', async (_route, proceed) => {
+      await held
+      await proceed()
+    })
+    await openAccounts(page)
+    await page.getByRole('button', { name: t.sortable.handle('Кредитка') }).focus()
+    await press(page, 'Space', 3)
+    await press(page, 'ArrowUp', 2)
+    await page.keyboard.press('Space')
+    await expect
+      .poll(() => names(sharedList(page)))
+      .toEqual([
+        'Карта Сбер',
+        'Кредитка',
+        'Наличные',
+        'Накопительный счёт на отпуск в следующем году — не трогать до лета',
+      ])
+    await page.getByRole('button', { name: t.sortable.handle('Кредитка') }).focus()
+    await page.keyboard.press('Space')
+    await expect(page.getByText('«Кредитка»: позиция 2 из 4.')).toBeAttached()
+    await page.keyboard.press('ArrowUp')
+    await expect(page.getByText('«Кредитка»: позиция 1 из 4.')).toBeAttached()
+    await page.keyboard.press('Space')
+    const final = [
+      'Кредитка',
+      'Карта Сбер',
+      'Наличные',
+      'Накопительный счёт на отпуск в следующем году — не трогать до лета',
+    ]
+    // Интерфейс обновился сразу, а второй запрос ждёт первого в очереди.
+    await expect.poll(() => names(sharedList(page))).toEqual(final)
+    expect(api.received.filter((k) => k === 'PUT /accounts/order')).toHaveLength(1)
+
+    release()
+    await expect.poll(() => api.orders.length).toBe(2)
+    const finalIds = final.map((name) => idOf(api.accounts, name))
+    expect(api.orders[1]).toEqual(finalIds)
+    // После перезапроса списка экран показывает то же, что на «сервере».
+    await expect.poll(() => names(sharedList(page))).toEqual(final)
+  })
+})
+
+test.describe('фокус после действий', () => {
+  test('архив из окна — фокус на соседней строке', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccountsApi(page)
+    await openAccounts(page)
+    await page.getByRole('button', { name: /^Наличные/ }).click()
+    await page.getByRole('button', { name: t.accounts.actions.archive }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect.poll(() => focusedRow(page)).toBe(idOf(api.accounts, 'Кредитка'))
+  })
+
+  test(
+    'последний счёт группы в архив — фокус на «Архив (N)»',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockAccountsApi(page, [account({ name: 'Единственный' })])
+      await openAccounts(page)
+      await page.getByRole('button', { name: /^Единственный/ }).click()
+      await page.getByRole('button', { name: t.accounts.actions.archive }).click()
+      await expect(page.getByRole('button', { name: t.accounts.archive(1) })).toBeFocused()
+      // Активных счетов нет — кнопка «Создать счёт» одна, в пустом состоянии.
+      await expect(page.getByRole('button', { name: t.accounts.create })).toHaveCount(1)
+    },
+  )
+
+  test(
+    'удаление последнего счёта — фокус на «Создать счёт»',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockAccountsApi(page, [account({ name: 'Пустой', hasTransactions: false })])
+      await openAccounts(page)
+      await page.getByRole('button', { name: /^Пустой/ }).click()
+      await page.getByRole('button', { name: t.accounts.actions.delete }).click()
+      await expect(page.getByRole('button', { name: t.accounts.create })).toBeFocused()
+    },
+  )
+
+  test('«Вернуть» из архива — фокус не теряется', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccountsApi(page)
+    await openAccounts(page)
+    await expandArchive(page)
+    await page.getByRole('button', { name: 'Вернуть «Старая карта»' }).click()
+    // Архив опустел и исчез — фокус на самой вернувшейся строке.
+    await expect.poll(() => focusedRow(page)).toBe(idOf(api.accounts, 'Старая карта'))
+  })
+})
+
+test.describe('отмена удаления без связи', () => {
+  test(
+    'тост с «Повторить» не закрывается, повтор возвращает счёт',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await mockAccountsApi(page)
+      await openAccounts(page)
+      await page.getByRole('button', { name: /^Наличные/ }).click()
+      await page.getByRole('button', { name: t.accounts.actions.delete }).click()
+      await expect(sharedList(page).getByRole('button', { name: /^Наличные/ })).toHaveCount(0)
+      api.failNext.set('POST /accounts', (route) => route.abort('internetdisconnected'))
+      await toast(page, t.accounts.toasts.deleted('Наличные'))
+        .getByRole('button', { name: t.common.undo })
+        .click()
+      const failed = toast(page, t.accounts.toasts.restoreFailed('Наличные'))
+      await expect(failed).toContainText(t.errors.network)
+      // Тост не закрывается сам: ждём дольше обычного времени жизни тоста.
+      await page.waitForTimeout(7000)
+      await expect(failed).toBeVisible()
+      await failed.getByRole('button', { name: t.errors.retry }).click()
+      await expect(sharedList(page).getByRole('button', { name: /^Наличные/ })).toBeVisible()
+      await expect(failed).toHaveCount(0)
+    },
+  )
+})
+
+test.describe('порядок без перетаскивания', () => {
+  test('«Выше» и «Ниже» в окне счёта', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccountsApi(page)
+    await openAccounts(page)
+    await page.getByRole('button', { name: /^Наличные/ }).click()
+    const dialog = page.getByRole('dialog', { name: t.accounts.form.editTitle })
+    const order = dialog.getByRole('group', { name: t.accounts.actions.orderLabel })
+    const down = order.getByRole('button', { name: t.accounts.actions.moveDown })
+    const up = order.getByRole('button', { name: t.accounts.actions.moveUp })
+
+    await down.click()
+    await expect
+      .poll(() => names(sharedList(page)))
+      .toEqual([
+        'Карта Сбер',
+        'Кредитка',
+        'Наличные',
+        'Накопительный счёт на отпуск в следующем году — не трогать до лета',
+      ])
+    // Окно открыто, фокус на той же кнопке — можно нажимать дальше.
+    await expect(down).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect.poll(() => api.orders.length).toBe(2)
+    expect(api.orders[1].at(-1)).toBe(idOf(api.accounts, 'Наличные'))
+    // Внизу группы «Ниже» неактивна, но фокус с неё не слетает.
+    await expect(down).toHaveAttribute('aria-disabled', 'true')
+    await expect(down).toBeFocused()
+    await page.keyboard.press('Enter')
+    expect(api.orders).toHaveLength(2)
+
+    await up.click()
+    await expect.poll(() => api.orders.length).toBe(3)
+    await expect(up).toBeFocused()
+    await expect(down).not.toHaveAttribute('aria-disabled')
+    await expectNoAxeViolations(page)
+  })
+
+  test('у единственного счёта группы кнопок нет', { tag: '@a11y' }, async ({ page }) => {
+    await mockAccountsApi(page)
+    await openAccounts(page)
+    await page.getByRole('button', { name: /^Доллары/ }).click()
+    await expect(
+      page.getByRole('group', { name: t.accounts.actions.orderLabel }).getByRole('button'),
+    ).toHaveCount(2)
+    await page.keyboard.press('Escape')
+    await mockAccountsApi(page, [account({ name: 'Один' })])
+    await page.reload()
+    await page.getByRole('button', { name: /^Один/ }).click()
+    await expect(page.getByRole('dialog', { name: t.accounts.form.editTitle })).toBeVisible()
+    await expect(page.getByRole('group', { name: t.accounts.actions.orderLabel })).toHaveCount(0)
   })
 })

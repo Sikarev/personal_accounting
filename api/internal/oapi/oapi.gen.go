@@ -14,12 +14,112 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
+
+// Defines values for AccountColor.
+const (
+	Blue   AccountColor = "blue"
+	Cyan   AccountColor = "cyan"
+	Grape  AccountColor = "grape"
+	Gray   AccountColor = "gray"
+	Green  AccountColor = "green"
+	Indigo AccountColor = "indigo"
+	Lime   AccountColor = "lime"
+	Orange AccountColor = "orange"
+	Pink   AccountColor = "pink"
+	Red    AccountColor = "red"
+	Teal   AccountColor = "teal"
+	Violet AccountColor = "violet"
+	Yellow AccountColor = "yellow"
+)
+
+// Valid indicates whether the value is a known member of the AccountColor enum.
+func (e AccountColor) Valid() bool {
+	switch e {
+	case Blue:
+		return true
+	case Cyan:
+		return true
+	case Grape:
+		return true
+	case Gray:
+		return true
+	case Green:
+		return true
+	case Indigo:
+		return true
+	case Lime:
+		return true
+	case Orange:
+		return true
+	case Pink:
+		return true
+	case Red:
+		return true
+	case Teal:
+		return true
+	case Violet:
+		return true
+	case Yellow:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccountType.
+const (
+	BankAccount AccountType = "bank_account"
+	Card        AccountType = "card"
+	Cash        AccountType = "cash"
+	CreditCard  AccountType = "credit_card"
+	Deposit     AccountType = "deposit"
+	Other       AccountType = "other"
+)
+
+// Valid indicates whether the value is a known member of the AccountType enum.
+func (e AccountType) Valid() bool {
+	switch e {
+	case BankAccount:
+		return true
+	case Card:
+		return true
+	case Cash:
+		return true
+	case CreditCard:
+		return true
+	case Deposit:
+		return true
+	case Other:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AccountVisibility.
+const (
+	Private AccountVisibility = "private"
+	Shared  AccountVisibility = "shared"
+)
+
+// Valid indicates whether the value is a known member of the AccountVisibility enum.
+func (e AccountVisibility) Valid() bool {
+	switch e {
+	case Private:
+		return true
+	case Shared:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for FamilyRole.
 const (
@@ -52,6 +152,109 @@ func (e RegisterRequestAcceptTerms) Valid() bool {
 	default:
 		return false
 	}
+}
+
+// Account defines model for Account.
+type Account struct {
+	// ArchivedAt Когда счёт архивирован; `null` — активный.
+	ArchivedAt *time.Time `json:"archivedAt"`
+
+	// Balance Текущий остаток: начальный + все неудалённые операции счёта
+	// (включая операции с будущей датой).
+	Balance int64 `json:"balance"`
+
+	// Color Имя цвета палитры Mantine; клиент берёт токен темы по имени.
+	// `null` — цвет не задан.
+	Color *AccountColor `json:"color"`
+
+	// Currency Код валюты счёта (ISO 4217).
+	//
+	// Example: RUB
+	Currency string `json:"currency"`
+
+	// HasTransactions Есть ли у счёта операции (в т. ч. удалённые). Счёт с операциями
+	// нельзя удалить — только архивировать.
+	HasTransactions bool               `json:"hasTransactions"`
+	Id              openapi_types.UUID `json:"id"`
+
+	// IncludeInTotal Учитывать ли счёт в общем балансе.
+	IncludeInTotal bool `json:"includeInTotal"`
+
+	// InitialBalance Начальный остаток в минимальных единицах валюты.
+	InitialBalance int64 `json:"initialBalance"`
+
+	// Name Example: Наличные
+	Name string `json:"name"`
+
+	// SortOrder Порядок внутри группы (общие / личные), по возрастанию.
+	SortOrder int32       `json:"sortOrder"`
+	Type      AccountType `json:"type"`
+
+	// Visibility `shared` — общий счёт семьи; `private` — личный, виден только владельцу.
+	Visibility AccountVisibility `json:"visibility"`
+}
+
+// AccountColor Имя цвета палитры Mantine; клиент берёт токен темы по имени.
+// `null` — цвет не задан.
+type AccountColor string
+
+// AccountList defines model for AccountList.
+type AccountList struct {
+	Items []Account `json:"items"`
+}
+
+// AccountName Пробелы по краям сервер обрезает; пустое после обрезки — ошибка `required`.
+//
+// Example: Наличные
+type AccountName = string
+
+// AccountType defines model for AccountType.
+type AccountType string
+
+// AccountVisibility `shared` — общий счёт семьи; `private` — личный, виден только владельцу.
+type AccountVisibility string
+
+// AdjustBalanceRequest defines model for AdjustBalanceRequest.
+type AdjustBalanceRequest struct {
+	// Balance Сумма в минимальных единицах валюты счёта (копейках), может быть отрицательной.
+	//
+	// Example: 150000
+	Balance MoneyAmount `json:"balance"`
+}
+
+// AdjustBalanceResponse defines model for AdjustBalanceResponse.
+type AdjustBalanceResponse struct {
+	Account Account `json:"account"`
+
+	// TransactionId Id созданной операции-корректировки; нет, если остаток не изменился.
+	TransactionId *openapi_types.UUID `json:"transactionId,omitempty"`
+}
+
+// CreateAccountRequest defines model for CreateAccountRequest.
+type CreateAccountRequest struct {
+	// Color Имя цвета палитры Mantine; клиент берёт токен темы по имени.
+	// `null` — цвет не задан.
+	Color *AccountColor `json:"color,omitempty"`
+
+	// Currency Код активной валюты из `GET /currencies`.
+	//
+	// Example: RUB
+	Currency       string `json:"currency"`
+	IncludeInTotal *bool  `json:"includeInTotal,omitempty"`
+
+	// InitialBalance Сумма в минимальных единицах валюты счёта (копейках), может быть отрицательной.
+	//
+	// Example: 150000
+	InitialBalance *MoneyAmount `json:"initialBalance,omitempty"`
+
+	// Name Пробелы по краям сервер обрезает; пустое после обрезки — ошибка `required`.
+	//
+	// Example: Наличные
+	Name AccountName `json:"name"`
+	Type AccountType `json:"type"`
+
+	// Visibility `shared` — общий счёт семьи; `private` — личный, виден только владельцу.
+	Visibility AccountVisibility `json:"visibility"`
 }
 
 // Currency defines model for Currency.
@@ -145,6 +348,11 @@ type MeUser struct {
 	Timezone string `json:"timezone"`
 }
 
+// MoneyAmount Сумма в минимальных единицах валюты счёта (копейках), может быть отрицательной.
+//
+// Example: 150000
+type MoneyAmount = int64
+
 // PasswordResetConfirmRequest defines model for PasswordResetConfirmRequest.
 type PasswordResetConfirmRequest struct {
 	// Password Новый пароль, 8–128 символов (те же правила, что при регистрации).
@@ -168,7 +376,8 @@ type Problem struct {
 	// Code Машиночитаемый код ошибки. Список может расширяться — неизвестный код
 	// клиент обрабатывает по HTTP-статусу. Известные значения:
 	// `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
-	// `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`.
+	// `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
+	// `account_has_transactions`, `account_archived`.
 	//
 	//
 	// Example: not_found
@@ -221,6 +430,31 @@ type RegisterRequest struct {
 // RegisterRequestAcceptTerms Согласие на обработку ПДн и с пользовательским соглашением. Только `true`.
 type RegisterRequestAcceptTerms bool
 
+// ReorderAccountsRequest defines model for ReorderAccountsRequest.
+type ReorderAccountsRequest struct {
+	// AccountIds Id счетов в нужном порядке.
+	AccountIds []openapi_types.UUID `json:"accountIds"`
+}
+
+// UpdateAccountRequest defines model for UpdateAccountRequest.
+type UpdateAccountRequest struct {
+	// Color Имя цвета палитры Mantine; клиент берёт токен темы по имени.
+	// `null` — цвет не задан.
+	Color          *AccountColor `json:"color"`
+	IncludeInTotal bool          `json:"includeInTotal"`
+
+	// InitialBalance Сумма в минимальных единицах валюты счёта (копейках), может быть отрицательной.
+	//
+	// Example: 150000
+	InitialBalance MoneyAmount `json:"initialBalance"`
+
+	// Name Пробелы по краям сервер обрезает; пустое после обрезки — ошибка `required`.
+	//
+	// Example: Наличные
+	Name AccountName `json:"name"`
+	Type AccountType `json:"type"`
+}
+
 // VerifyEmailRequest defines model for VerifyEmailRequest.
 type VerifyEmailRequest struct {
 	// Token Токен из ссылки в письме (параметр `token`), передаётся как есть.
@@ -228,6 +462,21 @@ type VerifyEmailRequest struct {
 	// `invalid_token` у поля `token`.
 	Token EmailToken `json:"token"`
 }
+
+// AccountId defines model for AccountId.
+type AccountId = openapi_types.UUID
+
+// CreateAccountJSONRequestBody defines body for CreateAccount for application/json ContentType.
+type CreateAccountJSONRequestBody = CreateAccountRequest
+
+// ReorderAccountsJSONRequestBody defines body for ReorderAccounts for application/json ContentType.
+type ReorderAccountsJSONRequestBody = ReorderAccountsRequest
+
+// UpdateAccountJSONRequestBody defines body for UpdateAccount for application/json ContentType.
+type UpdateAccountJSONRequestBody = UpdateAccountRequest
+
+// AdjustAccountBalanceJSONRequestBody defines body for AdjustAccountBalance for application/json ContentType.
+type AdjustAccountBalanceJSONRequestBody = AdjustBalanceRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -246,6 +495,30 @@ type VerifyEmailJSONRequestBody = VerifyEmailRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// ListAccounts Счета семьи с текущими остатками
+	// (GET /accounts)
+	ListAccounts(w http.ResponseWriter, r *http.Request)
+	// CreateAccount Создать счёт
+	// (POST /accounts)
+	CreateAccount(w http.ResponseWriter, r *http.Request)
+	// ReorderAccounts Задать порядок счетов
+	// (PUT /accounts/order)
+	ReorderAccounts(w http.ResponseWriter, r *http.Request)
+	// DeleteAccount Удалить счёт
+	// (DELETE /accounts/{accountId})
+	DeleteAccount(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	// UpdateAccount Изменить счёт
+	// (PUT /accounts/{accountId})
+	UpdateAccount(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	// AdjustAccountBalance Корректировка остатка
+	// (POST /accounts/{accountId}/adjust-balance)
+	AdjustAccountBalance(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	// ArchiveAccount Архивировать счёт
+	// (POST /accounts/{accountId}/archive)
+	ArchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId)
+	// UnarchiveAccount Вернуть счёт из архива
+	// (POST /accounts/{accountId}/unarchive)
+	UnarchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId)
 	// Login Вход по e-mail и паролю
 	// (POST /auth/login)
 	Login(w http.ResponseWriter, r *http.Request)
@@ -278,6 +551,54 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// ListAccounts Счета семьи с текущими остатками
+// (GET /accounts)
+func (_ Unimplemented) ListAccounts(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CreateAccount Создать счёт
+// (POST /accounts)
+func (_ Unimplemented) CreateAccount(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReorderAccounts Задать порядок счетов
+// (PUT /accounts/order)
+func (_ Unimplemented) ReorderAccounts(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteAccount Удалить счёт
+// (DELETE /accounts/{accountId})
+func (_ Unimplemented) DeleteAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UpdateAccount Изменить счёт
+// (PUT /accounts/{accountId})
+func (_ Unimplemented) UpdateAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// AdjustAccountBalance Корректировка остатка
+// (POST /accounts/{accountId}/adjust-balance)
+func (_ Unimplemented) AdjustAccountBalance(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ArchiveAccount Архивировать счёт
+// (POST /accounts/{accountId}/archive)
+func (_ Unimplemented) ArchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UnarchiveAccount Вернуть счёт из архива
+// (POST /accounts/{accountId}/unarchive)
+func (_ Unimplemented) UnarchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Login Вход по e-mail и паролю
 // (POST /auth/login)
@@ -341,6 +662,178 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ListAccounts operation middleware
+func (siw *ServerInterfaceWrapper) ListAccounts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAccounts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAccount operation middleware
+func (siw *ServerInterfaceWrapper) CreateAccount(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAccount(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReorderAccounts operation middleware
+func (siw *ServerInterfaceWrapper) ReorderAccounts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReorderAccounts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAccount operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId AccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAccount operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId AccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AdjustAccountBalance operation middleware
+func (siw *ServerInterfaceWrapper) AdjustAccountBalance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId AccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AdjustAccountBalance(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ArchiveAccount operation middleware
+func (siw *ServerInterfaceWrapper) ArchiveAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId AccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ArchiveAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UnarchiveAccount operation middleware
+func (siw *ServerInterfaceWrapper) UnarchiveAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "accountId" -------------
+	var accountId AccountId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "accountId", chi.URLParam(r, "accountId"), &accountId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "accountId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UnarchiveAccount(w, r, accountId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
@@ -608,11 +1101,336 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/me", wrapper.GetMe)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/accounts", wrapper.ListAccounts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts", wrapper.CreateAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/accounts/order", wrapper.ReorderAccounts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/accounts/{accountId}", wrapper.DeleteAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/accounts/{accountId}", wrapper.UpdateAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/archive", wrapper.ArchiveAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/unarchive", wrapper.UnarchiveAccount)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/accounts/{accountId}/adjust-balance", wrapper.AdjustAccountBalance)
+	})
 
 	return r
 }
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type ListAccountsRequestObject struct {
+}
+
+type ListAccountsResponseObject interface {
+	VisitListAccountsResponse(w http.ResponseWriter) error
+}
+
+type ListAccounts200JSONResponse AccountList
+
+func (response ListAccounts200JSONResponse) VisitListAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAccountsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ListAccountsdefaultApplicationProblemPlusJSONResponse) VisitListAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAccountRequestObject struct {
+	Body *CreateAccountJSONRequestBody
+}
+
+type CreateAccountResponseObject interface {
+	VisitCreateAccountResponse(w http.ResponseWriter) error
+}
+
+type CreateAccount201JSONResponse Account
+
+func (response CreateAccount201JSONResponse) VisitCreateAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateAccountdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response CreateAccountdefaultApplicationProblemPlusJSONResponse) VisitCreateAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReorderAccountsRequestObject struct {
+	Body *ReorderAccountsJSONRequestBody
+}
+
+type ReorderAccountsResponseObject interface {
+	VisitReorderAccountsResponse(w http.ResponseWriter) error
+}
+
+type ReorderAccounts204Response struct {
+}
+
+func (response ReorderAccounts204Response) VisitReorderAccountsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReorderAccountsdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ReorderAccountsdefaultApplicationProblemPlusJSONResponse) VisitReorderAccountsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteAccountRequestObject struct {
+	AccountId AccountId `json:"accountId"`
+}
+
+type DeleteAccountResponseObject interface {
+	VisitDeleteAccountResponse(w http.ResponseWriter) error
+}
+
+type DeleteAccount204Response struct {
+}
+
+func (response DeleteAccount204Response) VisitDeleteAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteAccountdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response DeleteAccountdefaultApplicationProblemPlusJSONResponse) VisitDeleteAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAccountRequestObject struct {
+	AccountId AccountId `json:"accountId"`
+	Body      *UpdateAccountJSONRequestBody
+}
+
+type UpdateAccountResponseObject interface {
+	VisitUpdateAccountResponse(w http.ResponseWriter) error
+}
+
+type UpdateAccount200JSONResponse Account
+
+func (response UpdateAccount200JSONResponse) VisitUpdateAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateAccountdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UpdateAccountdefaultApplicationProblemPlusJSONResponse) VisitUpdateAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdjustAccountBalanceRequestObject struct {
+	AccountId AccountId `json:"accountId"`
+	Body      *AdjustAccountBalanceJSONRequestBody
+}
+
+type AdjustAccountBalanceResponseObject interface {
+	VisitAdjustAccountBalanceResponse(w http.ResponseWriter) error
+}
+
+type AdjustAccountBalance200JSONResponse AdjustBalanceResponse
+
+func (response AdjustAccountBalance200JSONResponse) VisitAdjustAccountBalanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AdjustAccountBalancedefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response AdjustAccountBalancedefaultApplicationProblemPlusJSONResponse) VisitAdjustAccountBalanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveAccountRequestObject struct {
+	AccountId AccountId `json:"accountId"`
+}
+
+type ArchiveAccountResponseObject interface {
+	VisitArchiveAccountResponse(w http.ResponseWriter) error
+}
+
+type ArchiveAccount200JSONResponse Account
+
+func (response ArchiveAccount200JSONResponse) VisitArchiveAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ArchiveAccountdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response ArchiveAccountdefaultApplicationProblemPlusJSONResponse) VisitArchiveAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveAccountRequestObject struct {
+	AccountId AccountId `json:"accountId"`
+}
+
+type UnarchiveAccountResponseObject interface {
+	VisitUnarchiveAccountResponse(w http.ResponseWriter) error
+}
+
+type UnarchiveAccount200JSONResponse Account
+
+func (response UnarchiveAccount200JSONResponse) VisitUnarchiveAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UnarchiveAccountdefaultApplicationProblemPlusJSONResponse struct {
+	Body       Problem
+	StatusCode int
+}
+
+func (response UnarchiveAccountdefaultApplicationProblemPlusJSONResponse) VisitUnarchiveAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(response.StatusCode)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type LoginRequestObject struct {
 	Body *LoginJSONRequestBody
@@ -977,6 +1795,30 @@ func (response GetMedefaultApplicationProblemPlusJSONResponse) VisitGetMeRespons
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// ListAccounts Счета семьи с текущими остатками
+	// (GET /accounts)
+	ListAccounts(ctx context.Context, request ListAccountsRequestObject) (ListAccountsResponseObject, error)
+	// CreateAccount Создать счёт
+	// (POST /accounts)
+	CreateAccount(ctx context.Context, request CreateAccountRequestObject) (CreateAccountResponseObject, error)
+	// ReorderAccounts Задать порядок счетов
+	// (PUT /accounts/order)
+	ReorderAccounts(ctx context.Context, request ReorderAccountsRequestObject) (ReorderAccountsResponseObject, error)
+	// DeleteAccount Удалить счёт
+	// (DELETE /accounts/{accountId})
+	DeleteAccount(ctx context.Context, request DeleteAccountRequestObject) (DeleteAccountResponseObject, error)
+	// UpdateAccount Изменить счёт
+	// (PUT /accounts/{accountId})
+	UpdateAccount(ctx context.Context, request UpdateAccountRequestObject) (UpdateAccountResponseObject, error)
+	// AdjustAccountBalance Корректировка остатка
+	// (POST /accounts/{accountId}/adjust-balance)
+	AdjustAccountBalance(ctx context.Context, request AdjustAccountBalanceRequestObject) (AdjustAccountBalanceResponseObject, error)
+	// ArchiveAccount Архивировать счёт
+	// (POST /accounts/{accountId}/archive)
+	ArchiveAccount(ctx context.Context, request ArchiveAccountRequestObject) (ArchiveAccountResponseObject, error)
+	// UnarchiveAccount Вернуть счёт из архива
+	// (POST /accounts/{accountId}/unarchive)
+	UnarchiveAccount(ctx context.Context, request UnarchiveAccountRequestObject) (UnarchiveAccountResponseObject, error)
 	// Login Вход по e-mail и паролю
 	// (POST /auth/login)
 	Login(ctx context.Context, request LoginRequestObject) (LoginResponseObject, error)
@@ -1043,6 +1885,236 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ListAccounts operation middleware
+func (sh *strictHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
+	var request ListAccountsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAccounts(ctx, request.(ListAccountsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAccounts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAccountsResponseObject); ok {
+		if err := validResponse.VisitListAccountsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAccount operation middleware
+func (sh *strictHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
+	var request CreateAccountRequestObject
+
+	var body CreateAccountJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAccount(ctx, request.(CreateAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAccountResponseObject); ok {
+		if err := validResponse.VisitCreateAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReorderAccounts operation middleware
+func (sh *strictHandler) ReorderAccounts(w http.ResponseWriter, r *http.Request) {
+	var request ReorderAccountsRequestObject
+
+	var body ReorderAccountsJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReorderAccounts(ctx, request.(ReorderAccountsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReorderAccounts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReorderAccountsResponseObject); ok {
+		if err := validResponse.VisitReorderAccountsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteAccount operation middleware
+func (sh *strictHandler) DeleteAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	var request DeleteAccountRequestObject
+
+	request.AccountId = accountId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAccount(ctx, request.(DeleteAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAccountResponseObject); ok {
+		if err := validResponse.VisitDeleteAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAccount operation middleware
+func (sh *strictHandler) UpdateAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	var request UpdateAccountRequestObject
+
+	request.AccountId = accountId
+
+	var body UpdateAccountJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAccount(ctx, request.(UpdateAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAccountResponseObject); ok {
+		if err := validResponse.VisitUpdateAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AdjustAccountBalance operation middleware
+func (sh *strictHandler) AdjustAccountBalance(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	var request AdjustAccountBalanceRequestObject
+
+	request.AccountId = accountId
+
+	var body AdjustAccountBalanceJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AdjustAccountBalance(ctx, request.(AdjustAccountBalanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AdjustAccountBalance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AdjustAccountBalanceResponseObject); ok {
+		if err := validResponse.VisitAdjustAccountBalanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ArchiveAccount operation middleware
+func (sh *strictHandler) ArchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	var request ArchiveAccountRequestObject
+
+	request.AccountId = accountId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ArchiveAccount(ctx, request.(ArchiveAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ArchiveAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ArchiveAccountResponseObject); ok {
+		if err := validResponse.VisitArchiveAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UnarchiveAccount operation middleware
+func (sh *strictHandler) UnarchiveAccount(w http.ResponseWriter, r *http.Request, accountId AccountId) {
+	var request UnarchiveAccountRequestObject
+
+	request.AccountId = accountId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UnarchiveAccount(ctx, request.(UnarchiveAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UnarchiveAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UnarchiveAccountResponseObject); ok {
+		if err := validResponse.VisitUnarchiveAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // Login operation middleware
@@ -1301,81 +2373,117 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
+	"AP//",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

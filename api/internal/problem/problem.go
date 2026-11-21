@@ -28,6 +28,11 @@ const (
 	CodeMethodNotAllowed   = "method_not_allowed"
 	CodeTooManyRequests    = "too_many_requests"
 	CodeInternal           = "internal"
+
+	// Коды бизнес-правил (409 Conflict): действие невозможно в текущем
+	// состоянии объекта, исправлением полей запроса его не починить.
+	CodeAccountHasTransactions = "account_has_transactions"
+	CodeAccountArchived        = "account_archived"
 )
 
 // Problem — тело ответа с ошибкой. Поля соответствуют схеме Problem в openapi.yaml.
@@ -109,6 +114,13 @@ func TooManyRequests(retryAfter time.Duration) *Problem {
 
 func NotFound(detail string) *Problem {
 	return New(http.StatusNotFound, CodeNotFound, detail)
+}
+
+// Conflict — 409: запрос корректен, но противоречит состоянию объекта
+// (удалить счёт с операциями, корректировать архивный счёт). code —
+// машиночитаемая причина, по ней клиент выбирает текст.
+func Conflict(code, detail string) *Problem {
+	return New(http.StatusConflict, code, detail)
 }
 
 func MethodNotAllowed() *Problem {

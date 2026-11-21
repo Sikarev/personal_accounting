@@ -316,7 +316,13 @@ func TestAccountOrder(t *testing.T) {
 	// Повторы и пустой список отклоняет контракт.
 	decodeProblem(t, e.as(u, http.MethodPut, "/accounts/order", `{"accountIds":["`+aID+`","`+aID+`"]}`),
 		http.StatusUnprocessableEntity, "validation_failed")
-	got := fieldErrors(t, decodeProblem(t, e.as(u, http.MethodPut, "/accounts/order", `{"accountIds":[]}`),
+	// Тот же UUID в другом регистре uniqueItems не ловит — ловит обработчик.
+	got := fieldErrors(t, decodeProblem(t, e.as(u, http.MethodPut, "/accounts/order",
+		`{"accountIds":["`+aID+`","`+strings.ToUpper(aID)+`"]}`), http.StatusUnprocessableEntity, "validation_failed"))
+	if !reflect.DeepEqual(got, []string{"accountIds:invalid"}) {
+		t.Fatalf("повтор в другом регистре: %v", got)
+	}
+	got = fieldErrors(t, decodeProblem(t, e.as(u, http.MethodPut, "/accounts/order", `{"accountIds":[]}`),
 		http.StatusUnprocessableEntity, "validation_failed"))
 	if !slices.Contains(got, "accountIds:too_few_items") {
 		t.Fatalf("пустой список: %v", got)

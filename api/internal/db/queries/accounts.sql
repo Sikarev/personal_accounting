@@ -10,6 +10,8 @@
 -- + SUM(to_amount) там, где он to_account_id; только неудалённые операции,
 -- без учёта даты. SUM(bigint) в Postgres — numeric, поэтому ::bigint.
 -- has_transactions учитывает и удалённые операции: удалить счёт с ними нельзя.
+-- Каждый EXISTS явно указывает deleted_at IS NULL / IS NOT NULL, чтобы попасть
+-- в свой частичный индекс (00001 и 00004); без этого условия — полный скан.
 SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance,
        a.include_in_total, a.color, a.sort_order, a.archived_at,
        (a.initial_balance
@@ -21,9 +23,17 @@ SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance
                       AND t.deleted_at IS NULL), 0)
        )::bigint AS balance,
        (EXISTS (SELECT 1 FROM transactions t
-                WHERE t.family_id = a.family_id AND t.account_id = a.id)
+                WHERE t.family_id = a.family_id AND t.account_id = a.id
+                  AND t.deleted_at IS NULL)
         OR EXISTS (SELECT 1 FROM transactions t
-                   WHERE t.family_id = a.family_id AND t.to_account_id = a.id)
+                   WHERE t.family_id = a.family_id AND t.to_account_id = a.id
+                     AND t.deleted_at IS NULL)
+        OR EXISTS (SELECT 1 FROM transactions t
+                   WHERE t.family_id = a.family_id AND t.account_id = a.id
+                     AND t.deleted_at IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM transactions t
+                   WHERE t.family_id = a.family_id AND t.to_account_id = a.id
+                     AND t.deleted_at IS NOT NULL)
        )::boolean AS has_transactions
 FROM accounts a
 WHERE a.family_id = @family_id
@@ -99,10 +109,19 @@ FOR UPDATE;
 
 -- name: AccountHasTransactions :one
 -- Любые операции, в т. ч. удалённые и где счёт — получатель перевода.
+-- Разбито по deleted_at ради частичных индексов (см. ListAccounts).
 SELECT (EXISTS (SELECT 1 FROM transactions t
-               WHERE t.family_id = @family_id AND t.account_id = @account_id)
+               WHERE t.family_id = @family_id AND t.account_id = @account_id
+                 AND t.deleted_at IS NULL)
     OR EXISTS (SELECT 1 FROM transactions t
-               WHERE t.family_id = @family_id AND t.to_account_id = @account_id))::boolean AS has_transactions;
+               WHERE t.family_id = @family_id AND t.to_account_id = @account_id
+                 AND t.deleted_at IS NULL)
+    OR EXISTS (SELECT 1 FROM transactions t
+               WHERE t.family_id = @family_id AND t.account_id = @account_id
+                 AND t.deleted_at IS NOT NULL)
+    OR EXISTS (SELECT 1 FROM transactions t
+               WHERE t.family_id = @family_id AND t.to_account_id = @account_id
+                 AND t.deleted_at IS NOT NULL))::boolean AS has_transactions;
 
 -- name: DeleteAccount :exec
 DELETE FROM accounts

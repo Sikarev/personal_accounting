@@ -190,7 +190,19 @@ func (s *server) DeleteAccount(ctx context.Context, req oapi.DeleteAccountReques
 
 func (s *server) ReorderAccounts(ctx context.Context, req oapi.ReorderAccountsRequestObject) (oapi.ReorderAccountsResponseObject, error) {
 	p := currentUser(ctx)
-	ids := req.Body.AccountIds // уникальность и 1–500 элементов проверил валидатор контракта
+	ids := req.Body.AccountIds // 1–500 элементов проверил валидатор контракта
+	// uniqueItems валидатора сравнивает строки, а один UUID можно записать
+	// в разном регистре. Повтор дал бы меньше изменённых строк, чем id, и
+	// ложный 404 — поэтому сравниваем уже разобранные значения.
+	seen := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return nil, problem.Validation(problem.FieldError{
+				Field: "accountIds", Code: "invalid", Message: "Счета в списке повторяются.",
+			})
+		}
+		seen[id] = true
+	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

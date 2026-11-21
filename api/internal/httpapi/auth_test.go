@@ -574,6 +574,9 @@ func TestContractSecurity(t *testing.T) {
 		// Ссылку из письма могут открыть в другом браузере, без сессии.
 		"verifyEmail": true, "requestPasswordReset": true, "confirmPasswordReset": true,
 		"resendVerificationEmail": false,
+		// Категории — только для вошедших.
+		"listCategories": false, "createCategory": false, "updateCategory": false, "moveCategory": false,
+		"archiveCategory": false, "unarchiveCategory": false, "mergeCategory": false,
 	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)

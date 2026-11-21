@@ -23,7 +23,9 @@ export interface FieldError {
   /**
    * Машиночитаемый код нарушения (`required`, `invalid_format`, `too_long`, ...).
    * Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован;
-   * `invalid_token` — токен из письма неверный, просрочен или уже использован.
+   * `invalid_token` — токен из письма неверный, просрочен или уже использован;
+   * категории: `invalid_parent`, `has_children`, `name_taken`, `invalid_target`
+   * (см. описания операций категорий).
    */
   code: string
   /** Пояснение на русском. */

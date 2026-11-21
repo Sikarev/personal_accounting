@@ -6,7 +6,7 @@ import { apiErrorText, fieldErrorTexts, type Category } from '../../../shared/ap
 import { useT } from '../../../shared/i18n'
 import { categoryOptions, childrenOf } from '../../../shared/lib/categoryTree'
 import { formatCount } from '../../../shared/lib/plural'
-import { CategoryPicker } from '../../../shared/ui/CategoryPicker/CategoryPicker'
+import { CategoryPicker } from '../../../shared/ui'
 import { icons } from '../../../theme'
 import { categoryErrorOverrides } from './categoryErrors'
 

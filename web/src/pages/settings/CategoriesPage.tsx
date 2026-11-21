@@ -1,6 +1,6 @@
 import { Box, Button, Paper, Tabs } from '@mantine/core'
 import { IconAlertCircle, IconCategory, IconPlus } from '@tabler/icons-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 
 import { paths } from '../../app/navigation'
@@ -89,8 +89,13 @@ export function CategoriesPage() {
   const [opened, setOpened] = useState(false)
   // Новый ключ на каждое открытие — форма начинается с чистого состояния.
   const [dialogKey, setDialogKey] = useState(0)
+  // Действие в окне убрало строку, открывшую окно (слияние): фокус ставим сами после
+  // закрытия — как на экране «Счета» (`returnFocus` + `onExitTransitionEnd`).
+  const [returnFocus, setReturnFocus] = useState(true)
+  const afterClose = useRef<(() => void) | null>(null)
   const open = (next: Dialog) => {
     setDialog(next)
+    setReturnFocus(true)
     setDialogKey((k) => k + 1)
     setOpened(true)
   }
@@ -258,6 +263,11 @@ export function CategoriesPage() {
         title={dialog && dialogTitle(dialog, t)}
         // Слиянию нужен простор под выпадающий список категорий: на телефоне — на всю высоту.
         fullHeight={dialog?.type === 'merge'}
+        returnFocus={returnFocus}
+        onExitTransitionEnd={() => {
+          afterClose.current?.()
+          afterClose.current = null
+        }}
       >
         {dialog?.type === 'create' && (
           <CategoryNameForm
@@ -311,9 +321,10 @@ export function CategoriesPage() {
                 withChildren(categories, category.id),
               )
               await actions.merge(category, targetId)
-              close()
               // Окно вернуло бы фокус на удалённую строку — ведём его к соседней.
-              focusFirst(focusTo)
+              setReturnFocus(false)
+              afterClose.current = () => focusFirst(focusTo)
+              close()
             }}
           />
         )}

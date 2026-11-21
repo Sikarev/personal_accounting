@@ -22,7 +22,13 @@ export type PageHeaderProps = {
 export function PageHeader({ title, actions, back }: PageHeaderProps) {
   return (
     <Group justify="space-between" align="center" gap="md" mb="lg" wrap="nowrap">
-      <Group gap="xs" align="center" wrap="nowrap" className={classes.start}>
+      <Group
+        gap="xs"
+        align="center"
+        wrap="nowrap"
+        className={classes.start}
+        data-shrink={actions ? undefined : true}
+      >
         {back && (
           <ActionIcon
             component={Link}

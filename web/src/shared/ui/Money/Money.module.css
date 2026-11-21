@@ -3,3 +3,8 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* wrap: перенос разрешён только в точках <wbr> (после разделителей разрядов). */
+.root[data-wrap] {
+  white-space: normal;
+}

@@ -1,0 +1,240 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Итог по валютам: каждая валюта — пункт списка, пункты переносятся целиком. */
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--mantine-spacing-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Запас на случай, если и одного разряда не помещается (Money wrap переносит по разрядам). */
+.wrapAmount {
+  overflow-wrap: anywhere;
+}
+
+/* Строки списка доходят до скруглённых краёв карточки — обрезаем по радиусу.
+   Карточка — контейнер для @container: строки перестраиваются по её ширине. */
+.listCard {
+  overflow: hidden;
+  container: account-list / inline-size;
+}
+
+/* Кнопки — зона касания не ниже 44 px (у Mantine md — 42 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}
+
+/* Строка счёта: метка · название и тип · остаток. Вся строка — кнопка «открыть». */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  width: 100%;
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  color: var(--mantine-color-text);
+
+  /* Кольцо фокуса внутрь: снаружи его обрезала бы карточка (overflow: hidden). */
+  &:focus-visible {
+    outline-offset: calc(-1 * var(--mantine-spacing-xs) / 2);
+  }
+}
+
+.mark {
+  flex: none;
+  display: inline-flex;
+}
+
+/* Название с типом и остаток: в ряд, остаток справа. Огромный остаток не сжимает
+   название в пару букв: под название остаётся не меньше 5em, а остаток переносится
+   на следующую строку (по-прежнему справа). */
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mantine-spacing-md);
+}
+
+.rowText {
+  flex: 1 1 5em;
+  min-width: 0;
+}
+
+.amount {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+/* Узкая карточка — телефон с крупным системным шрифтом (ux.md, раздел 6: до 200 %).
+   В em: при 200 % порог растёт вместе со шрифтом. Метка скрывается (она декоративна,
+   тип есть текстом), остаток уходит под название и может переноситься. */
+@container account-list (max-width: 20em) {
+  .mark {
+    display: none;
+  }
+
+  .row {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+
+  .rowMain {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .rowText {
+    flex: none;
+  }
+
+  .amount {
+    margin-inline-start: 0;
+    /* Запас: Money wrap переносит по разрядам, этого хватает почти всегда. */
+    overflow-wrap: anywhere;
+  }
+
+  /* Ручка перетаскивания (88 px при шрифте 200 %) съела бы место у названия.
+     Порядок остаётся доступен через «Выше» / «Ниже» в окне счёта. */
+  [data-sortable-handle] {
+    display: none;
+  }
+
+  /* Архив: «Вернуть» под строкой, иначе название сжимается до пары букв. */
+  .archivedItem {
+    flex-wrap: wrap;
+    padding-bottom: var(--mantine-spacing-xs);
+  }
+
+  .rowGrow {
+    flex-basis: 100%;
+  }
+}
+
+.rowGrow {
+  flex: 1;
+  min-width: 0;
+}
+
+.plainList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.archivedItem {
+  display: flex;
+  gap: var(--mantine-spacing-xs);
+  align-items: center;
+  padding-inline-end: var(--mantine-spacing-sm);
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+
+  /* Подсветка наведения — на всю строку, вместе с кнопкой «Вернуть». */
+  &:hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+}
+
+/* «Архив (N)» — заголовок-кнопка, раскрывающая список. */
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: var(--app-touch-target);
+  font: inherit;
+  color: var(--mantine-color-text);
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+
+  &[data-expanded] {
+    transform: rotate(180deg);
+  }
+}
+
+/* Действия со счётом под формой: в ряд, переносятся на узком экране. */
+.sheetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+  padding-top: var(--mantine-spacing-md);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* «Выше» / «Ниже» — пара кнопок, переносится вместе. */
+.order {
+  display: flex;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Валюта и видимость существующего счёта — только для чтения. */
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  align-items: baseline;
+  margin: 0;
+
+  & dd {
+    margin: 0;
+    min-width: 0;
+  }
+}
+
+/* Скелетон: высоты полос — высота строки текста соответствующего размера. */
+.skeletonLabel {
+  width: 8rem;
+  height: var(--mantine-font-size-sm);
+}
+
+.skeletonTotal {
+  width: 12rem;
+  height: var(--mantine-font-size-xl);
+}
+
+.skeletonHeading {
+  width: 6rem;
+  height: var(--mantine-font-size-lg);
+}
+
+.skeletonRow {
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+
+  & + & {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.skeletonMark {
+  flex: none;
+  /* Как AccountMark размера lg (ThemeIcon xl — 44 px). */
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+}
+
+.skeletonName {
+  height: var(--mantine-font-size-md);
+}
+
+.skeletonType {
+  height: var(--mantine-font-size-xs);
+}

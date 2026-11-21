@@ -1,4 +1,5 @@
 import { Text, type TextProps } from '@mantine/core'
+import type { ReactNode } from 'react'
 
 import { formatMoneyParts, moneyTone, type MoneyVariant } from '../../lib/money'
 import { semanticColors } from '../../../theme'
@@ -25,6 +26,13 @@ export type MoneyProps = Omit<TextProps, 'c' | 'color' | 'variant'> & {
    * Цвет никогда не единственный носитель смысла: знак есть всегда.
    */
   variant?: MoneyVariant
+  /**
+   * Разрешить перенос по разрядам: «999 999 999 / 999,99 ₽». Нужен там, где огромная
+   * сумма при крупном шрифте не помещается в строку (итог, узкая раскладка). Точки
+   * переноса — `<wbr>` после разделителей разрядов: в копируемый текст не попадают
+   * (в отличие от U+200B). По умолчанию сумма не переносится.
+   */
+  wrap?: boolean
   /** Вывести как `<span>` (по умолчанию) или другой тег. */
   component?: 'span' | 'div' | 'p'
 }
@@ -39,6 +47,7 @@ export function Money({
   minorUnits,
   roundToMajor,
   variant = 'plain',
+  wrap = false,
   component = 'span',
   className,
   ...textProps
@@ -57,8 +66,26 @@ export function Money({
       {...textProps}
       c={tone && semanticColors[tone]}
       className={className ? `${classes.root} ${className}` : classes.root}
+      data-wrap={wrap || undefined}
     >
-      {text}
+      {wrap ? withBreakOpportunities(text) : text}
     </Text>
   )
+}
+
+// Разделители, которые ставит Intl для ru-RU: неразрывный и узкий неразрывный пробелы.
+const SEPARATOR = /([\u00a0\u202f])/
+const DIGIT = /^\d/
+
+/**
+ * `<wbr>` после разделителей разрядов: строка та же, но браузер может перенести здесь.
+ * Перед знаком валюты точки переноса нет — «₽» не уезжает на отдельную строку.
+ */
+function withBreakOpportunities(text: string): ReactNode[] {
+  const parts = text.split(SEPARATOR)
+  return parts.flatMap((part, i) => {
+    if (!part) return []
+    const betweenDigits = SEPARATOR.test(part) && DIGIT.test(parts[i + 1] ?? '')
+    return betweenDigits ? [part, <wbr key={i} />] : [part]
+  })
 }

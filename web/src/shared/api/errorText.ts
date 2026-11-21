@@ -33,6 +33,10 @@ export function apiErrorText(error: unknown, t: Messages): string {
       return t.errors.validation
     case 'not_found':
       return t.errors.notFound
+    case 'account_has_transactions':
+      return t.errors.accountHasTransactions
+    case 'account_archived':
+      return t.errors.accountArchived
   }
 
   // Код неизвестен (новый в контракте или ответ не от нашего API) — решаем по статусу.

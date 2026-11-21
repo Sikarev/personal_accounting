@@ -18,6 +18,14 @@ export type ResponsiveSheetProps = {
   fullHeight?: boolean
   /** Ширина модалки на desktop. */
   desktopSize?: 'sm' | 'md' | 'lg'
+  /**
+   * Вернуть фокус на кнопку, открывшую окно (по умолчанию да). Выключают, когда
+   * действие в окне убрало эту кнопку со страницы (счёт удалён или ушёл в архив):
+   * фокус тогда ставит сам экран в `onExitTransitionEnd`, иначе он упал бы на `body`.
+   */
+  returnFocus?: boolean
+  /** Окно закрылось и доиграло анимацию: содержимое уже размонтировано. */
+  onExitTransitionEnd?: () => void
 }
 
 /**
@@ -39,6 +47,8 @@ export function ResponsiveSheet({
   children,
   fullHeight = false,
   desktopSize = 'md',
+  returnFocus = true,
+  onExitTransitionEnd,
 }: ResponsiveSheetProps) {
   const mobileNow = useMobileLayout()
   const [isMobile, setIsMobile] = useState(mobileNow)
@@ -63,6 +73,8 @@ export function ResponsiveSheet({
         title={title}
         position="bottom"
         size={fullHeight ? '100%' : 'auto'}
+        returnFocus={returnFocus}
+        onExitTransitionEnd={onExitTransitionEnd}
         closeButtonProps={closeButtonProps}
         classNames={{
           content: fullHeight ? classes.sheetFull : classes.sheet,
@@ -82,6 +94,8 @@ export function ResponsiveSheet({
       onClose={onClose}
       title={title}
       size={desktopSize}
+      returnFocus={returnFocus}
+      onExitTransitionEnd={onExitTransitionEnd}
       radius="lg"
       centered
       closeButtonProps={closeButtonProps}

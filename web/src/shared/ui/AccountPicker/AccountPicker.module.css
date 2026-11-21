@@ -1,0 +1,89 @@
+/* Компактная кнопка «[метка] Карта ⌄»: не шире контейнера, длинное название с «…». */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  max-width: 100%;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-text);
+
+  &:hover:not(:disabled) {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    color: var(--mantine-color-dimmed);
+  }
+}
+
+.triggerName {
+  min-width: 0;
+  font-weight: 500;
+}
+
+.chevron {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-sm));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-text);
+
+  &:hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  /* Выбранный — как активный пункт меню: подложка и галочка (не только цвет). */
+  &[data-selected] {
+    background-color: var(--mantine-primary-color-light);
+  }
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Место под галочку есть у каждого пункта: суммы стоят ровной колонкой. */
+.check {
+  flex: none;
+  display: inline-flex;
+  width: var(--mantine-spacing-lg);
+  color: var(--app-color-accent-text);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  padding-block: var(--mantine-spacing-md);
+}

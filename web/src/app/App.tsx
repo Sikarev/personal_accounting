@@ -2,7 +2,6 @@ import { lazy } from 'react'
 import { Route, Routes } from 'react-router'
 
 import { RedirectIfAuthenticated, RequireAuth } from '../features/auth/RouteGuards'
-import { AccountsPage } from '../pages/AccountsPage'
 import { AuthPage } from '../pages/auth/AuthPage'
 import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage'
@@ -18,16 +17,18 @@ import { AppLayout } from './layout/AppLayout'
 import { RouteBoundary } from './layout/RouteBoundary'
 import { paths } from './navigation'
 
-// «Категории» — по маршруту (ux.md, раздел 8): перетаскивание (@dnd-kit) и выпадающие
-// списки Mantine добавляли к первой загрузке ~57 КБ gzip, а экран открывают редко.
-// Загрузку и ошибку загрузки чанка обрабатывает RouteBoundary — для всех ленивых экранов.
+// Лёгкие экраны грузятся вместе с оболочкой. Тяжёлые — отдельным чанком по маршруту
+// (React.lazy), чтобы не тратить бюджет JS первой загрузки (ux.md, раздел 8):
+// «Счета» и «Категории» — с перетаскиванием (@dnd-kit) и формами, дальше — отчёты
+// с графиками. Загрузку и ошибку загрузки чанка обрабатывает RouteBoundary — для всех
+// ленивых экранов сразу, свой Suspense не нужен.
+const AccountsPage = lazy(() =>
+  import('../pages/accounts/AccountsPage').then((m) => ({ default: m.AccountsPage })),
+)
 const CategoriesPage = lazy(() =>
   import('../pages/settings/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
 )
 
-// Лёгкие экраны грузятся вместе с оболочкой, тяжёлые — через React.lazy по маршруту
-// (бюджет JS в ux.md, раздел 8).
-//
 // Публичные страницы (вход, восстановление пароля, документы) — вне оболочки.
 // Их список для обработки 401 — `isPublicPath` в navigation.ts; новый публичный маршрут
 // добавляется и туда.

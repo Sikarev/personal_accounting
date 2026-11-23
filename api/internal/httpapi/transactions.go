@@ -413,9 +413,10 @@ func transactionToAPI(r txRow, userID uuid.UUID) oapi.Transaction {
 		Date:       openapi_types.Date{Time: r.OpDate},
 		CategoryId: r.CategoryID,
 		Comment:    r.Comment,
-		CreatedAt:  r.CreatedAt.UTC(),
-		UpdatedAt:  r.UpdatedAt.UTC(),
-		Editable:   r.Kind != dbgen.TransactionKindAdjustment && fullyVisible(r, userID),
+		// pgx возвращает timestamptz в поясе процесса; в API — всегда UTC.
+		CreatedAt: r.CreatedAt.UTC(),
+		UpdatedAt: r.UpdatedAt.UTC(),
+		Editable:  r.Kind != dbgen.TransactionKindAdjustment && fullyVisible(r, userID),
 	}
 	if r.CreatedBy != nil && r.AuthorName != nil {
 		t.Author = &oapi.TransactionUser{Id: *r.CreatedBy, Name: *r.AuthorName}

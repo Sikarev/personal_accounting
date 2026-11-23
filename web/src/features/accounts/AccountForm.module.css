@@ -1,0 +1,53 @@
+/* Валюта и видимость существующего счёта — только для чтения. */
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  align-items: baseline;
+  margin: 0;
+
+  & dd {
+    margin: 0;
+    min-width: 0;
+  }
+}
+
+/* Быстрые варианты нового счёта (онбординг): чипы переносятся, зона касания ≥ 44 px. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+}
+
+.chipRoot {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chipLabel {
+  height: auto;
+  min-height: var(--app-touch-target);
+  max-width: 100%;
+  white-space: normal;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* «Ещё настройки» — по левому краю формы, как ссылка-раскрывашка, а не главная кнопка. */
+.moreToggle {
+  align-self: flex-start;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-xs);
+}
+
+.chevron {
+  transition: transform 150ms ease;
+
+  &[data-open] {
+    transform: rotate(180deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}

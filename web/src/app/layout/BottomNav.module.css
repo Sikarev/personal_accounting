@@ -98,3 +98,16 @@
     transform: scale(0.96);
   }
 }
+
+/* Онбординг (шаг 2): «операции вносятся этой кнопкой». Широкий мягкий ореол, а не тонкое
+   кольцо — чтобы выделение не путалось с фокусом. Смысл несёт текст карточки на главной,
+   ореол только помогает найти кнопку. Без анимации (ux.md, §7). */
+.add[data-highlight] {
+  box-shadow: 0 0 0 var(--mantine-spacing-sm) var(--mantine-primary-color-light);
+
+  /* Фокус поверх ореола: кольцо снаружи него, вид при фокусе заметно меняется. */
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: calc(var(--mantine-spacing-sm) + 2px);
+  }
+}

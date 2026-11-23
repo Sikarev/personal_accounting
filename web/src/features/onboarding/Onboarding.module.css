@@ -1,0 +1,23 @@
+/* Форма в одну колонку: на широком экране не растягиваем поля на всю ширину контента. */
+.step {
+  max-width: calc(var(--app-auth-form-width) + 2 * var(--mantine-spacing-lg));
+}
+
+.intro {
+  max-width: var(--app-reading-width);
+
+  /* Фокус ставится программно (результат создания счёта), с клавиатуры сюда не попасть —
+     кольцо как у остальных элементов, чтобы было видно, где теперь фокус. */
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* На телефоне кнопки — друг под другом во всю ширину (под большой палец), на desktop — по
+   ширине подписи; при крупном шрифте переносятся. data-mobile — по useMobileLayout(). */
+.actions[data-mobile] {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+}

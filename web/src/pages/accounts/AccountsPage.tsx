@@ -46,7 +46,7 @@ import {
   SortableList,
 } from '../../shared/ui'
 import { icons } from '../../theme'
-import { AccountForm } from './AccountForm'
+import { AccountForm } from '../../features/accounts/AccountForm'
 import { AdjustBalanceForm } from './AdjustBalanceForm'
 import { useAccountActions } from './useAccountActions'
 import classes from './AccountsPage.module.css'

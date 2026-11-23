@@ -185,20 +185,6 @@
   gap: var(--mantine-spacing-sm);
 }
 
-/* Валюта и видимость существующего счёта — только для чтения. */
-.facts {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
-  align-items: baseline;
-  margin: 0;
-
-  & dd {
-    margin: 0;
-    min-width: 0;
-  }
-}
-
 /* Скелетон: высоты полос — высота строки текста соответствующего размера. */
 .skeletonLabel {
   width: 8rem;

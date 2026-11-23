@@ -498,9 +498,8 @@ test.describe('подтверждение e-mail', () => {
 
   test('успех у вошедшего: плашка в оболочке исчезает', { tag: '@a11y' }, async ({ page }) => {
     let verified = false
-    await page.route(`**${API}/me`, (route) =>
-      route.fulfill({ json: meFixture({ emailVerified: verified }) }),
-    )
+    // Свой /me: после подтверждения он отвечает уже с emailVerified: true.
+    await mockSignedIn(page, () => meFixture({ emailVerified: verified }))
     await page.route(`**${API}/auth/verify-email`, (route) => {
       verified = true
       return route.fulfill({ status: 204 })

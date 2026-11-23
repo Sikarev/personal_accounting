@@ -3,6 +3,7 @@ import { Outlet } from 'react-router'
 
 import { QuickAddProvider } from '../../features/quick-add/QuickAddProvider'
 import { EmailVerificationBanner } from '../../features/auth/EmailVerificationBanner'
+import { OnboardingProvider } from '../../features/onboarding/OnboardingProvider'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { layout } from '../../theme'
 import classes from './AppLayout.module.css'
@@ -26,30 +27,32 @@ export function AppLayout() {
 
   return (
     <QuickAddProvider>
-      <AppShell
-        navbar={mobile ? undefined : { width: layout.navbarWidth, breakpoint: 'sm' }}
-        footer={
-          mobile
-            ? // Высота панели + отступ под системную полоску «домой» на iPhone.
-              { height: 'calc(var(--app-bottom-nav-height) + env(safe-area-inset-bottom))' }
-            : undefined
-        }
-      >
-        {!mobile && <Sidebar />}
+      <OnboardingProvider>
+        <AppShell
+          navbar={mobile ? undefined : { width: layout.navbarWidth, breakpoint: 'sm' }}
+          footer={
+            mobile
+              ? // Высота панели + отступ под системную полоску «домой» на iPhone.
+                { height: 'calc(var(--app-bottom-nav-height) + env(safe-area-inset-bottom))' }
+              : undefined
+          }
+        >
+          {!mobile && <Sidebar />}
 
-        <AppShell.Main className={classes.main} data-mobile={mobile || undefined}>
-          <div className={classes.content}>
-            <EmailVerificationBanner />
-            <Outlet />
-          </div>
-        </AppShell.Main>
+          <AppShell.Main className={classes.main} data-mobile={mobile || undefined}>
+            <div className={classes.content}>
+              <EmailVerificationBanner />
+              <Outlet />
+            </div>
+          </AppShell.Main>
 
-        {mobile && (
-          <AppShell.Footer className={classes.footer}>
-            <BottomNav />
-          </AppShell.Footer>
-        )}
-      </AppShell>
+          {mobile && (
+            <AppShell.Footer className={classes.footer}>
+              <BottomNav />
+            </AppShell.Footer>
+          )}
+        </AppShell>
+      </OnboardingProvider>
     </QuickAddProvider>
   )
 }

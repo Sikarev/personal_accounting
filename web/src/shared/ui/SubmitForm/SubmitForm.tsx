@@ -26,7 +26,13 @@ export type SubmitFormProps = {
   /** Показать у сообщения кнопку «Повторить» (ошибка сети). */
   retryable?: boolean
   submitLabel: string
+  /** Идёт отправка: повторная отправка (второй Enter) игнорируется. */
   pending: boolean
+  /**
+   * Показывать индикатор на кнопке. По умолчанию — всё время `pending`; форма быстрого
+   * ввода передаёт `useDelayedLoading(pending)`, чтобы быстрый ответ не мигал (ux.md, §4).
+   */
+  loading?: boolean
   children: ReactNode
 }
 
@@ -37,6 +43,7 @@ export function SubmitForm({
   retryable,
   submitLabel,
   pending,
+  loading = pending,
   children,
 }: SubmitFormProps) {
   const t = useT()
@@ -78,7 +85,7 @@ export function SubmitForm({
           </Alert>
         )}
         {children}
-        <Button type="submit" size="md" fullWidth loading={pending}>
+        <Button type="submit" size="md" fullWidth loading={loading}>
           {submitLabel}
         </Button>
       </Stack>

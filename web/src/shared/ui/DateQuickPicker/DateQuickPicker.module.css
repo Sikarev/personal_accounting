@@ -1,0 +1,81 @@
+/* Компактная кнопка «📅 Сегодня ⌄» — как у AccountPicker: стоят рядом в одной строке. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  max-width: 100%;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-text);
+
+  &:hover:not(:disabled) {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    color: var(--mantine-color-dimmed);
+  }
+}
+
+.triggerText {
+  min-width: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.icon {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-sm));
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-text);
+
+  &:hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  /* Выбранный — подложка и галочка (не только цвет), как в AccountPicker. */
+  &[data-selected] {
+    background-color: var(--mantine-primary-color-light);
+  }
+}
+
+.optionName {
+  flex: 1;
+  min-width: 0;
+}
+
+.check {
+  flex: none;
+  display: inline-flex;
+  width: var(--mantine-spacing-lg);
+  color: var(--app-color-accent-text);
+}
+
+.other {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}

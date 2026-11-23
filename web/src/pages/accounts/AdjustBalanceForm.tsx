@@ -9,14 +9,15 @@ import { isNegativeBalanceProblem, minorUnitsOf } from '../../shared/lib/account
 import { parseMoneyInput } from '../../shared/lib/moneyInput'
 import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
-import { Money, SubmitForm } from '../../shared/ui'
+import { Money, notifyWithUndo, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from '../../features/accounts/accountsCache'
+import { undoTransaction } from '../../features/transactions/transactionToasts'
 
 /**
  * Корректировка остатка: пользователь вводит, сколько денег на счёте на самом деле,
  * сервер записывает операцию-корректировку на разницу.
  *
- * Тост результата — без «Отменить»: удаления операций ещё нет (техдолг №32, этап 3).
+ * Тост результата — с «Отменить»: удаляет операцию-корректировку, остаток возвращается.
  */
 export function AdjustBalanceForm({
   account,
@@ -49,20 +50,23 @@ export function AdjustBalanceForm({
     adjust.mutate(
       { accountId: account.id, data: { balance: parsed.value } },
       {
-        onSuccess: ({ account: updated }) => {
+        onSuccess: ({ account: updated, transactionId }) => {
           upsertAccount(qc, updated)
           onDone()
           const diff = updated.balance - before
-          notifications.show({
-            message:
-              diff === 0 ? (
-                t.accounts.adjust.unchanged
-              ) : (
-                <>
-                  {t.accounts.adjust.done}{' '}
-                  <Money amount={diff} currency={updated.currency} variant="flow" />
-                </>
-              ),
+          if (diff === 0 || !transactionId) {
+            notifications.show({ message: t.accounts.adjust.unchanged })
+            return
+          }
+          // «Отменить» удаляет операцию-корректировку (техдолг №32): остаток вернётся.
+          notifyWithUndo({
+            message: (
+              <>
+                {t.accounts.adjust.done}{' '}
+                <Money amount={diff} currency={updated.currency} variant="flow" />
+              </>
+            ),
+            onUndo: () => void undoTransaction(qc, transactionId, t, t.accounts.adjust.undoFailed),
           })
         },
         onError: (error) => {

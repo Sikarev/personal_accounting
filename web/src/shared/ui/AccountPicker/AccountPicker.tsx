@@ -48,7 +48,9 @@ export function AccountPicker({
   const t = useT()
   const [opened, { open, close }] = useDisclosure(false)
   const groups = groupActiveAccounts(accounts)
-  const selected = accounts.find((a) => a.id === value && a.archivedAt === null) ?? null
+  // Выбранный может быть архивным (правка старой операции): на кнопке он виден,
+  // но в списке выбора архивных нет.
+  const selected = accounts.find((a) => a.id === value) ?? null
   const isEmpty = groups.shared.length === 0 && groups.private.length === 0
   const title = label ?? t.accounts.picker.label
   const sharedId = useId()

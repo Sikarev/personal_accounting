@@ -60,10 +60,20 @@ export function CategoryPicker({
   const t = useT()
   const frequentLabelId = useId()
 
-  const options = useMemo(
-    () => categoryOptions(categories, kind, exclude),
-    [categories, kind, exclude],
-  )
+  const options = useMemo(() => {
+    const active = categoryOptions(categories, kind, exclude)
+    // Выбранная категория в архиве (правка старой операции) — оставляем её в поле,
+    // иначе оно выглядело бы пустым. Других архивных в выборе нет.
+    const current = categories.find((c) => c.id === value && c.kind === kind)
+    if (!current || active.some((o) => o.id === current.id)) return active
+    const option: CategoryOption = {
+      id: current.id,
+      label: current.name,
+      name: current.name,
+      parentName: null,
+    }
+    return [...active, option]
+  }, [categories, kind, exclude, value])
   const data: ComboboxItem[] = useMemo(
     () => options.map((o) => ({ value: o.id, label: o.label })),
     [options],

@@ -2,6 +2,7 @@ import { Drawer, Modal } from '@mantine/core'
 import { useState, type ReactNode } from 'react'
 
 import { useT } from '../../i18n'
+import { useCloseOnBack } from '../../lib/useCloseOnBack'
 import { useMobileLayout } from '../../lib/useMobileLayout'
 import classes from './ResponsiveSheet.module.css'
 
@@ -39,6 +40,10 @@ export type ResponsiveSheetProps = {
  * Доступность обеспечивает Mantine: фокус переходит внутрь и не выходит за пределы окна,
  * `Esc` и клик по подложке закрывают, после закрытия фокус возвращается на кнопку,
  * которая открыла окно.
+ *
+ * Системная кнопка «Назад» закрывает окно (`useCloseOnBack`): открытое окно добавляет
+ * запись в историю. Ссылка внутри окна должна переходить с `replace: true`, иначе
+ * в истории останется лишний шаг с адресом экрана под окном.
  */
 export function ResponsiveSheet({
   opened,
@@ -61,6 +66,8 @@ export function ResponsiveSheet({
     setWasOpened(opened)
     if (opened) setIsMobile(mobileNow)
   }
+
+  useCloseOnBack(opened, onClose)
 
   const t = useT()
   const closeButtonProps = { 'aria-label': t.common.close }

@@ -1,0 +1,58 @@
+/* Как переключатель «Вход / Регистрация» и активный пункт меню (handoff, «Web»): активный
+   сегмент — подложка primary-light, акцентный текст и рамка акцентного цвета (≥ 3:1 к фону
+   переключателя и к соседнему сегменту в обеих темах, WCAG 1.4.11). */
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--app-color-surface);
+}
+
+.item {
+  /* Поровну в строке (основа 0), но не уже подписи: не помещается — сегмент переносится
+     на следующую строку целиком, слово не рвётся. */
+  flex: 1 1 0;
+  min-width: max-content;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-md);
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    color: var(--mantine-color-text);
+  }
+
+  &:has(:focus-visible) {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+  }
+
+  &[data-active] {
+    font-weight: 600;
+    color: var(--app-color-accent-text);
+    background-color: var(--mantine-primary-color-light);
+    border-color: var(--app-color-accent-text);
+  }
+}
+
+/* Радиокнопка невидима, но в дереве доступности и в порядке Tab: фокус рисует сегмент. */
+.input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}

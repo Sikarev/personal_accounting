@@ -1,0 +1,54 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Сумма — главное поле формы: крупнее остальных, табличные цифры. */
+.input {
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Итог выражения «= 590 ₽» — цветом текста, а не приглушённым: это ответ, а не подсказка. */
+.description {
+  margin-top: var(--mantine-spacing-xs);
+  font-size: var(--mantine-font-size-md);
+  color: var(--mantine-color-text);
+}
+
+.result {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* Шесть кнопок в ряд, по ширине поля: при крупном шрифте сжимаются, а не вылезают за экран. */
+.operators {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--mantine-spacing-sm);
+}
+
+.operator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--mantine-color-default);
+  color: var(--mantine-color-text);
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 500;
+
+  &:active {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--mantine-color-default-hover);
+    }
+  }
+}

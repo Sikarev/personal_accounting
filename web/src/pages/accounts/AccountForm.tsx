@@ -14,10 +14,9 @@ import {
 import { useT, type Messages } from '../../shared/i18n'
 import { minorUnitsOf } from '../../shared/lib/accounts'
 import { formatMoneyInput, parseMoneyInput } from '../../shared/lib/moneyInput'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState, type FormErrors } from '../../shared/lib/useFormState'
-import { AccountColorPicker } from '../../shared/ui'
-import { AuthForm } from '../auth/AuthForm'
-import { submitErrorState } from '../auth/submitErrorState'
+import { AccountColorPicker, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from './accountsCache'
 import classes from './AccountsPage.module.css'
 
@@ -147,7 +146,7 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
 
   return (
     <Stack gap="lg">
-      <AuthForm
+      <SubmitForm
         onSubmit={submit}
         errorsShown={form.errorsShown}
         error={formError?.text ?? null}
@@ -232,7 +231,7 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
           onChange={(e) => form.setValue('includeInTotal', e.currentTarget.checked)}
         />
         <AccountColorPicker value={v.color} onChange={(color) => form.setValue('color', color)} />
-      </AuthForm>
+      </SubmitForm>
       {footer}
     </Stack>
   )

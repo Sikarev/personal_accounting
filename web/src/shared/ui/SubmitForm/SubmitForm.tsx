@@ -2,25 +2,18 @@ import { Alert, Button, Stack } from '@mantine/core'
 import { IconAlertCircle } from '@tabler/icons-react'
 import { useEffect, useRef, type FormEvent, type ReactNode } from 'react'
 
-import { useT } from '../../shared/i18n'
-import { icons } from '../../theme'
+import { useT } from '../../i18n'
+import { icons } from '../../../theme'
 
 /**
- * Общее для форм входа, регистрации и восстановления пароля: сообщение над формой,
- * фокус на первом поле с ошибкой, кнопка отправки во всю ширину.
+ * Каркас формы с отправкой (вход, регистрация, восстановление пароля, формы счёта):
+ * сообщение об ошибке над формой (с «Повторить» при ошибке сети), фокус на первом поле
+ * с ошибкой, кнопка отправки во всю ширину.
  *
  * Форма с `noValidate`: проверку и тексты ошибок даём сами (из словаря), а не
  * всплывающие подсказки браузера на его языке.
  */
-export function AuthForm({
-  onSubmit,
-  errorsShown,
-  error,
-  retryable,
-  submitLabel,
-  pending,
-  children,
-}: {
+export type SubmitFormProps = {
   onSubmit: () => void
   /**
    * Счётчик показов ошибок (`useFormState().errorsShown`): при его смене фокус переходит
@@ -35,7 +28,17 @@ export function AuthForm({
   submitLabel: string
   pending: boolean
   children: ReactNode
-}) {
+}
+
+export function SubmitForm({
+  onSubmit,
+  errorsShown,
+  error,
+  retryable,
+  submitLabel,
+  pending,
+  children,
+}: SubmitFormProps) {
   const t = useT()
   const formRef = useRef<HTMLFormElement>(null)
 

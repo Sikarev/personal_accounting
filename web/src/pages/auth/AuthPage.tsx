@@ -7,10 +7,9 @@ import { browserTimezone, useCompleteSignIn } from '../../features/auth/session'
 import { useLogin, useRegister } from '../../shared/api'
 import { useT, type Messages } from '../../shared/i18n'
 import { safeNextPath } from '../../shared/lib/safeNext'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState, type FormErrors } from '../../shared/lib/useFormState'
-import { AuthLayout, PasswordField } from '../../shared/ui'
-import { AuthForm } from './AuthForm'
-import { submitErrorState } from './submitErrorState'
+import { AuthLayout, PasswordField, SubmitForm } from '../../shared/ui'
 import classes from './AuthPage.module.css'
 
 export type AuthMode = 'login' | 'register'
@@ -131,7 +130,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         ))}
       </nav>
 
-      <AuthForm
+      <SubmitForm
         onSubmit={submit}
         errorsShown={form.errorsShown}
         error={formError?.text ?? null}
@@ -207,7 +206,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             classNames={{ label: classes.consentLabel }}
           />
         )}
-      </AuthForm>
+      </SubmitForm>
     </AuthLayout>
   )
 }

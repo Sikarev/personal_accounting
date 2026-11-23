@@ -20,7 +20,7 @@ import {
   IconTrash,
   IconWallet,
 } from '@tabler/icons-react'
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 
 import {
   apiErrorText,
@@ -61,8 +61,8 @@ const FOCUS = {
 }
 
 /**
- * Поставить фокус на первый найденный элемент. Ждём два кадра: оптимистичная правка
- * кэша перерисовывает список не синхронно.
+ * Поставить фокус на первый найденный элемент. Вызывать, когда изменение уже на экране
+ * (`focusWhenRendered` в `AccountsPage`); два кадра — запас на закрытие окна Mantine.
  */
 function focusFirst(selectors: string[]) {
   requestAnimationFrame(() =>
@@ -128,11 +128,39 @@ export function AccountsPage() {
   const groups = groupActiveAccounts(accounts)
   const hasActive = groups.shared.length + groups.private.length > 0
 
+  // Фокус после действия, которое убирает строку с места, ставим только тогда, когда
+  // список на экране уже перерисован с этим изменением. Ждать «пару кадров» нельзя:
+  // кэш TanStack Query оповещает компоненты через `setTimeout`, и под нагрузкой кадры
+  // успевали раньше перерисовки — фокус вставал на ещё не исчезнувший «Архив (N)»
+  // и вместе с ним уходил на `body`. Если запрос не удался и счёт откатился, ожидание
+  // так и не сработает — его сбросит следующее такое действие.
+  const renderedAccounts = useRef(accounts)
+  const pendingFocus = useRef<{ account: Account; targets: string[] } | null>(null)
+  const focusIfRendered = () => {
+    const pending = pendingFocus.current
+    if (!pending) return
+    const now = renderedAccounts.current.find((a) => a.id === pending.account.id)
+    // Счёт на экране ещё в прежнем состоянии — ждём следующей перерисовки списка.
+    if (now && now.archivedAt === pending.account.archivedAt) return
+    pendingFocus.current = null
+    focusFirst(pending.targets)
+  }
+  const focusWhenRendered = (account: Account, targets: string[]) => {
+    pendingFocus.current = { account, targets }
+    focusIfRendered()
+  }
+  useEffect(() => {
+    renderedAccounts.current = accounts
+    focusIfRendered()
+  })
+
   /** Действие из окна счёта, после которого строки на прежнем месте не будет. */
   const actFromSheet = (account: Account, run: (account: Account) => unknown) => {
     const targets = focusTargets(accounts, account, [FOCUS.row(account.id)])
     setReturnFocus(false)
-    afterClose.current = () => focusFirst(targets)
+    pendingFocus.current = null
+    // Окно закрылось — фокус ставим, как только строка ушла с места (обычно уже ушла).
+    afterClose.current = () => focusWhenRendered(account, targets)
     closeSheet()
     run(account)
   }
@@ -140,7 +168,7 @@ export function AccountsPage() {
   const unarchiveFromList = (account: Account) => {
     const targets = focusTargets(accounts, account, [FOCUS.row(account.id)])
     void actions.unarchive(account)
-    focusFirst(targets)
+    focusWhenRendered(account, targets)
   }
 
   const createButton = (

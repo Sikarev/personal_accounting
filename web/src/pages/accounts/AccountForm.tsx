@@ -15,10 +15,9 @@ import {
 import { useT, type Messages } from '../../shared/i18n'
 import { minorUnitsOf } from '../../shared/lib/accounts'
 import { formatMoneyInput, parseMoneyInput } from '../../shared/lib/moneyInput'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState, type FormErrors } from '../../shared/lib/useFormState'
-import { AccountColorPicker } from '../../shared/ui'
-import { AuthForm } from '../auth/AuthForm'
-import { submitErrorState } from '../auth/submitErrorState'
+import { AccountColorPicker, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from './accountsCache'
 import classes from './AccountsPage.module.css'
 import { icons } from '../../theme'
@@ -204,7 +203,7 @@ export function AccountForm({
               value="shared"
               label={t.accounts.form.visibilityShared}
               description={t.accounts.form.visibilitySharedHint}
-              // Radio.Group не помечает радиокнопки при ошибке, а AuthForm ставит фокус на первое
+              // Radio.Group не помечает радиокнопки при ошибке, а SubmitForm ставит фокус на первое
               // поле с aria-invalid — помечаем сами, чтобы фокус попал к ошибке.
               aria-invalid={form.errors.visibility ? true : undefined}
             />
@@ -229,7 +228,7 @@ export function AccountForm({
 
   return (
     <Stack gap="lg">
-      <AuthForm
+      <SubmitForm
         onSubmit={submit}
         errorsShown={form.errorsShown}
         error={formError?.text ?? null}
@@ -334,7 +333,7 @@ export function AccountForm({
               </Stack>
             )
           : moreFields}
-      </AuthForm>
+      </SubmitForm>
       {footer}
     </Stack>
   )

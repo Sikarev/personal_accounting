@@ -6,10 +6,9 @@ import { Link, useLocation } from 'react-router'
 import { paths } from '../../app/navigation'
 import { useRequestPasswordReset } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
-import { AuthLayout, EmptyState } from '../../shared/ui'
-import { AuthForm } from './AuthForm'
-import { submitErrorState } from './submitErrorState'
+import { AuthLayout, EmptyState, SubmitForm } from '../../shared/ui'
 import classes from './auth.module.css'
 
 /**
@@ -92,7 +91,7 @@ export function ForgotPasswordPage() {
           {t.auth.forgot.description}
         </Text>
       </Stack>
-      <AuthForm
+      <SubmitForm
         onSubmit={submit}
         errorsShown={form.errorsShown}
         error={formError?.text ?? null}
@@ -116,7 +115,7 @@ export function ForgotPasswordPage() {
           onChange={(e) => form.setValue('email', e.currentTarget.value)}
           error={form.errors.email}
         />
-      </AuthForm>
+      </SubmitForm>
       <Anchor component={Link} to={paths.login} className={classes.link} mt="sm">
         {t.auth.forgot.backToLogin}
       </Anchor>

@@ -1,10 +1,5 @@
-import {
-  apiErrorText,
-  fieldErrorTexts,
-  NetworkError,
-  type FieldErrorOverrides,
-} from '../../shared/api'
-import type { Messages } from '../../shared/i18n'
+import { apiErrorText, fieldErrorTexts, NetworkError, type FieldErrorOverrides } from '../api'
+import type { Messages } from '../i18n'
 
 /** Как показать ошибку отправки формы: у полей и (или) сообщением над формой. */
 export type SubmitErrorState = {

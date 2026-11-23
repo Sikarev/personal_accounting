@@ -15,6 +15,7 @@ export { PageHeader, type PageHeaderProps } from './PageHeader/PageHeader'
 export { PasswordField, type PasswordFieldProps } from './PasswordField/PasswordField'
 export { ResponsiveSheet, type ResponsiveSheetProps } from './ResponsiveSheet/ResponsiveSheet'
 export { SortableList, type SortableListProps } from './SortableList/SortableList'
+export { SubmitForm, type SubmitFormProps } from './SubmitForm/SubmitForm'
 export {
   TransactionListSkeleton,
   type TransactionListSkeletonProps,

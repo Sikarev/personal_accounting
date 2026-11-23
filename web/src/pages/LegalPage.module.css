@@ -1,0 +1,6 @@
+/* Ссылка «На главную» с зоной касания 44 px по высоте — как у ссылок экранов входа. */
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+}

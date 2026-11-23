@@ -19,4 +19,9 @@ export interface MeFamily {
   id: string
   name: string
   role: FamilyRole
+  /**
+   * Число участников семьи, включая текущего пользователя. Клиент по нему
+   * решает, показывать ли автора операций и фильтр по нему.
+   */
+  memberCount: number
 }

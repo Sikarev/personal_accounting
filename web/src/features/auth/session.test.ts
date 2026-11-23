@@ -14,7 +14,7 @@ const me = (timezone: string): Me => ({
     timezone,
     emailVerified: true,
   },
-  family: { id: 'f1', name: 'Семья', role: 'owner' },
+  family: { id: 'f1', name: 'Семья', role: 'owner', memberCount: 1 },
 })
 
 /**

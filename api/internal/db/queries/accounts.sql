@@ -97,10 +97,12 @@ WHERE family_id = @family_id
 
 -- name: LockAccount :one
 -- Блокирует видимый счёт до конца транзакции. FOR UPDATE конфликтует с
--- FOR KEY SHARE, который берёт вставка операции со ссылкой на счёт, поэтому
--- пока блокировка держится, новые операции по счёту ждут: корректировка
--- считает разницу от остатка, который не изменится до коммита, а удаление
--- не пропустит только что добавленную операцию.
+-- FOR KEY SHARE, который берут вставка операции со ссылкой на счёт (проверка
+-- внешнего ключа) и правка, удаление и восстановление операции
+-- (LockTransactionAccounts в transactions.sql). Поэтому, пока блокировка
+-- держится, ни одна операция по счёту не появляется, не меняется и не
+-- исчезает: корректировка считает разницу от остатка, который не изменится
+-- до коммита, а удаление счёта не пропустит только что добавленную операцию.
 SELECT id, archived_at
 FROM accounts
 WHERE id = @id AND family_id = @family_id
@@ -134,17 +136,10 @@ WHERE id = @id AND family_id = @family_id
 SELECT timezone FROM users WHERE id = @id;
 
 -- name: CreateAdjustment :one
--- Операция-корректировка и запись о ней в журнале изменений — одним запросом
--- (data-modifying CTE). Снимок в audit_log.after — строка transactions целиком
--- (to_jsonb), с именами колонок БД.
-WITH t AS (
-    INSERT INTO transactions (family_id, kind, account_id, amount, op_date,
-                              created_by, created_at, updated_at)
-    VALUES (@family_id, 'adjustment', @account_id, @amount, @op_date,
-            @created_by::uuid, @now, @now)
-    RETURNING *
-)
-INSERT INTO audit_log (family_id, actor_user_id, entity_type, entity_id, action, after, created_at)
-SELECT t.family_id, t.created_by, 'transaction', t.id, 'create', to_jsonb(t), @now
-FROM t
-RETURNING entity_id;
+-- Операция-корректировка. Запись в журнал изменений (снимок в формате API)
+-- добавляет обработчик в той же транзакции — см. writeTransactionAudit.
+INSERT INTO transactions (family_id, kind, account_id, amount, op_date,
+                          created_by, created_at, updated_at)
+VALUES (@family_id, 'adjustment', @account_id, @amount, @op_date,
+        @created_by::uuid, @now, @now)
+RETURNING id;

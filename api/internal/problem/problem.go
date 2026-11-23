@@ -33,6 +33,12 @@ const (
 	// состоянии объекта, исправлением полей запроса его не починить.
 	CodeAccountHasTransactions = "account_has_transactions"
 	CodeAccountArchived        = "account_archived"
+	CodeAdjustmentReadonly     = "adjustment_readonly"
+
+	// CodeTransactionReadonly (403) — операция видна, но пользователь видит
+	// не все её счета (перевод с чужого личного счёта): править, удалять и
+	// восстанавливать её может только владелец личного счёта.
+	CodeTransactionReadonly = "transaction_readonly"
 )
 
 // Problem — тело ответа с ошибкой. Поля соответствуют схеме Problem в openapi.yaml.
@@ -110,6 +116,11 @@ func TooManyRequests(retryAfter time.Duration) *Problem {
 	p := New(http.StatusTooManyRequests, CodeTooManyRequests, "Слишком много попыток. Попробуйте позже.")
 	p.RetryAfter = retryAfter
 	return p
+}
+
+// Forbidden — 403: объект виден, но действие над ним пользователю запрещено.
+func Forbidden(code, detail string) *Problem {
+	return New(http.StatusForbidden, code, detail)
 }
 
 func NotFound(detail string) *Problem {

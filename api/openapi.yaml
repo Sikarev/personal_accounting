@@ -29,6 +29,8 @@ tags:
     description: Счета
   - name: categories
     description: Категории расходов и доходов
+  - name: transactions
+    description: Операции (расходы, доходы, переводы, корректировки)
 
 paths:
   /currencies:
@@ -575,6 +577,214 @@ paths:
           $ref: "#/components/responses/Problem"
   # --- /Категории ------------------------------------------------------------
 
+  # ---------------------------------------------------------------------
+  # Операции. Операция видна, если виден её счёт или счёт-получатель
+  # перевода. Невидимая, чужой семьи или удалённая — 404 (кроме restore).
+  # ---------------------------------------------------------------------
+  /transactions:
+    get:
+      operationId: listTransactions
+      summary: Лента операций
+      description: |
+        Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+        Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+        нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+        у поля `cursor`.
+
+        `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+        этой даты под теми же фильтрами (даже если день разрезан границей
+        страницы). В итоги входят только расходы и доходы.
+
+        Значения одного параметра объединяются через «или», разные параметры —
+        через «и». Невидимый, чужой или несуществующий id в фильтре просто
+        ничего не находит.
+      tags: [transactions]
+      parameters:
+        - $ref: "#/components/parameters/TransactionFrom"
+        - $ref: "#/components/parameters/TransactionTo"
+        - $ref: "#/components/parameters/TransactionKindFilter"
+        - $ref: "#/components/parameters/TransactionAccountFilter"
+        - $ref: "#/components/parameters/TransactionCategoryFilter"
+        - $ref: "#/components/parameters/TransactionAuthorFilter"
+        - $ref: "#/components/parameters/TransactionSearch"
+        - name: limit
+          in: query
+          required: false
+          description: Размер страницы.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: "`nextCursor` предыдущей страницы, передаётся как есть."
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+      responses:
+        "200":
+          description: Страница ленты.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionList"
+        default:
+          $ref: "#/components/responses/Problem"
+    post:
+      operationId: createTransaction
+      summary: Создать операцию
+      description: |
+        Расход, доход или перевод (корректировка — только через
+        `adjust-balance`). Валюта — валюта счёта. Ошибки (422 `validation_failed`):
+        `invalid_account` у `accountId` / `toAccountId` (счёта нет в семье,
+        он не виден или в архиве), `same_account` у `toAccountId`,
+        `invalid_category` у `categoryId` (нет в семье, другого вида или в архиве),
+        `required` / `not_allowed` у полей, которые обязательны или запрещены
+        для вида операции, `to_amount_mismatch` у `toAmount` (перевод между
+        счетами одной валюты с другой суммой зачисления), `invalid_format`
+        у `date` (несуществующая дата) и `comment` (управляющие символы).
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionRequest"
+      responses:
+        "201":
+          description: Операция создана.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /transactions/summary:
+    get:
+      operationId: getTransactionsSummary
+      summary: Итоги по отфильтрованным операциям
+      description: |
+        Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+        только расходы и доходы; пересчёта в рубли нет.
+      tags: [transactions]
+      parameters:
+        - $ref: "#/components/parameters/TransactionFrom"
+        - $ref: "#/components/parameters/TransactionTo"
+        - $ref: "#/components/parameters/TransactionKindFilter"
+        - $ref: "#/components/parameters/TransactionAccountFilter"
+        - $ref: "#/components/parameters/TransactionCategoryFilter"
+        - $ref: "#/components/parameters/TransactionAuthorFilter"
+        - $ref: "#/components/parameters/TransactionSearch"
+      responses:
+        "200":
+          description: Итоги.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionSummary"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /transactions/defaults:
+    get:
+      operationId: getTransactionDefaults
+      summary: Значения по умолчанию для быстрого ввода
+      description: |
+        По операциям текущего пользователя (он автор): последний счёт расхода
+        и дохода, последняя пара счетов перевода, частые категории (до 8 на
+        вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+        Только видимые неархивные счета и активные категории. Нет данных — `null`
+        или пустой список.
+      tags: [transactions]
+      responses:
+        "200":
+          description: Значения по умолчанию.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionDefaults"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /transactions/{transactionId}:
+    parameters:
+      - $ref: "#/components/parameters/TransactionId"
+    get:
+      operationId: getTransaction
+      summary: Операция
+      tags: [transactions]
+      responses:
+        "200":
+          description: Операция.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        default:
+          $ref: "#/components/responses/Problem"
+    put:
+      operationId: updateTransaction
+      summary: Изменить операцию
+      description: |
+        Полная замена, тело — как у создания; вид можно менять (расход ↔ доход ↔
+        перевод). Ошибки: 404 `not_found`; 403 `transaction_readonly` (пользователь
+        видит не все счета операции); 409 `adjustment_readonly` (корректировку
+        не правят — только удаляют); 422 — как у создания. Счёт и категория,
+        которые не менялись, могут быть в архиве.
+      tags: [transactions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransactionRequest"
+      responses:
+        "200":
+          description: Операция изменена.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        default:
+          $ref: "#/components/responses/Problem"
+    delete:
+      operationId: deleteTransaction
+      summary: Удалить операцию
+      description: |
+        Мягкое удаление (отмена — `restore`). Корректировку удалить можно.
+        Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+      tags: [transactions]
+      responses:
+        "204":
+          description: Операция удалена.
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /transactions/{transactionId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/TransactionId"
+    post:
+      operationId: restoreTransaction
+      summary: Вернуть удалённую операцию
+      description: |
+        Отмена удаления. Идемпотентно: неудалённая операция возвращается как есть.
+        Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+      tags: [transactions]
+      responses:
+        "200":
+          description: Операция восстановлена.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        default:
+          $ref: "#/components/responses/Problem"
+  # --- /Операции -------------------------------------------------------------
+
 components:
   securitySchemes:
     cookieAuth:
@@ -616,6 +826,87 @@ components:
         type: string
         format: uuid
 
+    TransactionId:
+      name: transactionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    # Фильтры ленты и итогов. Массивы — повторением параметра:
+    # ?kind=expense&kind=income.
+    TransactionFrom:
+      name: from
+      in: query
+      required: false
+      description: Начало периода (дата операции, включительно).
+      schema:
+        type: string
+        format: date
+    TransactionTo:
+      name: to
+      in: query
+      required: false
+      description: Конец периода (включительно).
+      schema:
+        type: string
+        format: date
+    TransactionKindFilter:
+      name: kind
+      in: query
+      required: false
+      description: Виды операций.
+      schema:
+        type: array
+        maxItems: 4
+        items:
+          $ref: "#/components/schemas/TransactionKind"
+    TransactionAccountFilter:
+      name: accountId
+      in: query
+      required: false
+      description: |
+        Счета. Перевод подходит, если подходит любой его видимый счёт.
+      schema:
+        type: array
+        maxItems: 100
+        items:
+          type: string
+          format: uuid
+    TransactionCategoryFilter:
+      name: categoryId
+      in: query
+      required: false
+      description: Категории; категория верхнего уровня включает свои подкатегории.
+      schema:
+        type: array
+        maxItems: 100
+        items:
+          type: string
+          format: uuid
+    TransactionAuthorFilter:
+      name: authorId
+      in: query
+      required: false
+      description: Авторы операций (id пользователей).
+      schema:
+        type: array
+        maxItems: 50
+        items:
+          type: string
+          format: uuid
+    TransactionSearch:
+      name: q
+      in: query
+      required: false
+      description: |
+        Подстрока комментария: без учёта регистра, «ё» = «е». Пустая строка
+        (или из одних пробелов) — без фильтра.
+      schema:
+        type: string
+        maxLength: 200
+
   responses:
     Problem:
       description: Ошибка в формате RFC 9457 (Problem Details).
@@ -654,7 +945,8 @@ components:
             клиент обрабатывает по HTTP-статусу. Известные значения:
             `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
             `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
-            `account_has_transactions`, `account_archived`.
+            `account_has_transactions`, `account_archived`, `transaction_readonly`,
+            `adjustment_readonly`.
           example: not_found
         errors:
           type: array
@@ -679,7 +971,9 @@ components:
             Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован;
             `invalid_token` — токен из письма неверный, просрочен или уже использован;
             категории: `invalid_parent`, `has_children`, `name_taken`, `invalid_target`
-            (см. описания операций категорий).
+            (см. описания операций категорий); операции: `invalid_account`,
+            `same_account`, `invalid_category`, `not_allowed`, `to_amount_mismatch`
+            (см. `createTransaction`).
 
           example: required
         message:
@@ -838,7 +1132,7 @@ components:
 
     MeFamily:
       type: object
-      required: [id, name, role]
+      required: [id, name, role, memberCount]
       properties:
         id:
           type: string
@@ -848,6 +1142,12 @@ components:
           example: Семья
         role:
           $ref: "#/components/schemas/FamilyRole"
+        memberCount:
+          type: integer
+          description: |
+            Число участников семьи, включая текущего пользователя. Клиент по нему
+            решает, показывать ли автора операций и фильтр по нему.
+          example: 1
 
     Me:
       type: object
@@ -1146,3 +1446,287 @@ components:
           format: uuid
           description: Категория, в которую переносятся операции.
     # --- /Категории ----------------------------------------------------------
+
+    # --- Операции --------------------------------------------------------------
+    TransactionKind:
+      type: string
+      description: |
+        `adjustment` — корректировка остатка: создаётся только через
+        `adjust-balance`, её можно удалить и вернуть, но не править.
+      enum: [expense, income, transfer, adjustment]
+
+    TransactionInputKind:
+      type: string
+      description: Виды, которые можно создать или выбрать при правке.
+      enum: [expense, income, transfer]
+
+    TransactionAmount:
+      type: integer
+      format: int64
+      # До 10^13 минимальных единиц (100 млрд рублей) на операцию: чтобы
+      # SUM(...)::bigint в остатках переполнился, нужно ~900 тыс. предельных
+      # операций (техдолг №29).
+      minimum: 1
+      maximum: 10000000000000
+      description: Сумма операции в минимальных единицах валюты счёта, положительная.
+      example: 35050
+
+    TransactionUser:
+      type: object
+      description: Участник семьи (автор операции или владелец скрытого личного счёта).
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Иван
+
+    Transaction:
+      type: object
+      description: |
+        Операция. Суммы положительные, направление задаёт `kind`; исключение —
+        корректировка: её `amount` со знаком (изменение остатка).
+
+        Перевод между личным и общим счётом другие участники видят только со
+        стороны общего счёта: поля скрытой стороны (`accountId`, `amount`,
+        `currency` или `toAccountId`, `toAmount`, `toCurrency`) — `null`, вместо
+        них `counterparty` — владелец личного счёта.
+      required:
+        - id
+        - kind
+        - date
+        - accountId
+        - amount
+        - currency
+        - toAccountId
+        - toAmount
+        - toCurrency
+        - categoryId
+        - comment
+        - author
+        - counterparty
+        - editable
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          $ref: "#/components/schemas/TransactionKind"
+        date:
+          type: string
+          format: date
+          description: Дата операции (без времени).
+          example: "2026-11-18"
+        accountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Счёт (у перевода — счёт списания); `null` — скрытый чужой личный счёт.
+        amount:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Сумма в валюте `accountId`: положительная, у корректировки — со знаком.
+            `null` — сторона скрыта.
+        currency:
+          type: string
+          nullable: true
+          description: Валюта `accountId`; `null` — сторона скрыта.
+          example: RUB
+        toAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Счёт зачисления перевода; `null` — не перевод или сторона скрыта.
+        toAmount:
+          type: integer
+          format: int64
+          nullable: true
+          description: Сумма зачисления в валюте `toAccountId`.
+        toCurrency:
+          type: string
+          nullable: true
+          description: Валюта `toAccountId`.
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Категория расхода или дохода; у перевода и корректировки — `null`.
+        comment:
+          type: string
+          description: Комментарий; пустая строка — нет комментария.
+        author:
+          allOf:
+            - $ref: "#/components/schemas/TransactionUser"
+          nullable: true
+          description: Кто внёс операцию; `null` — пользователь удалён.
+        counterparty:
+          allOf:
+            - $ref: "#/components/schemas/TransactionUser"
+          nullable: true
+          description: |
+            Владелец скрытого от текущего пользователя личного счёта перевода
+            («Пополнение от Ивана»); иначе `null`.
+        editable:
+          type: boolean
+          description: |
+            Можно ли править и удалять: пользователь видит все счета операции.
+            У корректировки всегда `false` (её можно только удалить — клиент
+            узнаёт её по `kind`).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TransactionRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Создание и правка (полная замена). Расход и доход: `categoryId` обязательна,
+        `toAccountId` и `toAmount` запрещены. Перевод: `toAccountId` обязателен,
+        `categoryId` запрещена; `toAmount` между счетами одной валюты не
+        передаётся или равен `amount`, между разными валютами — обязателен
+        (обмен валют). Эти правила проверяет сервер (ошибки `required` /
+        `not_allowed` / `to_amount_mismatch` у полей).
+      required: [kind, date, accountId, amount]
+      properties:
+        kind:
+          $ref: "#/components/schemas/TransactionInputKind"
+        date:
+          type: string
+          format: date
+          example: "2026-11-18"
+        accountId:
+          type: string
+          format: uuid
+        amount:
+          $ref: "#/components/schemas/TransactionAmount"
+        categoryId:
+          type: string
+          format: uuid
+          nullable: true
+        toAccountId:
+          type: string
+          format: uuid
+          nullable: true
+        toAmount:
+          allOf:
+            - $ref: "#/components/schemas/TransactionAmount"
+          nullable: true
+        comment:
+          type: string
+          maxLength: 500
+          description: Пробелы по краям сервер обрезает.
+
+    CurrencyTotal:
+      type: object
+      description: Итог в одной валюте. Суммы положительные; разница — `income - expense`.
+      required: [currency, expense, income]
+      properties:
+        currency:
+          type: string
+          example: RUB
+        expense:
+          type: integer
+          format: int64
+        income:
+          type: integer
+          format: int64
+
+    TransactionDay:
+      type: object
+      required: [date, totals]
+      properties:
+        date:
+          type: string
+          format: date
+        totals:
+          type: array
+          description: По валютам (по коду); пусто, если за день нет расходов и доходов.
+          items:
+            $ref: "#/components/schemas/CurrencyTotal"
+
+    TransactionList:
+      type: object
+      required: [items, days]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        nextCursor:
+          type: string
+          description: Курсор следующей страницы; нет на последней.
+        days:
+          type: array
+          description: Итоги каждой даты из `items` (в том же порядке).
+          items:
+            $ref: "#/components/schemas/TransactionDay"
+
+    TransactionSummary:
+      type: object
+      required: [totals]
+      properties:
+        totals:
+          type: array
+          description: По валютам (по коду).
+          items:
+            $ref: "#/components/schemas/CurrencyTotal"
+
+    TransferAccounts:
+      type: object
+      required: [accountId, toAccountId]
+      properties:
+        accountId:
+          type: string
+          format: uuid
+        toAccountId:
+          type: string
+          format: uuid
+
+    FrequentCategories:
+      type: object
+      required: [expense, income]
+      properties:
+        expense:
+          type: array
+          description: До 8 id, самые частые первыми.
+          items:
+            type: string
+            format: uuid
+        income:
+          type: array
+          description: До 8 id, самые частые первыми.
+          items:
+            type: string
+            format: uuid
+
+    TransactionDefaults:
+      type: object
+      required: [expenseAccountId, incomeAccountId, transfer, frequentCategories]
+      properties:
+        expenseAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Счёт последнего расхода пользователя.
+        incomeAccountId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Счёт последнего дохода пользователя.
+        transfer:
+          allOf:
+            - $ref: "#/components/schemas/TransferAccounts"
+          nullable: true
+          description: Счета последнего перевода пользователя.
+        frequentCategories:
+          $ref: "#/components/schemas/FrequentCategories"
+    # --- /Операции -------------------------------------------------------------

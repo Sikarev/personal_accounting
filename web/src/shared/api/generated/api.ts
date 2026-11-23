@@ -39,6 +39,8 @@ import type {
   CreateAccountRequest,
   CreateCategoryRequest,
   CurrencyList,
+  GetTransactionsSummaryParams,
+  ListTransactionsParams,
   LoginRequest,
   Me,
   MergeCategoryRequest,
@@ -48,6 +50,11 @@ import type {
   ProblemResponse,
   RegisterRequest,
   ReorderAccountsRequest,
+  Transaction,
+  TransactionDefaults,
+  TransactionList,
+  TransactionRequest,
+  TransactionSummary,
   UpdateAccountRequest,
   UpdateCategoryRequest,
   VerifyEmailRequest,
@@ -2418,4 +2425,1049 @@ export const useMergeCategory = <TError = ErrorType<ProblemResponse>, TContext =
   TContext
 > => {
   return useMutation(getMergeCategoryMutationOptions(options), queryClient)
+}
+
+export const getListTransactionsUrl = (params?: ListTransactionsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['kind', 'accountId', 'categoryId', 'authorId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/transactions?${stringifiedParams}`
+    : `/api/v1/transactions`
+}
+
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export const listTransactions = async (
+  params?: ListTransactionsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<TransactionList> => {
+  return apiFetch<TransactionList>(getListTransactionsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListTransactionsQueryKey = (params?: ListTransactionsParams) => {
+  return [`/api/v1/transactions`, ...(params ? [params] : [])] as const
+}
+
+export const getListTransactionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListTransactionsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listTransactions>>> = ({ signal }) =>
+    listTransactions(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listTransactions>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListTransactionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTransactions>>>
+export type ListTransactionsQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactions<
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: undefined | ListTransactionsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof listTransactions>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactions<
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof listTransactions>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactions<
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactions<
+  TData = Awaited<ReturnType<typeof listTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListTransactionsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getCreateTransactionUrl = () => {
+  return `/api/v1/transactions`
+}
+
+/**
+ * Расход, доход или перевод (корректировка — только через
+ * `adjust-balance`). Валюта — валюта счёта. Ошибки (422 `validation_failed`):
+ * `invalid_account` у `accountId` / `toAccountId` (счёта нет в семье,
+ * он не виден или в архиве), `same_account` у `toAccountId`,
+ * `invalid_category` у `categoryId` (нет в семье, другого вида или в архиве),
+ * `required` / `not_allowed` у полей, которые обязательны или запрещены
+ * для вида операции, `to_amount_mismatch` у `toAmount` (перевод между
+ * счетами одной валюты с другой суммой зачисления), `invalid_format`
+ * у `date` (несуществующая дата) и `comment` (управляющие символы).
+ * @summary Создать операцию
+ */
+export const createTransaction = async (
+  transactionRequest: TransactionRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Transaction> => {
+  return apiFetch<Transaction>(getCreateTransactionUrl(), {
+    ...options,
+    method: 'POST',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(transactionRequest),
+  })
+}
+
+export const getCreateTransactionMutationKey = () => ['createTransaction'] as const
+
+export const getCreateTransactionMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createTransaction>>,
+    TError,
+    CreateTransactionMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createTransaction>>,
+  TError,
+  CreateTransactionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getCreateTransactionMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createTransaction>>,
+    CreateTransactionMutationVariables
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createTransaction(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreateTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createTransaction>>
+>
+export type CreateTransactionMutationBody = TransactionRequest
+export type CreateTransactionMutationError = ErrorType<ProblemResponse>
+export type CreateTransactionMutationVariables = { data: TransactionRequest }
+
+/**
+ * Расход, доход или перевод (корректировка — только через
+ * `adjust-balance`). Валюта — валюта счёта. Ошибки (422 `validation_failed`):
+ * `invalid_account` у `accountId` / `toAccountId` (счёта нет в семье,
+ * он не виден или в архиве), `same_account` у `toAccountId`,
+ * `invalid_category` у `categoryId` (нет в семье, другого вида или в архиве),
+ * `required` / `not_allowed` у полей, которые обязательны или запрещены
+ * для вида операции, `to_amount_mismatch` у `toAmount` (перевод между
+ * счетами одной валюты с другой суммой зачисления), `invalid_format`
+ * у `date` (несуществующая дата) и `comment` (управляющие символы).
+ * @summary Создать операцию
+ */
+export const useCreateTransaction = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof createTransaction>>,
+      TError,
+      CreateTransactionMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof createTransaction>>,
+  TError,
+  CreateTransactionMutationVariables,
+  TContext
+> => {
+  return useMutation(getCreateTransactionMutationOptions(options), queryClient)
+}
+
+export const getGetTransactionsSummaryUrl = (params?: GetTransactionsSummaryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['kind', 'accountId', 'categoryId', 'authorId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/transactions/summary?${stringifiedParams}`
+    : `/api/v1/transactions/summary`
+}
+
+/**
+ * Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+ * только расходы и доходы; пересчёта в рубли нет.
+ * @summary Итоги по отфильтрованным операциям
+ */
+export const getTransactionsSummary = async (
+  params?: GetTransactionsSummaryParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<TransactionSummary> => {
+  return apiFetch<TransactionSummary>(getGetTransactionsSummaryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTransactionsSummaryQueryKey = (params?: GetTransactionsSummaryParams) => {
+  return [`/api/v1/transactions/summary`, ...(params ? [params] : [])] as const
+}
+
+export const getGetTransactionsSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTransactionsSummary>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: GetTransactionsSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionsSummary>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTransactionsSummaryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTransactionsSummary>>> = ({ signal }) =>
+    getTransactionsSummary(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTransactionsSummary>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTransactionsSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTransactionsSummary>>
+>
+export type GetTransactionsSummaryQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+ * только расходы и доходы; пересчёта в рубли нет.
+ * @summary Итоги по отфильтрованным операциям
+ */
+export function useGetTransactionsSummary<
+  TData = Awaited<ReturnType<typeof getTransactionsSummary>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: undefined | GetTransactionsSummaryParams,
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionsSummary>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransactionsSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getTransactionsSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+ * только расходы и доходы; пересчёта в рубли нет.
+ * @summary Итоги по отфильтрованным операциям
+ */
+export function useGetTransactionsSummary<
+  TData = Awaited<ReturnType<typeof getTransactionsSummary>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: GetTransactionsSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionsSummary>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransactionsSummary>>,
+          TError,
+          Awaited<ReturnType<typeof getTransactionsSummary>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+ * только расходы и доходы; пересчёта в рубли нет.
+ * @summary Итоги по отфильтрованным операциям
+ */
+export function useGetTransactionsSummary<
+  TData = Awaited<ReturnType<typeof getTransactionsSummary>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: GetTransactionsSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionsSummary>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Те же фильтры, что у ленты (без курсора и лимита). Итоги по валютам,
+ * только расходы и доходы; пересчёта в рубли нет.
+ * @summary Итоги по отфильтрованным операциям
+ */
+export function useGetTransactionsSummary<
+  TData = Awaited<ReturnType<typeof getTransactionsSummary>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: GetTransactionsSummaryParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionsSummary>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTransactionsSummaryQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetTransactionDefaultsUrl = () => {
+  return `/api/v1/transactions/defaults`
+}
+
+/**
+ * По операциям текущего пользователя (он автор): последний счёт расхода
+ * и дохода, последняя пара счетов перевода, частые категории (до 8 на
+ * вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+ * Только видимые неархивные счета и активные категории. Нет данных — `null`
+ * или пустой список.
+ * @summary Значения по умолчанию для быстрого ввода
+ */
+export const getTransactionDefaults = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<TransactionDefaults> => {
+  return apiFetch<TransactionDefaults>(getGetTransactionDefaultsUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTransactionDefaultsQueryKey = () => {
+  return [`/api/v1/transactions/defaults`] as const
+}
+
+export const getGetTransactionDefaultsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTransactionDefaults>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof getTransactionDefaults>>, TError, TData>
+  >
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTransactionDefaultsQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTransactionDefaults>>> = ({ signal }) =>
+    getTransactionDefaults({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTransactionDefaults>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetTransactionDefaultsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTransactionDefaults>>
+>
+export type GetTransactionDefaultsQueryError = ErrorType<ProblemResponse>
+
+/**
+ * По операциям текущего пользователя (он автор): последний счёт расхода
+ * и дохода, последняя пара счетов перевода, частые категории (до 8 на
+ * вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+ * Только видимые неархивные счета и активные категории. Нет данных — `null`
+ * или пустой список.
+ * @summary Значения по умолчанию для быстрого ввода
+ */
+export function useGetTransactionDefaults<
+  TData = Awaited<ReturnType<typeof getTransactionDefaults>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionDefaults>>, TError, TData>
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransactionDefaults>>,
+          TError,
+          Awaited<ReturnType<typeof getTransactionDefaults>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По операциям текущего пользователя (он автор): последний счёт расхода
+ * и дохода, последняя пара счетов перевода, частые категории (до 8 на
+ * вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+ * Только видимые неархивные счета и активные категории. Нет данных — `null`
+ * или пустой список.
+ * @summary Значения по умолчанию для быстрого ввода
+ */
+export function useGetTransactionDefaults<
+  TData = Awaited<ReturnType<typeof getTransactionDefaults>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionDefaults>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransactionDefaults>>,
+          TError,
+          Awaited<ReturnType<typeof getTransactionDefaults>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По операциям текущего пользователя (он автор): последний счёт расхода
+ * и дохода, последняя пара счетов перевода, частые категории (до 8 на
+ * вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+ * Только видимые неархивные счета и активные категории. Нет данных — `null`
+ * или пустой список.
+ * @summary Значения по умолчанию для быстрого ввода
+ */
+export function useGetTransactionDefaults<
+  TData = Awaited<ReturnType<typeof getTransactionDefaults>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionDefaults>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По операциям текущего пользователя (он автор): последний счёт расхода
+ * и дохода, последняя пара счетов перевода, частые категории (до 8 на
+ * вид — по числу операций за 90 дней до «сегодня» в поясе пользователя).
+ * Только видимые неархивные счета и активные категории. Нет данных — `null`
+ * или пустой список.
+ * @summary Значения по умолчанию для быстрого ввода
+ */
+export function useGetTransactionDefaults<
+  TData = Awaited<ReturnType<typeof getTransactionDefaults>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof getTransactionDefaults>>, TError, TData>
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTransactionDefaultsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetTransactionUrl = (transactionId: string) => {
+  return `/api/v1/transactions/${transactionId}`
+}
+
+/**
+ * @summary Операция
+ */
+export const getTransaction = async (
+  transactionId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Transaction> => {
+  return apiFetch<Transaction>(getGetTransactionUrl(transactionId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTransactionQueryKey = (transactionId: string) => {
+  return [`/api/v1/transactions/${transactionId}`] as const
+}
+
+export const getGetTransactionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTransaction>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  transactionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetTransactionQueryKey(transactionId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTransaction>>> = ({ signal }) =>
+    getTransaction(transactionId, { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: transactionId !== null && transactionId !== undefined,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+}
+
+export type GetTransactionQueryResult = NonNullable<Awaited<ReturnType<typeof getTransaction>>>
+export type GetTransactionQueryError = ErrorType<ProblemResponse>
+
+/** @summary Операция */
+export function useGetTransaction<
+  TData = Awaited<ReturnType<typeof getTransaction>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  transactionId: string,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransaction>>,
+          TError,
+          Awaited<ReturnType<typeof getTransaction>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Операция */
+export function useGetTransaction<
+  TData = Awaited<ReturnType<typeof getTransaction>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  transactionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getTransaction>>,
+          TError,
+          Awaited<ReturnType<typeof getTransaction>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Операция */
+export function useGetTransaction<
+  TData = Awaited<ReturnType<typeof getTransaction>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  transactionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary Операция */
+export function useGetTransaction<
+  TData = Awaited<ReturnType<typeof getTransaction>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  transactionId: string,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getTransaction>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetTransactionQueryOptions(transactionId, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getUpdateTransactionUrl = (transactionId: string) => {
+  return `/api/v1/transactions/${transactionId}`
+}
+
+/**
+ * Полная замена, тело — как у создания; вид можно менять (расход ↔ доход ↔
+ * перевод). Ошибки: 404 `not_found`; 403 `transaction_readonly` (пользователь
+ * видит не все счета операции); 409 `adjustment_readonly` (корректировку
+ * не правят — только удаляют); 422 — как у создания. Счёт и категория,
+ * которые не менялись, могут быть в архиве.
+ * @summary Изменить операцию
+ */
+export const updateTransaction = async (
+  transactionId: string,
+  transactionRequest: TransactionRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Transaction> => {
+  return apiFetch<Transaction>(getUpdateTransactionUrl(transactionId), {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(transactionRequest),
+  })
+}
+
+export const getUpdateTransactionMutationKey = () => ['updateTransaction'] as const
+
+export const getUpdateTransactionMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateTransaction>>,
+    TError,
+    UpdateTransactionMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateTransaction>>,
+  TError,
+  UpdateTransactionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getUpdateTransactionMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateTransaction>>,
+    UpdateTransactionMutationVariables
+  > = (props) => {
+    const { transactionId, data } = props ?? {}
+
+    return updateTransaction(transactionId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type UpdateTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateTransaction>>
+>
+export type UpdateTransactionMutationBody = TransactionRequest
+export type UpdateTransactionMutationError = ErrorType<ProblemResponse>
+export type UpdateTransactionMutationVariables = { transactionId: string; data: TransactionRequest }
+
+/**
+ * Полная замена, тело — как у создания; вид можно менять (расход ↔ доход ↔
+ * перевод). Ошибки: 404 `not_found`; 403 `transaction_readonly` (пользователь
+ * видит не все счета операции); 409 `adjustment_readonly` (корректировку
+ * не правят — только удаляют); 422 — как у создания. Счёт и категория,
+ * которые не менялись, могут быть в архиве.
+ * @summary Изменить операцию
+ */
+export const useUpdateTransaction = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateTransaction>>,
+      TError,
+      UpdateTransactionMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateTransaction>>,
+  TError,
+  UpdateTransactionMutationVariables,
+  TContext
+> => {
+  return useMutation(getUpdateTransactionMutationOptions(options), queryClient)
+}
+
+export const getDeleteTransactionUrl = (transactionId: string) => {
+  return `/api/v1/transactions/${transactionId}`
+}
+
+/**
+ * Мягкое удаление (отмена — `restore`). Корректировку удалить можно.
+ * Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+ * @summary Удалить операцию
+ */
+export const deleteTransaction = async (
+  transactionId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getDeleteTransactionUrl(transactionId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteTransactionMutationKey = () => ['deleteTransaction'] as const
+
+export const getDeleteTransactionMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteTransaction>>,
+    TError,
+    DeleteTransactionMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteTransaction>>,
+  TError,
+  DeleteTransactionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getDeleteTransactionMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteTransaction>>,
+    DeleteTransactionMutationVariables
+  > = (props) => {
+    const { transactionId } = props ?? {}
+
+    return deleteTransaction(transactionId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteTransaction>>
+>
+
+export type DeleteTransactionMutationError = ErrorType<ProblemResponse>
+export type DeleteTransactionMutationVariables = { transactionId: string }
+
+/**
+ * Мягкое удаление (отмена — `restore`). Корректировку удалить можно.
+ * Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+ * @summary Удалить операцию
+ */
+export const useDeleteTransaction = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof deleteTransaction>>,
+      TError,
+      DeleteTransactionMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof deleteTransaction>>,
+  TError,
+  DeleteTransactionMutationVariables,
+  TContext
+> => {
+  return useMutation(getDeleteTransactionMutationOptions(options), queryClient)
+}
+
+export const getRestoreTransactionUrl = (transactionId: string) => {
+  return `/api/v1/transactions/${transactionId}/restore`
+}
+
+/**
+ * Отмена удаления. Идемпотентно: неудалённая операция возвращается как есть.
+ * Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+ * @summary Вернуть удалённую операцию
+ */
+export const restoreTransaction = async (
+  transactionId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Transaction> => {
+  return apiFetch<Transaction>(getRestoreTransactionUrl(transactionId), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getRestoreTransactionMutationKey = () => ['restoreTransaction'] as const
+
+export const getRestoreTransactionMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof restoreTransaction>>,
+    TError,
+    RestoreTransactionMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof restoreTransaction>>,
+  TError,
+  RestoreTransactionMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRestoreTransactionMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof restoreTransaction>>,
+    RestoreTransactionMutationVariables
+  > = (props) => {
+    const { transactionId } = props ?? {}
+
+    return restoreTransaction(transactionId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RestoreTransactionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof restoreTransaction>>
+>
+
+export type RestoreTransactionMutationError = ErrorType<ProblemResponse>
+export type RestoreTransactionMutationVariables = { transactionId: string }
+
+/**
+ * Отмена удаления. Идемпотентно: неудалённая операция возвращается как есть.
+ * Ошибки: 404 `not_found`; 403 `transaction_readonly`.
+ * @summary Вернуть удалённую операцию
+ */
+export const useRestoreTransaction = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof restoreTransaction>>,
+      TError,
+      RestoreTransactionMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof restoreTransaction>>,
+  TError,
+  RestoreTransactionMutationVariables,
+  TContext
+> => {
+  return useMutation(getRestoreTransactionMutationOptions(options), queryClient)
 }

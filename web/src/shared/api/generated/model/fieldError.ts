@@ -25,7 +25,9 @@ export interface FieldError {
    * Коды бизнес-правил: `email_taken` — e-mail уже зарегистрирован;
    * `invalid_token` — токен из письма неверный, просрочен или уже использован;
    * категории: `invalid_parent`, `has_children`, `name_taken`, `invalid_target`
-   * (см. описания операций категорий).
+   * (см. описания операций категорий); операции: `invalid_account`,
+   * `same_account`, `invalid_category`, `not_allowed`, `to_amount_mismatch`
+   * (см. `createTransaction`).
    */
   code: string
   /** Пояснение на русском. */

@@ -9,7 +9,7 @@ import { expect, type Page, type Route } from '@playwright/test'
  */
 export type Me = {
   user: { id: string; email: string; name: string; timezone: string; emailVerified: boolean }
-  family: { id: string; name: string; role: 'owner' | 'member' }
+  family: { id: string; name: string; role: 'owner' | 'member'; memberCount: number }
 }
 
 export const API = '/api/v1'
@@ -24,7 +24,12 @@ export function meFixture(overrides: Partial<Me['user']> = {}): Me {
       emailVerified: true,
       ...overrides,
     },
-    family: { id: '01a1faf8-0000-7000-8000-000000000002', name: 'Семья', role: 'owner' },
+    family: {
+      id: '01a1faf8-0000-7000-8000-000000000002',
+      name: 'Семья',
+      role: 'owner',
+      memberCount: 1,
+    },
   }
 }
 

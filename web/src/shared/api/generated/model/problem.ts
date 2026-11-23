@@ -33,7 +33,8 @@ export interface Problem {
    * клиент обрабатывает по HTTP-статусу. Известные значения:
    * `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
    * `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
-   * `account_has_transactions`, `account_archived`.
+   * `account_has_transactions`, `account_archived`, `transaction_readonly`,
+   * `adjustment_readonly`.
    */
   code: string
   /** Ошибки по полям; только при `code = validation_failed`. */

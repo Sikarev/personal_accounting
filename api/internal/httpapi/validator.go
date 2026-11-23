@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -35,6 +36,23 @@ func init() {
 		}
 		return nil
 	})
+	// Встроенная проверка format: date — только шаблон YYYY-MM-DD, она
+	// пропускает «2026-02-31» (техдолг №9). Такая дата дошла бы до разбора
+	// тела и вернула бы 400 вместо 422 у поля. time.Parse проверяет, что
+	// день существует.
+	openapi3.DefineStringFormatCallback("date", func(s string) error {
+		if !isValidDate(s) {
+			return errors.New("invalid date")
+		}
+		return nil
+	})
+}
+
+// isValidDate — существующая дата YYYY-MM-DD. Год 0 Postgres не принимает
+// (до 1 года н. э. идёт 1 до н. э.), поэтому он тоже ошибка формата, а не 500.
+func isValidDate(s string) bool {
+	d, err := time.Parse(time.DateOnly, s)
+	return err == nil && d.Year() >= 1
 }
 
 // hasControlChars сообщает, есть ли в строке управляющие символы (NUL, перевод

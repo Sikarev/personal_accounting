@@ -120,43 +120,36 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (u
 }
 
 const createAdjustment = `-- name: CreateAdjustment :one
-WITH t AS (
-    INSERT INTO transactions (family_id, kind, account_id, amount, op_date,
-                              created_by, created_at, updated_at)
-    VALUES ($2, 'adjustment', $3, $4, $5,
-            $6::uuid, $1, $1)
-    RETURNING id, family_id, kind, account_id, amount, to_account_id, to_amount, category_id, op_date, comment, created_by, created_at, updated_at, deleted_at
-)
-INSERT INTO audit_log (family_id, actor_user_id, entity_type, entity_id, action, after, created_at)
-SELECT t.family_id, t.created_by, 'transaction', t.id, 'create', to_jsonb(t), $1
-FROM t
-RETURNING entity_id
+INSERT INTO transactions (family_id, kind, account_id, amount, op_date,
+                          created_by, created_at, updated_at)
+VALUES ($1, 'adjustment', $2, $3, $4,
+        $5::uuid, $6, $6)
+RETURNING id
 `
 
 type CreateAdjustmentParams struct {
-	Now       time.Time
 	FamilyID  uuid.UUID
 	AccountID uuid.UUID
 	Amount    int64
 	OpDate    time.Time
 	CreatedBy uuid.UUID
+	Now       time.Time
 }
 
-// Операция-корректировка и запись о ней в журнале изменений — одним запросом
-// (data-modifying CTE). Снимок в audit_log.after — строка transactions целиком
-// (to_jsonb), с именами колонок БД.
+// Операция-корректировка. Запись в журнал изменений (снимок в формате API)
+// добавляет обработчик в той же транзакции — см. writeTransactionAudit.
 func (q *Queries) CreateAdjustment(ctx context.Context, arg CreateAdjustmentParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createAdjustment,
-		arg.Now,
 		arg.FamilyID,
 		arg.AccountID,
 		arg.Amount,
 		arg.OpDate,
 		arg.CreatedBy,
+		arg.Now,
 	)
-	var entity_id uuid.UUID
-	err := row.Scan(&entity_id)
-	return entity_id, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteAccount = `-- name: DeleteAccount :exec

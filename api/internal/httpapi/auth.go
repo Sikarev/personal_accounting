@@ -239,9 +239,10 @@ func (s *server) me(ctx context.Context, userID, familyID uuid.UUID) (oapi.Me, e
 			EmailVerified: row.EmailVerifiedAt != nil,
 		},
 		Family: oapi.MeFamily{
-			Id:   row.FamilyID,
-			Name: row.FamilyName,
-			Role: oapi.FamilyRole(row.Role),
+			Id:          row.FamilyID,
+			Name:        row.FamilyName,
+			Role:        oapi.FamilyRole(row.Role),
+			MemberCount: int(row.MemberCount),
 		},
 	}, nil
 }

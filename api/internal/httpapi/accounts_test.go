@@ -400,7 +400,8 @@ func TestAdjustBalance(t *testing.T) {
 		t.Fatalf("операция: %s %d %s %s; ожидались adjustment 2500 %s %s", kind, amount, opDate, createdBy, wantDate, u.id)
 	}
 
-	// Журнал изменений: запись о создании со снимком операции.
+	// Журнал изменений: запись о создании со снимком операции в формате API
+	// (как у остальных операций, см. transactionSnapshot).
 	var actor, entityType, action string
 	var after map[string]any
 	if err := e.pool.QueryRow(ctx, `
@@ -410,7 +411,8 @@ func TestAdjustBalance(t *testing.T) {
 	}
 	if actor != u.id || entityType != "transaction" || action != "create" ||
 		after["id"] != txID || after["kind"] != "adjustment" || after["amount"] != float64(2500) ||
-		after["account_id"] != id || after["op_date"] != wantDate.Format(time.DateOnly) {
+		after["accountId"] != id || after["currency"] != "RUB" || after["authorId"] != u.id ||
+		after["date"] != wantDate.Format(time.DateOnly) {
 		t.Fatalf("audit_log: %s %s %s %v", actor, entityType, action, after)
 	}
 

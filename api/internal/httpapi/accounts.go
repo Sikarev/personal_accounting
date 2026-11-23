@@ -277,6 +277,14 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 	if err != nil {
 		return nil, fmt.Errorf("create adjustment: %w", err)
 	}
+	// Журнал: снимок в формате API операций, как у остальных операций.
+	created, err := getTxRow(ctx, q, p, txID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.writeTransactionAudit(ctx, q, p, dbgen.AuditActionCreate, nil, &created); err != nil {
+		return nil, err
+	}
 	// Остаток перечитываем внутри транзакции: так ответ точно совпадает с тем,
 	// что увидит следующий GET /accounts.
 	if resp.Account, err = s.getAccount(ctx, q, p, req.AccountId); err != nil {

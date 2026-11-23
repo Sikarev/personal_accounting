@@ -199,7 +199,7 @@ func TestRegisterCreatesUserFamilyAndCategories(t *testing.T) {
 	userID, familyID := user["id"].(string), family["id"].(string)
 	// Сырой JSON: проверяем и имена полей, и отсутствие лишних.
 	wantUser := map[string]any{"id": userID, "email": email, "name": "Иван", "timezone": "Europe/Moscow", "emailVerified": false}
-	wantFamily := map[string]any{"id": familyID, "name": "Семья", "role": "owner"}
+	wantFamily := map[string]any{"id": familyID, "name": "Семья", "role": "owner", "memberCount": float64(1)}
 	if !reflect.DeepEqual(user, wantUser) || !reflect.DeepEqual(family, wantFamily) || len(body) != 2 {
 		t.Fatalf("ответ: %s", rec.Body)
 	}
@@ -581,6 +581,10 @@ func TestContractSecurity(t *testing.T) {
 		// Категории — только для вошедших.
 		"listCategories": false, "createCategory": false, "updateCategory": false, "moveCategory": false,
 		"archiveCategory": false, "unarchiveCategory": false, "mergeCategory": false,
+		// Операции — только для вошедших.
+		"listTransactions": false, "getTransactionsSummary": false, "getTransactionDefaults": false,
+		"getTransaction": false, "createTransaction": false, "updateTransaction": false,
+		"deleteTransaction": false, "restoreTransaction": false,
 	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)

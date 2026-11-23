@@ -110,7 +110,8 @@ func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 
 const getMe = `-- name: GetMe :one
 SELECT u.id AS user_id, u.email, u.name AS user_name, u.timezone, u.email_verified_at,
-       f.id AS family_id, f.name AS family_name, fm.role
+       f.id AS family_id, f.name AS family_name, fm.role,
+       (SELECT count(*) FROM family_members m WHERE m.family_id = f.id)::integer AS member_count
 FROM users u
 JOIN family_members fm ON fm.user_id = u.id
 JOIN families f ON f.id = fm.family_id
@@ -131,6 +132,7 @@ type GetMeRow struct {
 	FamilyID        uuid.UUID
 	FamilyName      string
 	Role            FamilyRole
+	MemberCount     int32
 }
 
 func (q *Queries) GetMe(ctx context.Context, arg GetMeParams) (GetMeRow, error) {
@@ -145,6 +147,7 @@ func (q *Queries) GetMe(ctx context.Context, arg GetMeParams) (GetMeRow, error) 
 		&i.FamilyID,
 		&i.FamilyName,
 		&i.Role,
+		&i.MemberCount,
 	)
 	return i, err
 }

@@ -1,0 +1,95 @@
+/* Строка: иконка · (название и комментарий | сумма и счёт) · меню.
+   Контейнер @container — строка перестраивается по своей ширине, а не по ширине экрана:
+   так одинаково на телефоне с крупным шрифтом и в узкой колонке на desktop. */
+.row {
+  container: transaction-row / inline-size;
+  display: flex;
+  align-items: center;
+  /* Узкие промежутки: в плотной строке место нужнее названию. */
+  gap: var(--mantine-spacing-sm);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding-block: var(--mantine-spacing-sm);
+}
+
+.icon {
+  flex: none;
+}
+
+/* Название и сумма в ряд, сумма справа. Огромная сумма не сжимает название в пару букв:
+   под название остаётся не меньше 6em, а сумма переносится на следующую строку
+   (по-прежнему справа). */
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mantine-spacing-sm);
+}
+
+.main {
+  flex: 1 1 6em;
+  min-width: 0;
+}
+
+.parent {
+  color: var(--mantine-color-dimmed);
+  font-weight: 400;
+}
+
+.side {
+  flex: none;
+  max-width: 100%;
+  margin-inline-start: auto;
+  text-align: end;
+}
+
+/* Запас: Money wrap переносит по разрядам, этого хватает почти всегда. */
+.amount {
+  overflow-wrap: anywhere;
+}
+
+/* Счёт под суммой: длинное название обрезается, не раздвигая строку. */
+.meta {
+  max-width: 12em;
+  margin-inline-start: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  flex: none;
+  display: flex;
+}
+
+/* Узкая строка — телефон с крупным системным шрифтом (ux.md, раздел 6: до 200 %).
+   Иконка декоративна (вид понятен из названия и знака суммы) — прячем её, сумма и счёт
+   уходят под название и выравниваются по левому краю. */
+@container transaction-row (max-width: 16em) {
+  .icon {
+    display: none;
+  }
+
+  /* nowrap обязателен: у многострочного flex ширина строки — по самому широкому
+     элементу, и длинный комментарий растянул бы её за край экрана. */
+  .body {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .main {
+    flex: none;
+  }
+
+  .side {
+    margin-inline-start: 0;
+    text-align: start;
+  }
+
+  .meta {
+    max-width: 100%;
+    margin-inline-start: 0;
+  }
+}

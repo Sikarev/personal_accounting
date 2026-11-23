@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatOpDate, todayIn } from './date'
+import { formatOpDate, formatPeriod, isCalendarDate, todayIn } from './date'
 
 describe('todayIn', () => {
   // 21:30 UTC 17 ноября = 00:30 18 ноября в Москве (UTC+3).
@@ -76,5 +76,52 @@ describe('formatOpDate', () => {
 
   it('отвергает строку не в формате YYYY-MM-DD', () => {
     expect(() => formatOpDate('18.11.2026', today)).toThrow(RangeError)
+  })
+})
+
+describe('isCalendarDate', () => {
+  it('существующие даты', () => {
+    expect(isCalendarDate('2026-11-23')).toBe(true)
+    expect(isCalendarDate('2024-02-29')).toBe(true)
+  })
+
+  it('несуществующие и не в формате YYYY-MM-DD', () => {
+    expect(isCalendarDate('2026-02-31')).toBe(false)
+    expect(isCalendarDate('2025-02-29')).toBe(false)
+    expect(isCalendarDate('2026-13-01')).toBe(false)
+    expect(isCalendarDate('2026-1-01')).toBe(false)
+    expect(isCalendarDate('')).toBe(false)
+  })
+})
+
+describe('formatPeriod', () => {
+  const today = '2026-11-23'
+
+  it('в одном месяце текущего года — без года', () => {
+    expect(formatPeriod('2026-11-01', '2026-11-15', today)).toBe('1–15 ноября')
+  })
+
+  it('в одном месяце прошлого года — с годом', () => {
+    expect(formatPeriod('2025-11-01', '2025-11-30', today)).toBe('1–30 ноября 2025')
+  })
+
+  it('один день', () => {
+    expect(formatPeriod('2026-11-05', '2026-11-05', today)).toBe('5 ноября')
+    expect(formatPeriod('2025-11-05', '2025-11-05', today)).toBe('5 ноября 2025')
+  })
+
+  it('разные месяцы одного года', () => {
+    expect(formatPeriod('2026-10-20', '2026-11-05', today)).toBe('20 октября – 5 ноября')
+    expect(formatPeriod('2025-10-20', '2025-11-05', today)).toBe('20 октября – 5 ноября 2025')
+  })
+
+  it('через Новый год — год у обеих дат', () => {
+    expect(formatPeriod('2025-12-28', '2026-01-05', today)).toBe('28 декабря 2025 – 5 января 2026')
+  })
+
+  it('открытый период', () => {
+    expect(formatPeriod('2026-11-01', null, today)).toBe('с 1 ноября')
+    expect(formatPeriod(null, '2025-11-15', today)).toBe('по 15 ноября 2025')
+    expect(formatPeriod(null, null, today)).toBe('')
   })
 })

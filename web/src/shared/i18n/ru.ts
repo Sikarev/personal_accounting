@@ -23,16 +23,15 @@ export const ru = {
   dates: {
     today: 'Сегодня',
     yesterday: 'Вчера',
+    // Открытый с одной стороны период: «с 1 ноября», «по 15 ноября 2025».
+    since: (date: string) => `с ${date}`,
+    until: (date: string) => `по ${date}`,
   },
   pages: {
     home: {
       emptyTitle: 'Здесь появится ваш баланс',
       emptyDescription:
         'Когда вы добавите счета и операции, на главной будут общий баланс, счета и последние траты.',
-    },
-    transactions: {
-      emptyTitle: 'Здесь появятся ваши операции',
-      emptyDescription: 'Расходы, доходы и переводы — по дням, с поиском и фильтрами.',
     },
     reports: {
       emptyTitle: 'Отчёты появятся вместе с операциями',
@@ -368,6 +367,83 @@ export const ru = {
       nothingFound: 'Ничего не нашлось',
     },
   },
+  // Экран «Операции»: лента, фильтры, итоги, строка операции (TransactionRow).
+  feed: {
+    listLabel: (day: string) => `Операции за ${day.toLocaleLowerCase('ru-RU')}`,
+    dayTotalLabel: 'Итог дня',
+    loadError: 'Не удалось загрузить операции',
+    nextPageError: 'Не удалось загрузить следующие операции.',
+    showMore: 'Показать ещё',
+    emptyTitle: 'Здесь появятся ваши операции',
+    emptyDescription: 'Расходы, доходы и переводы — по дням, с поиском и фильтрами.',
+    nothingFoundTitle: 'Ничего не найдено',
+    nothingFoundDescription: 'Под эти фильтры не подходит ни одна операция.',
+    resetFilters: 'Сбросить фильтры',
+    resetAll: 'Сбросить всё',
+    summary: {
+      title: 'Итоги',
+      filteredTitle: 'Итоги по фильтрам',
+      expense: 'Расходы',
+      income: 'Доходы',
+      difference: 'Разница',
+      empty: 'Расходов и доходов нет',
+      loadError: 'Не удалось загрузить итоги.',
+    },
+    filters: {
+      title: 'Фильтры',
+      label: 'Фильтры операций',
+      open: 'Фильтры',
+      openWithCount: (count: number) => `Фильтры (${count})`,
+      apply: 'Показать операции',
+      search: 'Поиск по комментарию',
+      period: 'Период',
+      periods: {
+        all: 'Всё время',
+        thisMonth: 'Этот месяц',
+        lastMonth: 'Прошлый месяц',
+        thisYear: 'Этот год',
+        custom: 'Свой период',
+      },
+      customLabel: 'Границы периода',
+      from: 'Начало периода',
+      to: 'Конец периода',
+      kind: 'Вид операций',
+      kinds: {
+        expense: 'Расходы',
+        income: 'Доходы',
+        transfer: 'Переводы',
+        adjustment: 'Корректировки',
+      },
+      accounts: 'Счета',
+      categories: 'Категории',
+      categoryGroups: { expense: 'Расходы', income: 'Доходы' },
+      archived: (name: string) => `${name} (в архиве)`,
+      nothingFound: 'Ничего не нашлось',
+      clear: (field: string) => `Очистить поле «${field}»`,
+      unknownCategory: 'Категория недоступна',
+      activeLabel: 'Выбранные фильтры',
+      remove: (label: string) => `Убрать фильтр: ${label}`,
+      query: (q: string) => `«${q}»`,
+    },
+    row: {
+      adjustment: 'Корректировка остатка',
+      noCategory: 'Без категории',
+      unknownAccount: 'Счёт недоступен',
+      deletedAuthor: 'Удалённый участник',
+      // Перевод с чужого личного счёта на общий или обратно: личный счёт скрыт,
+      // вместо него — владелец (requirements, раздел 4).
+      incomingFrom: (name: string) => `Пополнение: ${name}`,
+      outgoingTo: (name: string) => `Снятие: ${name}`,
+      actions: (title: string) => `Действия с операцией «${title}»`,
+    },
+    actions: {
+      delete: 'Удалить',
+    },
+    toasts: {
+      deleted: 'Операция удалена',
+      restoreFailed: 'Не удалось вернуть операцию.',
+    },
+  },
   legal: {
     draftNotice: 'Это черновик: окончательный текст документа появится до запуска сервиса.',
     back: 'Вернуться в приложение',
@@ -407,6 +483,9 @@ export const ru = {
     accountHasTransactions:
       'На счёте есть операции, поэтому его нельзя удалить — только архивировать.',
     accountArchived: 'Счёт в архиве. Верните его из архива, чтобы исправить остаток.',
+    transactionReadonly:
+      'Эту операцию может изменить только владелец личного счёта, который в ней участвует.',
+    adjustmentReadonly: 'Корректировку остатка нельзя изменить — только удалить.',
     reorderFailed: 'Не удалось сохранить порядок счетов.',
     server: 'На сервере что-то пошло не так. Попробуйте ещё раз через пару минут.',
     generic: 'Не получилось. Обновите страницу и попробуйте снова.',

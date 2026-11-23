@@ -54,6 +54,8 @@ describe('apiErrorText', () => {
       t.errors.accountHasTransactions,
     ],
     ['account_archived', apiError(409, 'account_archived'), t.errors.accountArchived],
+    ['transaction_readonly', apiError(403, 'transaction_readonly'), t.errors.transactionReadonly],
+    ['adjustment_readonly', apiError(409, 'adjustment_readonly'), t.errors.adjustmentReadonly],
     ['internal', apiError(500, 'internal'), t.errors.server],
     // Неизвестный код — по статусу.
     ['неизвестный код, 502', apiError(502, UNKNOWN_ERROR_CODE), t.errors.server],

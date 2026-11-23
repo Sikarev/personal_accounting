@@ -17,6 +17,17 @@ export { ResponsiveSheet, type ResponsiveSheetProps } from './ResponsiveSheet/Re
 export { SortableList, type SortableListProps } from './SortableList/SortableList'
 export { SubmitForm, type SubmitFormProps } from './SubmitForm/SubmitForm'
 export {
+  TransactionDayHeader,
+  type TransactionDayHeaderProps,
+} from './TransactionRow/TransactionDayHeader'
+export { TransactionRow, type TransactionRowProps } from './TransactionRow/TransactionRow'
+export {
+  describeTransaction,
+  transactionTitle,
+  type TransactionLookups,
+  type TransactionView,
+} from './TransactionRow/describeTransaction'
+export {
   TransactionListSkeleton,
   type TransactionListSkeletonProps,
 } from './Skeletons/TransactionListSkeleton'

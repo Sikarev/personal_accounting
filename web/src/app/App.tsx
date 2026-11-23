@@ -12,14 +12,14 @@ import { MorePage } from '../pages/MorePage'
 import { NotFoundPage } from '../pages/NotFoundPage'
 import { ReportsPage } from '../pages/ReportsPage'
 import { SettingsPage } from '../pages/settings/SettingsPage'
-import { TransactionsPage } from '../pages/TransactionsPage'
 import { AppLayout } from './layout/AppLayout'
 import { RouteBoundary } from './layout/RouteBoundary'
 import { paths } from './navigation'
 
 // Лёгкие экраны грузятся вместе с оболочкой. Тяжёлые — отдельным чанком по маршруту
 // (React.lazy), чтобы не тратить бюджет JS первой загрузки (ux.md, раздел 8):
-// «Счета» и «Категории» — с перетаскиванием (@dnd-kit) и формами, дальше — отчёты
+// «Счета» и «Категории» — с перетаскиванием (@dnd-kit) и формами, «Операции» — с лентой
+// и фильтрами, дальше — отчёты
 // с графиками. Загрузку и ошибку загрузки чанка обрабатывает RouteBoundary — для всех
 // ленивых экранов сразу, свой Suspense не нужен.
 const AccountsPage = lazy(() =>
@@ -27,6 +27,11 @@ const AccountsPage = lazy(() =>
 )
 const CategoriesPage = lazy(() =>
   import('../pages/settings/CategoriesPage').then((m) => ({ default: m.CategoriesPage })),
+)
+const TransactionsPage = lazy(() =>
+  import('../pages/transactions/TransactionsPage').then((m) => ({
+    default: m.TransactionsPage,
+  })),
 )
 
 // Публичные страницы (вход, восстановление пароля, документы) — вне оболочки.

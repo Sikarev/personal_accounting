@@ -37,6 +37,10 @@ export function apiErrorText(error: unknown, t: Messages): string {
       return t.errors.accountHasTransactions
     case 'account_archived':
       return t.errors.accountArchived
+    case 'transaction_readonly':
+      return t.errors.transactionReadonly
+    case 'adjustment_readonly':
+      return t.errors.adjustmentReadonly
   }
 
   // Код неизвестен (новый в контракте или ответ не от нашего API) — решаем по статусу.

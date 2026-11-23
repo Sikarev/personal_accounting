@@ -75,10 +75,12 @@ export const existingAccount = {
  * Пользователь вошёл: `/me` отвечает профилем, а `GET /accounts` — одним счётом
  * (без счетов главная показывает онбординг, см. onboarding.spec.ts). Свой мок счетов,
  * зарегистрированный позже, перекрывает этот: Playwright проверяет обработчики
- * с последнего добавленного.
+ * с последнего добавленного. `me` может быть функцией — профиль, меняющийся по ходу теста.
  */
-export async function mockSignedIn(page: Page, me: Me = meFixture()) {
-  await page.route(`**${API}/me`, (route) => route.fulfill({ json: me }))
+export async function mockSignedIn(page: Page, me: Me | (() => Me) = meFixture()) {
+  await page.route(`**${API}/me`, (route) =>
+    route.fulfill({ json: typeof me === 'function' ? me() : me }),
+  )
   await page.route(`**${API}/accounts`, (route) =>
     route.request().method() === 'GET'
       ? route.fulfill({ json: { items: [existingAccount] } })

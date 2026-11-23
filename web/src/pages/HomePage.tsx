@@ -1,6 +1,6 @@
 import { Button, Paper, Skeleton, Stack, VisuallyHidden } from '@mantine/core'
 import { IconAlertCircle, IconHome2 } from '@tabler/icons-react'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { useOnboarding } from '../features/onboarding/onboardingContext'
 import { QuickAddIntro } from '../features/onboarding/QuickAddIntro'
@@ -13,10 +13,12 @@ import { StubPage, STUB_ACTION } from './StubPage'
 
 // Шаг 1 онбординга с формой счёта нужен только новому пользователю, один раз, — грузится
 // отдельным чанком, общим с экраном «Счета», а не в первую загрузку (ux.md, раздел 8).
+// Загрузчик вынесен, чтобы начать загрузку чанка заранее, параллельно с GET /accounts:
+// иначе новый пользователь ждал бы два сетевых круга подряд (список, потом чанк).
+// Повторный import() того же модуля не грузит его второй раз.
+const loadFirstAccountStep = () => import('../features/onboarding/FirstAccountStep')
 const FirstAccountStep = lazy(() =>
-  import('../features/onboarding/FirstAccountStep').then((m) => ({
-    default: m.FirstAccountStep,
-  })),
+  loadFirstAccountStep().then((m) => ({ default: m.FirstAccountStep })),
 )
 
 /**
@@ -30,6 +32,18 @@ export function HomePage() {
   const onboarding = useOnboarding()
   const query = useListAccounts()
   const showSkeleton = useDelayedLoading(query.isPending)
+  // Скелетон уже показан — пока догружается чанк шага 1, держим его без новой задержки,
+  // иначе было бы «скелетон → пусто → форма».
+  const [skeletonShown, setSkeletonShown] = useState(false)
+  if (showSkeleton && !skeletonShown) setSkeletonShown(true)
+
+  // Холодная загрузка главной: списка счетов ещё нет — грузим чанк шага 1 параллельно.
+  // Пользователю со счетами это стоит ~5 КБ gzip (и тот же чанк нужен экрану «Счета»).
+  const coldStart = query.isPending
+  useEffect(() => {
+    // Ошибку загрузки здесь глушим: её покажет RouteBoundary, когда шаг 1 понадобится.
+    if (coldStart) loadFirstAccountStep().catch(() => {})
+  }, [coldStart])
 
   if (onboarding.introVisible) {
     return (
@@ -76,7 +90,7 @@ export function HomePage() {
 
   if (query.data.items.length === 0) {
     return (
-      <Suspense fallback={<HomeSkeleton delayed />}>
+      <Suspense fallback={<HomeSkeleton delayed={!skeletonShown} />}>
         <FirstAccountStep />
       </Suspense>
     )

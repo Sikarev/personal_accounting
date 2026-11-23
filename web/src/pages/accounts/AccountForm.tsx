@@ -26,7 +26,9 @@ import { icons } from '../../theme'
 /** Длина названия из контракта (`AccountName`). */
 const NAME_MAX_LENGTH = 100
 const DEFAULT_CURRENCY = 'RUB'
-const FIELDS = ['name', 'type', 'currency', 'initialBalance', 'visibility', 'color'] as const
+// Поля, ошибки которых показываются у поля. Цвета здесь нет: у выбора цвета нет места
+// под ошибку, и нарушение у него уходит общим сообщением над формой (submitErrorState).
+const FIELDS = ['name', 'type', 'currency', 'initialBalance', 'visibility'] as const
 
 type Values = {
   name: string
@@ -176,7 +178,9 @@ export function AccountForm({
     form.setValue('type', preset.type)
   }
   // Ошибка сервера у свёрнутого поля — раскрываем, иначе фокус на ошибку некуда поставить.
-  const showMore = !compact || moreOpened || Boolean(form.errors.visibility || form.errors.color)
+  // Пока ошибка есть, переключатель скрыт: свернуть блок с ошибкой всё равно нельзя.
+  const moreForced = Boolean(form.errors.visibility)
+  const showMore = !compact || moreOpened || moreForced
 
   // Пока справочник валют грузится (или не загрузился), доступна выбранная — рубли.
   const currencyOptions = (
@@ -200,11 +204,15 @@ export function AccountForm({
               value="shared"
               label={t.accounts.form.visibilityShared}
               description={t.accounts.form.visibilitySharedHint}
+              // Radio.Group не помечает радиокнопки при ошибке, а AuthForm ставит фокус на первое
+              // поле с aria-invalid — помечаем сами, чтобы фокус попал к ошибке.
+              aria-invalid={form.errors.visibility ? true : undefined}
             />
             <Radio
               value="private"
               label={t.accounts.form.visibilityPrivate}
               description={t.accounts.form.visibilityPrivateHint}
+              aria-invalid={form.errors.visibility ? true : undefined}
             />
           </Stack>
         </Radio.Group>
@@ -299,7 +307,7 @@ export function AccountForm({
           }
           rightSectionPointerEvents="none"
         />
-        {compact && (
+        {compact && !moreForced && (
           <Button
             variant="subtle"
             size="md"

@@ -178,6 +178,35 @@ test.describe('шаг 1: первый счёт', () => {
     expect(api.created).toHaveLength(1)
   })
 
+  test('ошибка сервера у свёрнутых полей', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccounts(page)
+    await openStep1(page)
+    await pickChip(page, t.onboarding.presets.card)
+    const more = page.getByRole('button', { name: t.accounts.form.moreSettings })
+    const submit = page.getByRole('button', { name: t.accounts.form.submitCreate })
+
+    // Видимость: блок раскрыт, ошибка у поля, переключатель скрыт — свернуть его нельзя.
+    api.failCreate = (route) =>
+      problem(route, 422, 'validation_failed', {
+        errors: [{ field: 'visibility', code: 'invalid', message: 'bad' }],
+      })
+    await submit.click()
+    await expect(page.getByRole('radio', { name: t.accounts.form.visibilityShared })).toBeVisible()
+    await expect(page.getByRole('radio', { name: t.accounts.form.visibilityShared })).toBeFocused()
+    await expect(more).toHaveCount(0)
+
+    // Цвет: у выбора цвета нет места под ошибку — общее сообщение над формой.
+    api.failCreate = (route) =>
+      problem(route, 422, 'validation_failed', {
+        errors: [{ field: 'color', code: 'invalid', message: 'bad' }],
+      })
+    await submit.click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(more).toBeVisible()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+    await expectNoAxeViolations(page)
+  })
+
   test('ошибка загрузки списка счетов: «Повторить»', { tag: '@a11y' }, async ({ page }) => {
     const api = await mockAccounts(page)
     let fail = true
@@ -205,6 +234,44 @@ test.describe('шаг 2: где вносить операции', () => {
     await createFirstAccount(page)
     await expect(page).toHaveScreenshot('onboarding-step2.png')
   })
+
+  test(
+    'скриншот: фокус на выделенной кнопке быстрого ввода',
+    { tag: '@visual' },
+    async ({ page }) => {
+      await mockAccounts(page)
+      await openStep1(page)
+      await createFirstAccount(page)
+      // Выделение и фокус должны различаться: кольцо фокуса — поверх ореола.
+      // Фокус с клавиатуры (Shift+Tab, Tab): кольцо рисуется только при :focus-visible.
+      await navAddButton(page).focus()
+      await page.keyboard.press('Shift+Tab')
+      await page.keyboard.press('Tab')
+      await expect(navAddButton(page)).toBeFocused()
+      await expect(page).toHaveScreenshot('onboarding-step2-add-focused.png')
+    },
+  )
+
+  test(
+    'между шагом 1 и шагом 2 обычная главная не мелькает',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockAccounts(page)
+      await openStep1(page)
+      // Следим за DOM: появись хоть на кадр заглушка главной — флаг останется.
+      await page.evaluate((stubTitle) => {
+        const w = window as Window & { stubSeen?: boolean }
+        w.stubSeen = false
+        new MutationObserver(() => {
+          if (document.body.textContent?.includes(stubTitle)) w.stubSeen = true
+        }).observe(document.body, { childList: true, subtree: true, characterData: true })
+      }, t.pages.home.emptyTitle)
+      await createFirstAccount(page)
+      expect(await page.evaluate(() => (window as Window & { stubSeen?: boolean }).stubSeen)).toBe(
+        false,
+      )
+    },
+  )
 
   test('доступность', { tag: '@a11y' }, async ({ page }) => {
     await mockAccounts(page)
@@ -287,4 +354,12 @@ test('есть счёт — онбординга нет', { tag: '@a11y' }, asyn
   await expect(page.getByRole('heading', { level: 1, name: t.nav.home })).toBeVisible()
   await expect(page.getByRole('heading', { name: t.onboarding.title })).toHaveCount(0)
   await expect(navAddButton(page)).not.toHaveAttribute('data-highlight')
+})
+
+test('есть только архивный счёт — онбординга нет', { tag: '@a11y' }, async ({ page }) => {
+  const api = await mockAccounts(page)
+  api.accounts.push({ ...existingAccount, archivedAt: '2026-11-01T10:00:00Z' })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1, name: t.nav.home })).toBeVisible()
+  await expect(page.getByRole('heading', { name: t.onboarding.title })).toHaveCount(0)
 })

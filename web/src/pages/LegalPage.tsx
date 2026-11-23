@@ -6,7 +6,7 @@ import { paths } from '../app/navigation'
 import { useT } from '../shared/i18n'
 import { AuthLayout } from '../shared/ui'
 import { icons } from '../theme'
-import classes from './auth/auth.module.css'
+import classes from './LegalPage.module.css'
 
 /**
  * Документы, на которые ссылается согласие при регистрации. Доступны без входа.

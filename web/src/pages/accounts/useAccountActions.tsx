@@ -21,7 +21,7 @@ import {
   patchAccounts,
   readAccounts,
   upsertAccount,
-} from './accountsCache'
+} from '../../features/accounts/accountsCache'
 
 /**
  * Действия со счетами, которые выполняются сразу, без подтверждения (ux.md, принцип 4):

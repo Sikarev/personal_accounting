@@ -1,9 +1,9 @@
 import { Paper, Stack, Text } from '@mantine/core'
 import { useMemo } from 'react'
-
+// Форма счёта общая с экраном «Счета». Этот модуль грузится лениво (см. HomePage),
 // Форма счёта живёт у экрана «Счета». Этот модуль грузится лениво (см. HomePage),
 // поэтому общий с «Счетами» код уходит в отдельный чанк, а не в первую загрузку.
-import { AccountForm, type AccountPreset } from '../../pages/accounts/AccountForm'
+import { AccountForm, type AccountPreset } from '../accounts/AccountForm'
 import { useListCurrencies } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'

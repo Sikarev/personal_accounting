@@ -10,7 +10,7 @@ import { parseMoneyInput } from '../../shared/lib/moneyInput'
 import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
 import { Money, SubmitForm } from '../../shared/ui'
-import { accountMutationOptions, upsertAccount } from './accountsCache'
+import { accountMutationOptions, upsertAccount } from '../../features/accounts/accountsCache'
 
 /**
  * Корректировка остатка: пользователь вводит, сколько денег на счёте на самом деле,

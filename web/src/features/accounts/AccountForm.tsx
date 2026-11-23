@@ -19,7 +19,7 @@ import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState, type FormErrors } from '../../shared/lib/useFormState'
 import { AccountColorPicker, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from './accountsCache'
-import classes from './AccountsPage.module.css'
+import classes from './AccountForm.module.css'
 import { icons } from '../../theme'
 
 /** Длина названия из контракта (`AccountName`). */

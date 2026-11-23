@@ -39,3 +39,11 @@
   /* Как у .links: пункт «Выйти» выровнен по пунктам меню. */
   margin-inline: calc(var(--mantine-spacing-xs) * -1);
 }
+
+/* Онбординг: «операции вносятся этой кнопкой». Спокойное кольцо цветом акцента, без
+   анимации (ux.md, §7); зазор цвета меню отделяет кольцо от кнопки. */
+.add[data-highlight] {
+  box-shadow:
+    0 0 0 2px var(--app-color-surface),
+    0 0 0 4px var(--app-color-accent-text);
+}

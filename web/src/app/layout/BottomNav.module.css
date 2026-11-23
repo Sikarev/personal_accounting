@@ -98,3 +98,11 @@
     transform: scale(0.96);
   }
 }
+
+/* Онбординг: «операции вносятся этой кнопкой». Спокойное кольцо цветом акцента, без
+   анимации (ux.md, §7); зазор цвета фона отделяет кольцо от кнопки. */
+.add[data-highlight] {
+  box-shadow:
+    0 0 0 2px var(--mantine-color-body),
+    0 0 0 4px var(--app-color-accent-text);
+}

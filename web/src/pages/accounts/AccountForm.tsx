@@ -1,6 +1,7 @@
-import { Checkbox, NativeSelect, Radio, Stack, Text, TextInput } from '@mantine/core'
+import { Button, Checkbox, Chip, NativeSelect, Radio, Stack, Text, TextInput } from '@mantine/core'
+import { IconChevronDown } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 
 import {
   AccountType,
@@ -20,6 +21,7 @@ import { AuthForm } from '../auth/AuthForm'
 import { submitErrorState } from '../auth/submitErrorState'
 import { accountMutationOptions, upsertAccount } from './accountsCache'
 import classes from './AccountsPage.module.css'
+import { icons } from '../../theme'
 
 /** Длина названия из контракта (`AccountName`). */
 const NAME_MAX_LENGTH = 100
@@ -72,6 +74,13 @@ function validate(v: Values, minorUnits: number, t: Messages) {
   return { errors, initialBalance: balance.ok ? balance.value : 0 }
 }
 
+/** Быстрый вариант нового счёта: чип, который заполняет название и тип. */
+export type AccountPreset = {
+  label: string
+  name: string
+  type: AccountType
+}
+
 export type AccountFormProps = {
   /** Редактируемый счёт; `null` — создание нового. */
   account: Account | null
@@ -81,6 +90,14 @@ export type AccountFormProps = {
   onDone: () => void
   /** Дополнительные действия под формой (корректировка, архив, удаление). */
   footer?: ReactNode
+  /** Только для нового счёта: чипы над названием, заполняют название и тип. */
+  presets?: readonly AccountPreset[]
+  /**
+   * Компактная форма нового счёта (онбординг): видимость, «учитывать в балансе» и цвет
+   * свёрнуты под «Ещё настройки» — у них хорошие значения по умолчанию, а в семье
+   * из одного человека видимость пока ничего не меняет.
+   */
+  compact?: boolean
 }
 
 /**
@@ -88,8 +105,18 @@ export type AccountFormProps = {
  * (API их не меняет) — при редактировании они показаны текстом.
  * Ошибка сети не стирает введённое: сообщение над формой с кнопкой «Повторить».
  */
-export function AccountForm({ account, currencies, onDone, footer }: AccountFormProps) {
+export function AccountForm({
+  account,
+  currencies,
+  onDone,
+  footer,
+  presets,
+  compact,
+}: AccountFormProps) {
   const t = useT()
+  const presetsLabelId = useId()
+  const moreId = useId()
+  const [moreOpened, setMoreOpened] = useState(false)
   const qc = useQueryClient()
   const form = useFormState<Values>(initialValues(account, currencies))
   const [formError, setFormError] = useState<{ text: string; retryable: boolean } | null>(null)
@@ -140,10 +167,57 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
     value: type,
     label: t.accounts.types[type],
   }))
+  // Чип выбран, пока название и тип совпадают с вариантом; правка названия снимает выбор.
+  const presetIndex = presets?.findIndex((p) => p.name === v.name.trim() && p.type === v.type) ?? -1
+  const applyPreset = (index: string) => {
+    const preset = presets?.[Number(index)]
+    if (!preset) return
+    form.setValue('name', preset.name)
+    form.setValue('type', preset.type)
+  }
+  // Ошибка сервера у свёрнутого поля — раскрываем, иначе фокус на ошибку некуда поставить.
+  const showMore = !compact || moreOpened || Boolean(form.errors.visibility || form.errors.color)
+
   // Пока справочник валют грузится (или не загрузился), доступна выбранная — рубли.
   const currencyOptions = (
     currencies.length > 0 ? currencies : [{ code: v.currency, name: '' }]
   ).map((c) => ({ value: c.code, label: c.name ? `${c.code} — ${c.name}` : c.code }))
+
+  const moreFields = (
+    <>
+      {account ? (
+        <ReadOnlyFacts account={account} />
+      ) : (
+        <Radio.Group
+          size="md"
+          label={t.accounts.form.visibility}
+          value={v.visibility}
+          onChange={(value) => form.setValue('visibility', value as AccountVisibility)}
+          error={form.errors.visibility}
+        >
+          <Stack gap="sm" mt="xs">
+            <Radio
+              value="shared"
+              label={t.accounts.form.visibilityShared}
+              description={t.accounts.form.visibilitySharedHint}
+            />
+            <Radio
+              value="private"
+              label={t.accounts.form.visibilityPrivate}
+              description={t.accounts.form.visibilityPrivateHint}
+            />
+          </Stack>
+        </Radio.Group>
+      )}
+      <Checkbox
+        size="md"
+        label={t.accounts.form.includeInTotal}
+        checked={v.includeInTotal}
+        onChange={(e) => form.setValue('includeInTotal', e.currentTarget.checked)}
+      />
+      <AccountColorPicker value={v.color} onChange={(color) => form.setValue('color', color)} />
+    </>
+  )
 
   return (
     <Stack gap="lg">
@@ -155,6 +229,30 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
         submitLabel={account ? t.accounts.form.submitEdit : t.accounts.form.submitCreate}
         pending={create.isPending || update.isPending}
       >
+        {!account && presets && presets.length > 0 && (
+          <div role="group" aria-labelledby={presetsLabelId}>
+            <Text id={presetsLabelId} size="sm" fw={500} mb="xs">
+              {t.accounts.form.presetsLabel}
+            </Text>
+            <Chip.Group
+              value={presetIndex >= 0 ? String(presetIndex) : null}
+              onChange={applyPreset}
+            >
+              <div className={classes.chips}>
+                {presets.map((preset, index) => (
+                  <Chip
+                    key={preset.label}
+                    value={String(index)}
+                    size="md"
+                    classNames={{ root: classes.chipRoot, label: classes.chipLabel }}
+                  >
+                    {preset.label}
+                  </Chip>
+                ))}
+              </div>
+            </Chip.Group>
+          </div>
+        )}
         <TextInput
           size="md"
           label={t.accounts.form.name}
@@ -201,37 +299,33 @@ export function AccountForm({ account, currencies, onDone, footer }: AccountForm
           }
           rightSectionPointerEvents="none"
         />
-        {account ? (
-          <ReadOnlyFacts account={account} />
-        ) : (
-          <Radio.Group
+        {compact && (
+          <Button
+            variant="subtle"
             size="md"
-            label={t.accounts.form.visibility}
-            value={v.visibility}
-            onChange={(value) => form.setValue('visibility', value as AccountVisibility)}
-            error={form.errors.visibility}
+            className={classes.moreToggle}
+            aria-expanded={showMore}
+            aria-controls={moreId}
+            rightSection={
+              <IconChevronDown
+                size={icons.size.md}
+                stroke={icons.stroke}
+                className={classes.chevron}
+                data-open={showMore || undefined}
+              />
+            }
+            onClick={() => setMoreOpened((o) => !o)}
           >
-            <Stack gap="sm" mt="xs">
-              <Radio
-                value="shared"
-                label={t.accounts.form.visibilityShared}
-                description={t.accounts.form.visibilitySharedHint}
-              />
-              <Radio
-                value="private"
-                label={t.accounts.form.visibilityPrivate}
-                description={t.accounts.form.visibilityPrivateHint}
-              />
-            </Stack>
-          </Radio.Group>
+            {t.accounts.form.moreSettings}
+          </Button>
         )}
-        <Checkbox
-          size="md"
-          label={t.accounts.form.includeInTotal}
-          checked={v.includeInTotal}
-          onChange={(e) => form.setValue('includeInTotal', e.currentTarget.checked)}
-        />
-        <AccountColorPicker value={v.color} onChange={(color) => form.setValue('color', color)} />
+        {compact
+          ? showMore && (
+              <Stack gap="md" id={moreId}>
+                {moreFields}
+              </Stack>
+            )
+          : moreFields}
       </AuthForm>
       {footer}
     </Stack>

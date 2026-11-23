@@ -52,9 +52,38 @@ export function problem(
   })
 }
 
-/** Пользователь вошёл: `/me` отвечает профилем. */
+/**
+ * Счёт по умолчанию у вошедшего пользователя (схема `Account` контракта).
+ * Нужен, чтобы главная показывала обычный экран, а не онбординг первого счёта.
+ */
+export const existingAccount = {
+  id: '01a1faf8-0000-7000-8000-0000000000a1',
+  name: 'Карта',
+  type: 'card',
+  currency: 'RUB',
+  visibility: 'shared',
+  initialBalance: 0,
+  balance: 0,
+  includeInTotal: true,
+  color: null,
+  sortOrder: 0,
+  archivedAt: null,
+  hasTransactions: false,
+}
+
+/**
+ * Пользователь вошёл: `/me` отвечает профилем, а `GET /accounts` — одним счётом
+ * (без счетов главная показывает онбординг, см. onboarding.spec.ts). Свой мок счетов,
+ * зарегистрированный позже, перекрывает этот: Playwright проверяет обработчики
+ * с последнего добавленного.
+ */
 export async function mockSignedIn(page: Page, me: Me = meFixture()) {
   await page.route(`**${API}/me`, (route) => route.fulfill({ json: me }))
+  await page.route(`**${API}/accounts`, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { items: [existingAccount] } })
+      : route.fallback(),
+  )
 }
 
 /** Пользователь не вошёл: `/me` отвечает 401. */

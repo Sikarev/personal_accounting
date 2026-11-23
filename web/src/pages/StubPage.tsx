@@ -6,6 +6,9 @@ import { useT } from '../shared/i18n'
 import { EmptyState, PageHeader } from '../shared/ui'
 import { icons } from '../theme'
 
+/** Атрибут главного действия заглушки: по нему главная возвращает фокус после онбординга. */
+export const STUB_ACTION = 'data-stub-action'
+
 type StubPageProps = {
   title: string
   icon: Icon
@@ -43,6 +46,7 @@ export function StubPage({
                 variant="light"
                 leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
                 onClick={quickAdd.open}
+                {...{ [STUB_ACTION]: true }}
               >
                 {t.nav.addTransaction}
               </Button>

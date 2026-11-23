@@ -2,6 +2,7 @@ import { UnstyledButton } from '@mantine/core'
 import { IconPlus } from '@tabler/icons-react'
 import { Link, useLocation } from 'react-router'
 
+import { useOnboarding } from '../../features/onboarding/onboardingContext'
 import { useQuickAdd } from '../../features/quick-add/quickAddContext'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
@@ -16,6 +17,8 @@ import classes from './BottomNav.module.css'
 export function BottomNav() {
   const t = useT()
   const quickAdd = useQuickAdd()
+  // Онбординг (шаг 2) показывает, где вносить операции, — кнопка «+» выделена кольцом.
+  const { introVisible } = useOnboarding()
   const { pathname } = useLocation()
 
   const renderItem = (item: NavItem) => {
@@ -42,6 +45,7 @@ export function BottomNav() {
       <div className={classes.addSlot}>
         <UnstyledButton
           className={classes.add}
+          data-highlight={introVisible || undefined}
           onClick={quickAdd.open}
           aria-label={t.nav.addTransaction}
           aria-haspopup="dialog"

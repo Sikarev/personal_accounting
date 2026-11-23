@@ -3,6 +3,7 @@ import { IconHomeDollar, IconLogout, IconPlus } from '@tabler/icons-react'
 import { NavLink as RouterNavLink, useLocation } from 'react-router'
 
 import { useLogoutAction } from '../../features/auth/useLogoutAction'
+import { useOnboarding } from '../../features/onboarding/onboardingContext'
 import { useQuickAdd } from '../../features/quick-add/quickAddContext'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
@@ -14,6 +15,8 @@ import classes from './Sidebar.module.css'
 export function Sidebar() {
   const t = useT()
   const quickAdd = useQuickAdd()
+  // Онбординг (шаг 2) показывает, где вносить операции, — кнопка выделена кольцом.
+  const { introVisible } = useOnboarding()
   const { pathname } = useLocation()
   const { logout, isPending: loggingOut } = useLogoutAction()
 
@@ -39,6 +42,8 @@ export function Sidebar() {
           leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
           onClick={quickAdd.open}
           aria-haspopup="dialog"
+          className={classes.add}
+          data-highlight={introVisible || undefined}
         >
           {t.nav.addTransaction}
         </Button>

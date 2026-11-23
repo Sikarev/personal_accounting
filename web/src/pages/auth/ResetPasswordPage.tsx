@@ -8,10 +8,9 @@ import { paths } from '../../app/navigation'
 import { useCompleteSignIn } from '../../features/auth/session'
 import { useConfirmPasswordReset } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
-import { AuthLayout, EmptyState, PasswordField } from '../../shared/ui'
-import { AuthForm } from './AuthForm'
-import { submitErrorState } from './submitErrorState'
+import { AuthLayout, EmptyState, PasswordField, SubmitForm } from '../../shared/ui'
 
 const MIN_PASSWORD = 8
 
@@ -83,7 +82,7 @@ export function ResetPasswordPage() {
           {t.auth.reset.description}
         </Text>
       </Stack>
-      <AuthForm
+      <SubmitForm
         onSubmit={submit}
         errorsShown={form.errorsShown}
         error={formError?.text ?? null}
@@ -102,7 +101,7 @@ export function ResetPasswordPage() {
           onChange={(e) => form.setValue('password', e.currentTarget.value)}
           error={form.errors.password}
         />
-      </AuthForm>
+      </SubmitForm>
     </AuthLayout>
   )
 }

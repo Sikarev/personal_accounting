@@ -7,10 +7,9 @@ import { useAdjustAccountBalance, type Account, type Currency } from '../../shar
 import { useT } from '../../shared/i18n'
 import { isNegativeBalanceProblem, minorUnitsOf } from '../../shared/lib/accounts'
 import { parseMoneyInput } from '../../shared/lib/moneyInput'
+import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
-import { Money } from '../../shared/ui'
-import { AuthForm } from '../auth/AuthForm'
-import { submitErrorState } from '../auth/submitErrorState'
+import { Money, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from './accountsCache'
 
 /**
@@ -80,7 +79,7 @@ export function AdjustBalanceForm({
   }
 
   return (
-    <AuthForm
+    <SubmitForm
       onSubmit={submit}
       errorsShown={form.errorsShown}
       error={formError?.text ?? null}
@@ -125,6 +124,6 @@ export function AdjustBalanceForm({
         }
         rightSectionPointerEvents="none"
       />
-    </AuthForm>
+    </SubmitForm>
   )
 }

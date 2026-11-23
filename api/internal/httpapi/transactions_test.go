@@ -1111,3 +1111,64 @@ func TestCreateTransactionAccountDeletedConcurrently(t *testing.T) {
 	}
 	wantFieldErr(t, <-done, "toAccountId:invalid_account")
 }
+
+// Правка, удаление и восстановление операции ждут корректировки остатка её
+// счёта (и наоборот): иначе корректировка посчитала бы разницу от остатка,
+// который тут же изменится, и итог не совпал бы с введённым. Корректировку
+// «держим» вручную — та же блокировка счёта FOR UPDATE, что у adjust-balance.
+func TestTransactionWriteWaitsForAdjustment(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := e.newUser(t)
+	cash := e.createAccount(t, u, accountBody("Наличные", "shared", 0))["id"].(string)
+	card := e.createAccount(t, u, accountBody("Карта", "shared", 0))["id"].(string)
+	products := e.catID(t, u.familyID, "expense", "Продукты")
+	id := e.createTxID(t, u, expenseReq(cash, products, 1000, day1))
+	tr := e.createTxID(t, u, transferReq(card, cash, 300, day1))
+	ctx := context.Background()
+
+	steps := []struct {
+		name, method, path, body string
+		lock                     string // счёт, который держит «корректировка»
+		status                   int
+	}{
+		{"правка суммы", http.MethodPut, "/transactions/" + id, expenseReq(cash, products, 2000, day1).json(), cash, http.StatusOK},
+		{"удаление", http.MethodDelete, "/transactions/" + id, "", cash, http.StatusNoContent},
+		{"восстановление", http.MethodPost, "/transactions/" + id + "/restore", "", cash, http.StatusOK},
+		// У перевода блокируется и счёт зачисления.
+		{"удаление перевода по счёту зачисления", http.MethodDelete, "/transactions/" + tr, "", cash, http.StatusNoContent},
+	}
+	for _, st := range steps {
+		tx, err := e.pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// При падении теста блокировка снимается, иначе удаление временной
+		// БД ждало бы её вечно. Rollback после Commit ничего не делает.
+		defer tx.Rollback(ctx)
+		if _, err := tx.Exec(ctx, `SELECT id FROM accounts WHERE id = $1 FOR UPDATE`, st.lock); err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan *httptest.ResponseRecorder, 1)
+		go func() { done <- e.as(u, st.method, st.path, st.body) }()
+		e.waitForLockWait(t, "transactionid")
+		select {
+		case rec := <-done:
+			t.Fatalf("%s не ждёт корректировки: %d %s", st.name, rec.Code, rec.Body)
+		default:
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if rec := <-done; rec.Code != st.status {
+			t.Fatalf("%s: %d %s", st.name, rec.Code, rec.Body)
+		}
+	}
+
+	// Настоящая корректировка после правок: итог равен введённому.
+	if rec := e.as(u, http.MethodPost, "/accounts/"+cash+"/adjust-balance", `{"balance":5000}`); rec.Code != http.StatusOK {
+		t.Fatal(rec.Body)
+	}
+	if got := e.balanceOf(t, u, cash); got != 5000 {
+		t.Fatalf("остаток после корректировки: %d", got)
+	}
+}

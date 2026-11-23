@@ -751,6 +751,16 @@ func lockForWrite(ctx context.Context, q *dbgen.Queries, p Principal, id uuid.UU
 	if !fullyVisible(row, p.UserID) {
 		return row, errTransactionReadonly()
 	}
+	// Счета операции — FOR KEY SHARE: корректировка остатка (FOR UPDATE счёта)
+	// не должна посчитать остаток, пока операция по счёту меняется или
+	// удаляется. Новые счета при правке блокирует проверка внешнего ключа.
+	accounts := []uuid.UUID{row.AccountID}
+	if row.ToAccountID != nil {
+		accounts = append(accounts, *row.ToAccountID)
+	}
+	if err := q.LockTransactionAccounts(ctx, dbgen.LockTransactionAccountsParams{FamilyID: p.FamilyID, Ids: accounts}); err != nil {
+		return row, fmt.Errorf("lock transaction accounts: %w", err)
+	}
 	return row, nil
 }
 

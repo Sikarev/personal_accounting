@@ -139,6 +139,20 @@ WHERE t.family_id = @family_id
        OR (ta.id IS NOT NULL AND (ta.owner_user_id IS NULL OR ta.owner_user_id = @user_id::uuid)))
 FOR UPDATE OF t;
 
+-- name: LockTransactionAccounts :exec
+-- FOR KEY SHARE на счета операции перед её правкой, удалением или
+-- восстановлением. Эти UPDATE не меняют ссылку на счёт (или меняют на новый),
+-- поэтому внешний ключ старый счёт не блокирует — а остаток его меняется.
+-- Блокировка конфликтует с FOR UPDATE корректировки (LockAccount): та ждёт
+-- коммита правки и считает разницу от нового остатка, и наоборот. Друг с
+-- другом KEY SHARE не конфликтуют — правки операций по одному счёту не ждут
+-- друг друга. Порядок по id — одинаковый у всех.
+SELECT id
+FROM accounts
+WHERE family_id = @family_id AND id = ANY(@ids::uuid[])
+ORDER BY id
+FOR KEY SHARE;
+
 -- name: GetVisibleAccount :one
 -- Счёт для операции: семья, видимость; архив и валюту проверяет обработчик.
 SELECT id, currency_code, archived_at

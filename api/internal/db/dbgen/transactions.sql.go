@@ -483,6 +483,31 @@ func (q *Queries) LockTransaction(ctx context.Context, arg LockTransactionParams
 	return id, err
 }
 
+const lockTransactionAccounts = `-- name: LockTransactionAccounts :exec
+SELECT id
+FROM accounts
+WHERE family_id = $1 AND id = ANY($2::uuid[])
+ORDER BY id
+FOR KEY SHARE
+`
+
+type LockTransactionAccountsParams struct {
+	FamilyID uuid.UUID
+	Ids      []uuid.UUID
+}
+
+// FOR KEY SHARE на счета операции перед её правкой, удалением или
+// восстановлением. Эти UPDATE не меняют ссылку на счёт (или меняют на новый),
+// поэтому внешний ключ старый счёт не блокирует — а остаток его меняется.
+// Блокировка конфликтует с FOR UPDATE корректировки (LockAccount): та ждёт
+// коммита правки и считает разницу от нового остатка, и наоборот. Друг с
+// другом KEY SHARE не конфликтуют — правки операций по одному счёту не ждут
+// друг друга. Порядок по id — одинаковый у всех.
+func (q *Queries) LockTransactionAccounts(ctx context.Context, arg LockTransactionAccountsParams) error {
+	_, err := q.db.Exec(ctx, lockTransactionAccounts, arg.FamilyID, arg.Ids)
+	return err
+}
+
 const setTransactionDeleted = `-- name: SetTransactionDeleted :exec
 UPDATE transactions
 SET deleted_at = $1, updated_at = $2

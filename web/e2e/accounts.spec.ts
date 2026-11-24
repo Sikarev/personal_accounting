@@ -440,10 +440,43 @@ test.describe('корректировка остатка', () => {
     await dialog.getByLabel(t.accounts.adjust.actual).fill('46 000')
     await dialog.getByRole('button', { name: t.accounts.adjust.submit }).click()
     await expect(dialog).toBeHidden()
-    // 46 000 − 45 230,50 = +769,50; «Отменить» нет — удаления операций ещё нет.
+    // 46 000 − 45 230,50 = +769,50.
     const done = toast(page, t.accounts.adjust.done)
     await expect(done).toContainText('+769,50')
-    await expect(done.getByRole('button', { name: t.common.undo })).toHaveCount(0)
+  })
+
+  test('«Отменить» удаляет операцию-корректировку', { tag: '@a11y' }, async ({ page }) => {
+    const api = await mockAccountsApi(page)
+    const deleted: string[] = []
+    await page.route(`**${API}/transactions/*`, (route) => {
+      if (route.request().method() !== 'DELETE') return problem(route, 404, 'not_found')
+      deleted.push(new URL(route.request().url()).pathname)
+      // Сервер удалил корректировку — остаток прежний.
+      api.accounts.find((a) => a.name === 'Карта Сбер')!.balance = 4_523_050
+      return route.fulfill({ status: 204 })
+    })
+    await openAccounts(page)
+    const dialog = await openAdjust(page, 'Карта Сбер')
+    await dialog.getByLabel(t.accounts.adjust.actual).fill('46 000')
+    await dialog.getByRole('button', { name: t.accounts.adjust.submit }).click()
+    const done = toast(page, t.accounts.adjust.done)
+    await done.getByRole('button', { name: t.common.undo }).click()
+    await expect.poll(() => deleted).toEqual([`${API}/transactions/tx-1`])
+    await expect(done).toHaveCount(0)
+    // Список счетов перезапрошен: остаток снова прежний.
+    await expect(page.getByRole('button', { name: /^Карта Сбер/ })).toContainText('45 230,50')
+  })
+
+  test('ошибка отмены корректировки — тост с причиной', { tag: '@a11y' }, async ({ page }) => {
+    await mockAccountsApi(page)
+    await page.route(`**${API}/transactions/*`, (route) => problem(route, 404, 'not_found'))
+    await openAccounts(page)
+    const dialog = await openAdjust(page, 'Карта Сбер')
+    await dialog.getByLabel(t.accounts.adjust.actual).fill('46 000')
+    await dialog.getByRole('button', { name: t.accounts.adjust.submit }).click()
+    await toast(page, t.accounts.adjust.done).getByRole('button', { name: t.common.undo }).click()
+    const failed = toast(page, t.accounts.adjust.undoFailed)
+    await expect(failed).toContainText(t.errors.notFound)
   })
 
   test('архивный счёт: понятная ошибка 409', { tag: '@a11y' }, async ({ page }) => {

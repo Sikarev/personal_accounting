@@ -8,9 +8,10 @@ import {
   fontsReady,
   horizontalOverflow,
   mockSignedIn,
+  mockTransactionsApi,
 } from './support.ts'
 
-// Оболочка приложения: главная, открытый быстрый ввод, экран «Ещё».
+// Оболочка приложения: главная, экран «Ещё». Быстрый ввод — в quick-add.spec.ts.
 // Проекты (mobile/desktop × light/dark) заданы в playwright.config.ts.
 
 // Оболочка — только для вошедшего пользователя: подменяем /me (e-mail подтверждён,
@@ -36,7 +37,7 @@ function addButton(page: Page) {
 async function openQuickAdd(page: Page) {
   await addButton(page).click()
   const dialog = page.getByRole('dialog', { name: t.quickAdd.title })
-  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('textbox', { name: t.transactions.amount })).toBeFocused()
   return dialog
 }
 
@@ -77,43 +78,6 @@ test.describe('главная', () => {
       )
     },
   )
-})
-
-test.describe('быстрый ввод', () => {
-  test('скриншот открытой панели', { tag: '@visual' }, async ({ page }) => {
-    await openPage(page, '/')
-    await openQuickAdd(page)
-    await expect(page).toHaveScreenshot('quick-add.png')
-  })
-
-  test('доступность открытой панели', { tag: '@a11y' }, async ({ page }) => {
-    await openPage(page, '/')
-    await openQuickAdd(page)
-    await expectNoAxeViolations(page)
-  })
-
-  test('Esc закрывает панель и возвращает фокус на кнопку', { tag: '@a11y' }, async ({ page }) => {
-    await openPage(page, '/')
-    const trigger = addButton(page)
-    // Открываем с клавиатуры — так проверяется и видимость кнопки в порядке табуляции.
-    await trigger.focus()
-    await page.keyboard.press('Enter')
-    const dialog = page.getByRole('dialog', { name: t.quickAdd.title })
-    await expect(dialog).toBeVisible()
-    // Фокус внутри окна, а не на странице под ним.
-    await expect(dialog.locator(':focus')).toHaveCount(1)
-
-    await page.keyboard.press('Escape')
-    await expect(dialog).toBeHidden()
-    await expect(trigger).toBeFocused()
-  })
-
-  test('кнопка «Закрыть» подписана и закрывает панель', { tag: '@a11y' }, async ({ page }) => {
-    await openPage(page, '/')
-    const dialog = await openQuickAdd(page)
-    await dialog.getByRole('button', { name: t.common.close }).click()
-    await expect(dialog).toBeHidden()
-  })
 })
 
 test.describe('mobile: нижняя панель и экран «Ещё»', () => {
@@ -183,10 +147,12 @@ test.describe('mobile: нижняя панель и экран «Ещё»', () =
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 })
       await openPage(page, '/')
+      await mockTransactionsApi(page)
       const dialog = await openQuickAdd(page)
-      const heading = dialog.getByRole('heading', { level: 3 })
+      const amount = dialog.getByRole('textbox', { name: t.transactions.amount })
+      await amount.fill('590')
       // Метка на DOM-узле: если содержимое пересоздастся, новый узел её не получит.
-      await heading.evaluate((el) => {
+      await amount.evaluate((el) => {
         ;(el as HTMLElement & { marker?: string }).marker = 'kept'
       })
 
@@ -194,9 +160,10 @@ test.describe('mobile: нижняя панель и экран «Ещё»', () =
 
       await expect(dialog).toBeVisible()
       await expect(page.locator('.mantine-Drawer-content')).toBeVisible()
-      expect(await heading.evaluate((el) => (el as HTMLElement & { marker?: string }).marker)).toBe(
+      expect(await amount.evaluate((el) => (el as HTMLElement & { marker?: string }).marker)).toBe(
         'kept',
       )
+      await expect(amount).toHaveValue('590')
 
       // После закрытия — нижняя панель, а не боковое меню: телефон в альбомной ориентации.
       await page.keyboard.press('Escape')

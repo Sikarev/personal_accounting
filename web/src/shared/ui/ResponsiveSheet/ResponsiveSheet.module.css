@@ -8,9 +8,14 @@
   max-height: calc(100dvh - var(--mantine-spacing-xl) - env(safe-area-inset-top));
 }
 
-/* На всю высоту — без скруглений, как отдельный экран; отступ под «чёлку» телефона. */
+/* На всю высоту — без скруглений, как отдельный экран; отступ под «чёлку» телефона.
+   scroll-padding: поле, к которому браузер прокручивает при фокусе, не прячется под
+   закреплённой внизу кнопкой формы (SubmitForm, stickySubmit). */
 .sheetFull {
   padding-top: env(safe-area-inset-top);
+  scroll-padding-block-end: calc(
+    var(--app-touch-target) + var(--mantine-spacing-lg) * 2 + env(safe-area-inset-bottom)
+  );
 }
 
 .header {

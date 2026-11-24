@@ -126,3 +126,57 @@ export function formatMoney(
 ): string {
   return formatMoneyParts(amount, currency, options).text
 }
+
+const rateFormatters = new Map<string, Intl.NumberFormat>()
+
+/** Знаков после запятой в курсе: 2–4, как у курсов в банковских приложениях. */
+const RATE_DIGITS = 4
+
+/**
+ * Курс обмена по двум суммам перевода (в минимальных единицах своих валют):
+ * `formatExchangeRate(923_500, 'RUB', 10_000, 'USD')` → `1 $ = 92,35 ₽`.
+ *
+ * Слева всегда единица более «дорогой» валюты: «1 $ = 92,35 ₽», а не «1 ₽ = 0,0108 $».
+ * Считается в целых числах (BigInt), округление — половина от нуля, до 4 знаков.
+ * Неположительная сумма — курса нет, `null`.
+ */
+export function formatExchangeRate(
+  fromAmount: number,
+  fromCurrency: string,
+  toAmount: number,
+  toCurrency: string,
+  { fromMinorUnits, toMinorUnits }: { fromMinorUnits?: number; toMinorUnits?: number } = {},
+): string | null {
+  if (fromAmount <= 0 || toAmount <= 0) return null
+  const fromDigits = fromMinorUnits ?? getMinorUnits(fromCurrency)
+  const toDigits = toMinorUnits ?? getMinorUnits(toCurrency)
+  // Сколько «from» за одну единицу «to»: (from / 10^fd) / (to / 10^td).
+  const fromPerTo = {
+    n: BigInt(fromAmount) * 10n ** BigInt(toDigits),
+    d: BigInt(toAmount) * 10n ** BigInt(fromDigits),
+  }
+  const toIsBase = fromPerTo.n >= fromPerTo.d
+  const base = toIsBase ? toCurrency : fromCurrency
+  const baseDigits = toIsBase ? toDigits : fromDigits
+  const quote = toIsBase ? fromCurrency : toCurrency
+  const { n, d } = toIsBase ? fromPerTo : { n: fromPerTo.d, d: fromPerTo.n }
+
+  const scale = 10n ** BigInt(RATE_DIGITS)
+  const scaled = (2n * n * scale + d) / (2n * d)
+  const intPart = scaled / scale
+  const fracPart = String(scaled % scale).padStart(RATE_DIGITS, '0')
+
+  let formatter = rateFormatters.get(quote)
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(LOCALE, {
+      style: 'currency',
+      currency: quote,
+      currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: RATE_DIGITS,
+    })
+    rateFormatters.set(quote, formatter)
+  }
+  const one = formatMoney(10 ** baseDigits, base, { minorUnits: baseDigits })
+  return `${one} = ${formatter.format(`${intPart}.${fracPart}` as `${number}`)}`
+}

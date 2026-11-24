@@ -27,6 +27,21 @@ function toUtc({ year, month, day }: CalendarDate): Date {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
+function toIso(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+/** Дата на `days` дней позже (раньше — с минусом): `shiftDate('2026-03-01', -1)` → `2026-02-28`. */
+export function shiftDate(date: CalendarDateInput, days: number): string {
+  return toIso(new Date(toUtc(toCalendarDate(date)).getTime() + days * DAY_MS))
+}
+
+/** Строка — существующая дата `YYYY-MM-DD` (не `2026-02-31`). */
+export function isCalendarDate(value: string): boolean {
+  if (!ISO_DATE.test(value)) return false
+  return toIso(toUtc(toCalendarDate(value))) === value
+}
+
 const todayFormats = new Map<string, Intl.DateTimeFormat>()
 
 /**

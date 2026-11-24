@@ -1,0 +1,31 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+/* Счёт и дата — одной строкой, при нехватке места переносится. Разделитель-точка не
+   нужен: у счёта и даты свои значки, а точка в конце строки при переносе выглядела бы
+   оборванной. */
+.context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mantine-spacing-md);
+  /* Кнопки-пикеры с внутренним отступом: выравниваем их текст по левому краю полей. */
+  margin-inline-start: calc(var(--mantine-spacing-sm) * -1);
+  min-width: 0;
+}
+
+.separator {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+}
+
+.rowError {
+  color: var(--mantine-color-error);
+}
+
+.rate {
+  overflow-wrap: anywhere;
+}

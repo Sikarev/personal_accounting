@@ -54,6 +54,8 @@ describe('apiErrorText', () => {
       t.errors.accountHasTransactions,
     ],
     ['account_archived', apiError(409, 'account_archived'), t.errors.accountArchived],
+    ['transaction_readonly', apiError(403, 'transaction_readonly'), t.errors.transactionReadonly],
+    ['adjustment_readonly', apiError(409, 'adjustment_readonly'), t.errors.adjustmentReadonly],
     ['internal', apiError(500, 'internal'), t.errors.server],
     // Неизвестный код — по статусу.
     ['неизвестный код, 502', apiError(502, UNKNOWN_ERROR_CODE), t.errors.server],
@@ -103,6 +105,23 @@ describe('fieldErrorTexts', () => {
       password: t.errors.field.tooShort,
       email: t.errors.field.invalidFormat,
       timezone: t.errors.field.invalid,
+    })
+  })
+
+  it('коды полей операций', () => {
+    const error = validation([
+      { field: 'accountId', code: 'invalid_account', message: '' },
+      { field: 'toAccountId', code: 'same_account', message: '' },
+      { field: 'categoryId', code: 'invalid_category', message: '' },
+      { field: 'toAmount', code: 'to_amount_mismatch', message: '' },
+      { field: 'categoryId2', code: 'not_allowed', message: '' },
+    ])
+    expect(fieldErrorTexts(error, t)).toEqual({
+      accountId: t.errors.field.invalidAccount,
+      toAccountId: t.errors.field.sameAccount,
+      categoryId: t.errors.field.invalidCategory,
+      toAmount: t.errors.field.toAmountMismatch,
+      categoryId2: t.errors.field.notAllowed,
     })
   })
 

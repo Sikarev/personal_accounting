@@ -1,0 +1,20 @@
+/* Кнопка внизу окна: прилипает к нижнему краю области прокрутки, фон — как у окна, чтобы
+   прокручиваемое содержимое уходило под неё, а не просвечивало. Отступ снизу — под
+   системную полоску «домой» на iPhone. */
+.sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin-block-end: calc(var(--mantine-spacing-lg) * -1 - env(safe-area-inset-bottom));
+  padding-block: var(--mantine-spacing-sm)
+    calc(var(--mantine-spacing-lg) + env(safe-area-inset-bottom));
+  background-color: var(--mantine-color-body);
+}
+
+/* Низкий экран (телефон боком, мало места над клавиатурой): закреплённая кнопка закрыла бы
+   поля и чипы — пусть стоит после формы, как обычно. */
+@media (max-height: 30em) {
+  .sticky {
+    position: static;
+  }
+}

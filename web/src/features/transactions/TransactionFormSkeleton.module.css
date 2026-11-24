@@ -1,0 +1,23 @@
+/* Скелетон формы: те же блоки и промежутки, что у формы. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.skeletonKinds {
+  height: calc(var(--app-touch-target) + var(--mantine-spacing-sm) * 2);
+}
+
+.skeletonRow {
+  height: var(--app-touch-target);
+  width: 60%;
+}
+
+.skeletonField {
+  height: calc(var(--app-touch-target) + var(--mantine-font-size-sm) * 1.5);
+}
+
+.skeletonChips {
+  height: calc(var(--app-touch-target) * 2);
+}

@@ -11,7 +11,12 @@ import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { PageHeader, TransactionListSkeleton } from '../../shared/ui'
 import { BlockError } from './BlockError'
-import { focusHomeForm, focusWhenPresent, HOME_PRIMARY_ACTION } from './focusTargets'
+import {
+  focusHomeForm,
+  focusWhenPresent,
+  HOME_PRIMARY_ACTION,
+  RECENT_ALL_LINK,
+} from './focusTargets'
 import { HomeAccounts } from './HomeAccounts'
 import { HomeQuickAddForm } from './HomeQuickAddForm'
 import classes from './HomePage.module.css'
@@ -55,15 +60,13 @@ export function HomePage() {
   const recentQuery = useListTransactions(RECENT_PARAMS)
   const categoriesQuery = useListCategories()
   const me = useGetMe()
-  // Последняя ошибка загрузки счетов. TanStack Query при повторном запросе без данных
-  // сбрасывает ошибку и снова считает запрос «ожидающим» — без этого «Повторить» в блоке
-  // меняло бы всю главную на скелетон, пока идёт запрос.
-  const [accountsError, setAccountsError] = useState<unknown>(null)
-  if (accountsQuery.error && accountsQuery.error !== accountsError) {
-    setAccountsError(accountsQuery.error)
-  }
-  if (accountsQuery.data && accountsError !== null) setAccountsError(null)
-  const firstLoad = accountsQuery.isPending && accountsError === null
+  // Счета без данных уже не загрузились. TanStack Query при повторе запроса без данных
+  // сбрасывает ошибку и снова считает его «ожидающим» — по счётчику ошибок (он при повторе
+  // не сбрасывается) блок ошибки остаётся на месте, а не сменяется скелетоном всей главной.
+  // Фоновая ошибка при уже загруженных данных ничего не меняет: показываем данные.
+  const accountsFailed =
+    !accountsQuery.data && (accountsQuery.isError || accountsQuery.errorUpdateCount > 0)
+  const firstLoad = accountsQuery.isPending && !accountsFailed
   const showSkeleton = useDelayedLoading(firstLoad)
   // Скелетон уже показан — пока догружается чанк шага 1, держим его без новой задержки,
   // иначе было бы «скелетон → пусто → форма».
@@ -84,7 +87,16 @@ export function HomePage() {
 
   // Карточка шага 2 исчезает вместе с «Понятно» — фокус на главное действие экрана:
   // desktop — сумма в форме на странице, mobile — «Добавить операцию» пустого блока.
-  const afterIntro = () => (mobile ? focusWhenPresent(`[${HOME_PRIMARY_ACTION}]`) : focusHomeForm())
+  // Операции уже есть (пустого блока нет) — «Все операции»; не дождались — заголовок экрана.
+  const afterIntro = () =>
+    mobile
+      ? focusWhenPresent(`[${HOME_PRIMARY_ACTION}], [${RECENT_ALL_LINK}]`, () => {
+          // Заголовок сам по себе не фокусируется — только программно (tabindex="-1").
+          const heading = document.querySelector<HTMLElement>('main h1')
+          heading?.setAttribute('tabindex', '-1')
+          return heading
+        })
+      : focusHomeForm()
 
   // Шаг 2 на телефоне — одна карточка: она указывает на «+» в нижней панели.
   if (onboarding.introVisible && mobile) {
@@ -111,7 +123,7 @@ export function HomePage() {
   ) : (
     <BlockError
       title={t.home.accountsLoadError}
-      error={accountsQuery.error ?? accountsError}
+      error={accountsQuery.error}
       retrying={accountsQuery.isFetching}
       onRetry={() => void accountsQuery.refetch()}
     />
@@ -144,9 +156,9 @@ export function HomePage() {
                 <RecentTransactions
                   query={recentQuery}
                   categoriesQuery={categoriesQuery}
-                  accounts={accountsQuery.data?.items ?? []}
+                  accounts={accountsQuery.data?.items ?? null}
                   showAuthor={(me.data?.family.memberCount ?? 1) > 1}
-                  mobile={mobile}
+                  withForm={withForm}
                 />
               </Suspense>
             </ChunkLoadBoundary>

@@ -17,7 +17,8 @@ export type RowAction = 'open' | 'duplicate' | 'delete'
 export type TransactionDaysProps = {
   groups: DayGroup[]
   today: string
-  accountNames: ReadonlyMap<string, string>
+  /** `null` — счета не загружены: подпись счёта в строках не показывается. */
+  accountNames: ReadonlyMap<string, string> | null
   categories: ReadonlyMap<string, Category>
   showAuthor: boolean
   onAction: (action: RowAction, transaction: Transaction) => void

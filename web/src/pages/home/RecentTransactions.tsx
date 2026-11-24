@@ -26,6 +26,8 @@ type Query<T> = {
   data: T | undefined
   isPending: boolean
   isError: boolean
+  /** Сколько раз запрос падал — не сбрасывается при повторе (в отличие от `error`). */
+  errorUpdateCount: number
   isFetching: boolean
   error: unknown
   refetch: () => unknown
@@ -36,12 +38,18 @@ type RecentTransactionsProps = {
   query: Query<TransactionList>
   /** Категории — названия в строках. */
   categoriesQuery: Query<{ items: Category[] }>
-  /** Счета (все, в т. ч. архивные: операция может быть на архивном). */
-  accounts: readonly Account[]
+  /**
+   * Счета (все, в т. ч. архивные: операция может быть на архивном); `null` — не загружены,
+   * подпись счёта в строках не показывается.
+   */
+  accounts: readonly Account[] | null
   /** Показать автора — в семье больше одного человека. */
   showAuthor: boolean
-  /** Раскладка mobile: пустое состояние ведёт в окно быстрого ввода, а не к форме рядом. */
-  mobile: boolean
+  /**
+   * Форма быстрого ввода есть на странице (desktop): пустое состояние ведёт к ней,
+   * иначе — в окно быстрого ввода.
+   */
+  withForm: boolean
 }
 
 /**
@@ -54,7 +62,7 @@ export function RecentTransactions({
   categoriesQuery,
   accounts,
   showAuthor,
-  mobile,
+  withForm,
 }: RecentTransactionsProps) {
   const t = useT()
   const today = useToday()
@@ -68,7 +76,10 @@ export function RecentTransactions({
     () => (query.data ? groupByDay(items, mergeDays([query.data])) : []),
     [items, query.data],
   )
-  const accountNames = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts])
+  const accountNames = useMemo(
+    () => (accounts ? new Map(accounts.map((a) => [a.id, a.name])) : null),
+    [accounts],
+  )
   const categories = useMemo(
     () => new Map((categoriesQuery.data?.items ?? []).map((c) => [c.id, c])),
     [categoriesQuery.data],
@@ -122,9 +133,14 @@ export function RecentTransactions({
     [remove],
   )
 
+  // Запрос без данных уже падал — блок ошибки держится и во время повтора: TanStack Query
+  // на время повтора сбрасывает `error` и снова считает запрос «ожидающим», и без этого
+  // ошибка сменялась бы скелетоном, а фокус с «Повторить» уходил бы на body.
+  const failed = [query, categoriesQuery].filter(
+    (q) => !q.data && (q.isError || q.errorUpdateCount > 0),
+  )
   const isPending = query.isPending || categoriesQuery.isPending
-  const showSkeleton = useDelayedLoading(isPending)
-  const failed = [query, categoriesQuery].filter((q) => q.isError && !q.data)
+  const showSkeleton = useDelayedLoading(isPending && failed.length === 0)
   const sheetTransaction = sheet.editingId
     ? items.find((item) => item.id === sheet.editingId)
     : undefined
@@ -148,9 +164,9 @@ export function RecentTransactions({
           icon={IconListDetails}
           titleOrder={3}
           title={t.home.emptyTitle}
-          description={mobile ? t.home.emptyDescriptionMobile : t.home.emptyDescriptionDesktop}
+          description={withForm ? t.home.emptyDescriptionDesktop : t.home.emptyDescriptionMobile}
           action={
-            mobile ? (
+            !withForm ? (
               <Button
                 variant="light"
                 size="md"

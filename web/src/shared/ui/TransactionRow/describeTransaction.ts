@@ -14,7 +14,11 @@ export type TransactionView = {
 }
 
 export type TransactionLookups = {
-  accountNames: ReadonlyMap<string, string>
+  /**
+   * Названия счетов по id; `null` — счета ещё не загружены (или не загрузились): подпись
+   * счёта не показывается, а не «Счёт недоступен».
+   */
+  accountNames: ReadonlyMap<string, string> | null
   categories: ReadonlyMap<string, Category>
 }
 
@@ -28,8 +32,9 @@ export function describeTransaction(
   t: Messages,
 ): TransactionView {
   const accountName = (id: string | null) =>
-    (id !== null && accountNames.get(id)) || t.feed.row.unknownAccount
-  const account = (id: string | null) => ({ type: 'account' as const, name: accountName(id) })
+    (id !== null && accountNames?.get(id)) || t.feed.row.unknownAccount
+  const account = (id: string | null) =>
+    accountNames ? { type: 'account' as const, name: accountName(id) } : null
 
   if (tx.kind === 'transfer') {
     // Скрытая сторона (чужой личный счёт): вместо неё — владелец счёта.
@@ -53,7 +58,9 @@ export function describeTransaction(
     return {
       title: {
         parent: null,
-        name: `${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}`,
+        name: accountNames
+          ? `${accountName(tx.accountId)} → ${accountName(tx.toAccountId)}`
+          : t.transactions.kinds.transfer,
       },
       amount: amountOf(tx.amount, tx.currency, false),
       side: exchange ? { type: 'amount', value: tx.toAmount!, currency: tx.toCurrency! } : null,

@@ -361,6 +361,131 @@ test.describe('состояния', () => {
     await expect(balance(page)).toBeVisible()
   })
 
+  test(
+    'ошибка блока счетов: в строках нет подписи счёта; без формы — «Добавить операцию»',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await setup(page)
+      await page.route(`**${API}/accounts`, (route) =>
+        route.request().method() === 'GET' ? problem(route, 500, 'internal') : route.fallback(),
+      )
+      await page.goto('/')
+      await expect(page.getByText(t.home.accountsLoadError)).toBeVisible()
+      await recentReady(page)
+      // Счета не загружены — не «Счёт недоступен», а без подписи; перевод — «Перевод».
+      await expect(recent(page).getByText(t.feed.row.unknownAccount)).toHaveCount(0)
+      await expect(recent(page).getByText(t.transactions.kinds.transfer)).toBeVisible()
+      // Формы на странице нет (и на desktop) — пустому блоку некуда вести, кроме окна.
+      await expect(pageForm(page)).toHaveCount(0)
+    },
+  )
+
+  test(
+    'ошибка блока счетов без операций — кнопка открывает окно',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await setup(page, { transactions: [] })
+      await page.route(`**${API}/accounts`, (route) =>
+        route.request().method() === 'GET' ? problem(route, 500, 'internal') : route.fallback(),
+      )
+      await page.goto('/')
+      await expect(page.getByText(t.home.accountsLoadError)).toBeVisible()
+      await recent(page).getByRole('button', { name: t.nav.addTransaction }).click()
+      await expect(page.getByRole('dialog', { name: t.quickAdd.title })).toBeVisible()
+    },
+  )
+
+  test(
+    'фоновая ошибка перезапроса счетов при загруженных данных — главная на месте',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const errors: string[] = []
+      page.on('pageerror', (e) => errors.push(String(e)))
+      await setup(page)
+      await openHome(page)
+      await recentReady(page)
+      // Дальше GET /accounts отвечает 500: удаление сбрасывает кэш счетов, перезапрос падает.
+      let accountRequests = 0
+      await page.route(`**${API}/accounts`, (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        accountRequests += 1
+        return problem(route, 500, 'internal')
+      })
+      await menuOf(page, food.name).first().click()
+      await page.getByRole('menuitem', { name: t.feed.actions.delete }).click()
+      await expect.poll(() => accountRequests).toBeGreaterThanOrEqual(2)
+      // Данные на месте: баланс и счета, последние операции; блока ошибки нет.
+      await expect(balance(page)).toBeVisible()
+      await expect(balance(page).getByText(credit.name as string)).toBeVisible()
+      await expect(recent(page).getByText('Кофе')).toBeVisible()
+      await expect(page.getByText(t.home.accountsLoadError)).toHaveCount(0)
+      expect(errors).toEqual([])
+    },
+  )
+
+  test(
+    '«Повторить» в блоке операций: фокус остаётся на кнопке во время повтора и после',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await setup(page)
+      let release: () => void = () => {}
+      // Первая загрузка и её повтор — 500; ручной повтор ждёт и снова падает (с повтором).
+      let calls = 0
+      api.failNext.set('GET /transactions', function handler(route) {
+        calls += 1
+        if (calls < 4) api.failNext.set('GET /transactions', handler)
+        if (calls === 3) {
+          return new Promise<void>((resolve) => (release = resolve)).then(() =>
+            problem(route, 500, 'internal'),
+          )
+        }
+        return problem(route, 500, 'internal')
+      })
+      await openHome(page)
+      const retry = recent(page).getByRole('button', { name: t.errors.retry })
+      await expect(retry).toBeVisible()
+      await retry.focus()
+      await page.keyboard.press('Enter')
+      await expect.poll(() => calls).toBe(3)
+      await expect(retry).toHaveAttribute('aria-busy', 'true')
+      await expect(retry).toBeFocused()
+      release()
+      await expect.poll(() => calls).toBe(4)
+      await expect(retry).not.toHaveAttribute('aria-busy')
+      await expect(retry).toBeFocused()
+      await expect(recent(page).getByText(t.home.recentLoadError)).toBeVisible()
+    },
+  )
+
+  test(
+    '«Повторить» в блоке счетов: фокус остаётся на кнопке во время повтора и после',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await setup(page)
+      let release: () => void = () => {}
+      let calls = 0
+      await page.route(`**${API}/accounts`, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback()
+        calls += 1
+        if (calls === 3) await new Promise<void>((resolve) => (release = resolve))
+        return problem(route, 500, 'internal')
+      })
+      await page.goto('/')
+      const block = page.getByText(t.home.accountsLoadError).locator('../..')
+      const retry = block.getByRole('button', { name: t.errors.retry })
+      await expect(retry).toBeVisible()
+      await retry.focus()
+      await page.keyboard.press('Enter')
+      await expect.poll(() => calls).toBe(3)
+      await expect(retry).toHaveAttribute('aria-busy', 'true')
+      await expect(retry).toBeFocused()
+      release()
+      await expect.poll(() => calls).toBe(4)
+      await expect(retry).not.toHaveAttribute('aria-busy')
+      await expect(retry).toBeFocused()
+    },
+  )
+
   test('загрузка: скелетон блока операций', { tag: '@a11y' }, async ({ page }) => {
     const api = await setup(page)
     let release: () => void = () => {}

@@ -353,6 +353,49 @@ test.describe('шаг 2: где вносить операции', () => {
     },
   )
 
+  test(
+    'mobile: «Понятно», когда операции уже есть, — фокус на «Все операции»',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(!isMobile, 'Шаг 2 одной карточкой — только на mobile')
+      await mockAccounts(page)
+      // Операции есть (например, внесены с другого устройства) — пустого блока нет.
+      await page.route(
+        (url) => url.pathname === `${API}/transactions`,
+        (route) =>
+          route.fulfill({
+            json: {
+              items: [
+                {
+                  id: '01a1faf8-0000-7000-9000-000000000001',
+                  kind: 'expense',
+                  date: '2026-11-23',
+                  accountId: existingAccount.id,
+                  amount: 10_000,
+                  currency: 'RUB',
+                  toAccountId: null,
+                  toAmount: null,
+                  toCurrency: null,
+                  categoryId: null,
+                  comment: 'Кофе',
+                  author: null,
+                  counterparty: null,
+                  editable: true,
+                  createdAt: '2026-11-23T10:00:00Z',
+                  updatedAt: '2026-11-23T10:00:00Z',
+                },
+              ],
+              days: [],
+            },
+          }),
+      )
+      await openStep1(page)
+      await createFirstAccount(page)
+      await intro(page).getByRole('button', { name: t.onboarding.dismiss }).click()
+      await expect(page.getByRole('link', { name: t.home.allTransactions })).toBeFocused()
+    },
+  )
+
   test('уход с главной скрывает шаг 2', { tag: '@a11y' }, async ({ page }) => {
     await mockAccounts(page)
     await openStep1(page)

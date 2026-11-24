@@ -46,6 +46,13 @@ type Config struct {
 	// MailFrom — отправитель писем (MAIL_FROM), например
 	// "Домашняя бухгалтерия <no-reply@example.com>".
 	MailFrom mail.Address
+
+	// RatesSync — фоновая загрузка курсов ЦБ РФ в процессе API (RATES_SYNC,
+	// по умолчанию включена). Выключают для работы без сети.
+	RatesSync bool
+	// CBRBaseURL — адрес XML-сервиса ЦБ без завершающего «/» (CBR_BASE_URL).
+	// По умолчанию официальный; другой нужен только для проверки с заглушкой.
+	CBRBaseURL string
 }
 
 // SMTP — настройки SMTP-сервера (SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD).
@@ -57,7 +64,11 @@ type SMTP struct {
 	Password string
 }
 
-const defaultAppBaseURL = "http://localhost:5173"
+const (
+	defaultAppBaseURL = "http://localhost:5173"
+	// defaultCBRBaseURL — официальный XML-сервис ЦБ РФ; неофициальные зеркала не используем.
+	defaultCBRBaseURL = "https://www.cbr.ru/scripts"
+)
 
 // Load возвращает конфигурацию. Значения по умолчанию совпадают
 // с docker-compose.yml, поэтому локально ничего настраивать не нужно.
@@ -105,6 +116,18 @@ func Load() (Config, error) {
 	}
 	if cfg.AppBaseURL, err = parseBaseURL(baseURL); err != nil {
 		return Config{}, fmt.Errorf("APP_BASE_URL: %w", err)
+	}
+
+	cfg.RatesSync = true
+	if v := os.Getenv("RATES_SYNC"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("RATES_SYNC: ожидается true или false, получено %q", v)
+		}
+		cfg.RatesSync = b
+	}
+	if cfg.CBRBaseURL, err = parseBaseURL(getEnv("CBR_BASE_URL", defaultCBRBaseURL)); err != nil {
+		return Config{}, fmt.Errorf("CBR_BASE_URL: %w", err)
 	}
 	return cfg, nil
 }

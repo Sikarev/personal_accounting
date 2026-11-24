@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test'
 
 import { ru as t } from '../src/shared/i18n/ru.ts'
 import {
@@ -151,6 +151,12 @@ async function feedReady(page: Page, firstDay: string = t.dates.today) {
   await expect(page.getByRole('heading', { level: 2, name: firstDay })).toBeVisible()
 }
 
+/** Кнопка строки (открыть операцию) — по тексту внутри строки. */
+const rowButton = (page: Page, text: string) =>
+  page
+    .locator('[data-transaction-row]', { has: page.getByText(text, { exact: true }) })
+    .locator('[data-transaction-open]')
+
 const menuOf = (page: Page, title: string) =>
   page.getByRole('button', { name: t.feed.row.actions(title) })
 
@@ -229,12 +235,20 @@ test.describe('лента', () => {
     await expect(page.getByText('Пополнение: Иван')).toBeVisible()
     await expect(page.getByText('Карта → Доллары')).toBeVisible()
 
-    // Перевод со скрытой стороной править и удалять нельзя — у строки нет меню.
-    await expect(menuOf(page, 'Пополнение: Иван')).toHaveCount(0)
-    // Корректировку удалить можно.
-    await expect(menuOf(page, t.feed.row.adjustment)).toHaveCount(2)
-
     await expectNoAxeViolations(page)
+
+    // Перевод со скрытой стороной не удалить и не дублировать — в меню только «Изменить»
+    // (форма объяснит, почему нельзя).
+    await menuOf(page, 'Пополнение: Иван').click()
+    await expect(page.getByRole('menuitem')).toHaveText([t.feed.actions.edit])
+    await page.keyboard.press('Escape')
+    // Корректировку можно удалить, но не дублировать.
+    await menuOf(page, t.feed.row.adjustment).first().click()
+    await expect(page.getByRole('menuitem')).toHaveText([
+      t.feed.actions.edit,
+      t.feed.actions.delete,
+    ])
+    await page.keyboard.press('Escape')
     expect(await horizontalOverflow(page)).toBe(0)
   })
 
@@ -529,8 +543,8 @@ test.describe('удаление', () => {
 
     await expect(page.getByText('Сыр и йогурт')).toHaveCount(0)
     await expect(toast(page, t.feed.toasts.deleted)).toBeVisible()
-    // Фокус — на меню следующей строки, а не на body.
-    await expect(menuOf(page, cafe.name)).toBeFocused()
+    // Фокус — на следующую строку, а не на body.
+    await expect(rowButton(page, 'Кофе')).toBeFocused()
     await expect.poll(() => api.received).toContain('DELETE /transactions/:id')
     // Итог дня пересчитан сервером после удаления.
     const today = dayHeader(page, t.dates.today)
@@ -570,3 +584,134 @@ test(
     expect(url.searchParams.getAll('kind')).toEqual(['income'])
   },
 )
+
+test.describe('правка', () => {
+  const field = (scope: Page | Locator, name: string) =>
+    scope.getByRole('textbox', { name, exact: true })
+  const inlineEdit = (page: Page, title: string) =>
+    page.getByRole('region', { name: t.feed.edit.inlineLabel(title) })
+  const sheet = (page: Page) => page.getByRole('dialog', { name: t.feed.edit.title })
+  const dairyTitle = `${food.name} › ${dairy.name}`
+
+  test(
+    'desktop: на месте строки, Enter — сохранить, Esc — отмена',
+    { tag: ['@visual', '@a11y'] },
+    async ({ page, isMobile }) => {
+      test.skip(isMobile, 'На mobile — окно')
+      const api = await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Сыр и йогурт').click()
+      const form = inlineEdit(page, dairyTitle)
+      await expect(field(form, t.transactions.amount)).toBeFocused()
+      await expect(field(form, t.transactions.amount)).toHaveValue('1290')
+      await expect(page).toHaveScreenshot('feed-edit-inline.png', { fullPage: true })
+      await expectNoAxeViolations(page)
+
+      // Esc — отмена: без запроса, фокус — на строку.
+      await page.keyboard.press('Escape')
+      await expect(form).toHaveCount(0)
+      await expect(rowButton(page, 'Сыр и йогурт')).toBeFocused()
+
+      // Enter на строке — открыть; Enter в форме — сохранить.
+      await page.keyboard.press('Enter')
+      await field(form, t.transactions.amount).fill('1500')
+      await page.keyboard.press('Enter')
+      await expect(form).toHaveCount(0)
+      await expect(rowButton(page, 'Сыр и йогурт')).toContainText(/−1\s500\s₽/)
+      await expect(rowButton(page, 'Сыр и йогурт')).toBeFocused()
+      await expect(toast(page, t.feed.toasts.edited)).toBeVisible()
+      await expect.poll(() => api.updates.length).toBe(1)
+      expect(api.updates[0].body).toMatchObject({ kind: 'expense', amount: 150_000 })
+
+      // Одновременно открыта одна форма.
+      await rowButton(page, 'Сыр и йогурт').click()
+      await rowButton(page, 'Кофе').click()
+      await expect(inlineEdit(page, dairyTitle)).toHaveCount(0)
+      await expect(inlineEdit(page, cafe.name)).toBeVisible()
+    },
+  )
+
+  test(
+    'mobile: окно правки, «Назад» закрывает',
+    { tag: ['@visual', '@a11y'] },
+    async ({ page, isMobile }) => {
+      test.skip(!isMobile, 'На desktop — на месте строки')
+      const api = await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Сыр и йогурт').click()
+      const dialog = sheet(page)
+      await expect(dialog).toBeVisible()
+      await expect(field(dialog, t.transactions.amount)).toHaveValue('1290')
+      await expect(page).toHaveScreenshot('feed-edit-sheet.png')
+      await expectNoAxeViolations(page)
+
+      // «Назад» закрывает окно, а не уводит с экрана.
+      await page.goBack()
+      await expect(dialog).toBeHidden()
+      await expect(page).toHaveURL(/\/transactions$/)
+
+      // Правка комментария и сохранение.
+      await rowButton(page, 'Сыр и йогурт').click()
+      await field(dialog, t.transactions.comment).fill('Сыр, йогурт, кефир')
+      await dialog.getByRole('button', { name: t.transactions.submit.expense }).click()
+      await expect(dialog).toBeHidden()
+      await expect(page.getByText('Сыр, йогурт, кефир')).toBeVisible()
+      await expect(rowButton(page, 'Сыр, йогурт, кефир')).toBeFocused()
+      await expect.poll(() => api.updates.length).toBe(1)
+      expect(api.updates[0].body).toMatchObject({ comment: 'Сыр, йогурт, кефир' })
+    },
+  )
+
+  test(
+    'ошибка сохранения — строка откатывается, тост с причиной',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await setup(page)
+      failTimes(api, 'PUT /transactions/:id', 1, (route) => problem(route, 500, 'internal'))
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Кофе').click()
+      const scope = sheet(page).or(inlineEdit(page, cafe.name))
+      await field(scope, t.transactions.comment).fill('Кофе и круассан')
+      await field(scope, t.transactions.comment).press('Enter')
+      await expect(toast(page, t.feed.toasts.editFailed)).toBeVisible()
+      await expect(toast(page, t.feed.toasts.editFailed)).toContainText(t.errors.server)
+      await expect(page.getByText('Кофе', { exact: true })).toBeVisible()
+      await expect(page.getByText('Кофе и круассан')).toHaveCount(0)
+    },
+  )
+
+  test('корректировку не правят: объяснение и «Удалить»', { tag: '@a11y' }, async ({ page }) => {
+    await setup(page)
+    await openFeed(page)
+    await feedReady(page)
+    await page.locator('[data-transaction-open]', { hasText: '+250,50' }).click()
+    await expect(page.getByText(t.transactions.readonly.adjustment)).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: t.feed.actions.delete, exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('button', { name: t.feed.actions.duplicate })).toHaveCount(0)
+    await expectNoAxeViolations(page)
+  })
+
+  test(
+    'дублирование открывает быстрый ввод с копией, дата — сегодня',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      // Операция прошлого года (единственная строка «Продукты»), копия — на сегодня.
+      await menuOf(page, food.name).click()
+      await page.getByRole('menuitem', { name: t.feed.actions.duplicate }).click()
+      const quickAdd = page.getByRole('dialog', { name: t.quickAdd.title })
+      await expect(quickAdd).toBeVisible()
+      await expect(field(quickAdd, t.transactions.amount)).toHaveValue('300')
+      await quickAdd.getByRole('button', { name: t.transactions.submit.expense }).click()
+      await expect.poll(() => api.created.length).toBe(1)
+      expect(api.created[0]).toMatchObject({ kind: 'expense', amount: 30_000, date: '2026-11-23' })
+    },
+  )
+})

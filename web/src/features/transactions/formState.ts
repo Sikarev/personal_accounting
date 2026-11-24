@@ -1,5 +1,6 @@
 import type {
   Account,
+  Category,
   Currency,
   Transaction,
   TransactionDefaults,
@@ -59,6 +60,9 @@ function pickAccount(active: readonly Account[], preferred: string | null | unde
  * Начальные значения. Создание: счета — из `defaults` (последние использованные), если
  * они ещё активны, иначе первый по порядку экрана «Счета»; дата — сегодня. Правка: всё из
  * операции, остальные виды — как при создании (на случай смены вида).
+ * Создание по образцу (`template`, дублирование): как правка, но дата — сегодня, а
+ * архивный счёт и архивная категория образца не подставляются (новую операцию на них
+ * не создать) — вместо них значения по умолчанию.
  */
 export function initialValues({
   accounts,
@@ -66,12 +70,17 @@ export function initialValues({
   currencies,
   today,
   transaction,
+  template,
+  categories,
 }: {
   accounts: readonly Account[]
   defaults: TransactionDefaults | null | undefined
   currencies: readonly Currency[]
   today: string
   transaction?: Transaction | null
+  template?: Transaction | null
+  /** Нужны только для образца: архивная категория не подставляется. */
+  categories?: readonly Category[]
 }): TransactionFormValues {
   const active = activeAccountsInOrder(accounts)
   const fromAccountId = pickAccount(active, defaults?.transfer?.accountId)
@@ -92,6 +101,8 @@ export function initialValues({
     categoryId: null,
     comment: '',
   }
+  if (template && !transaction)
+    return fromTemplate(values, template, active, currencies, categories)
   if (!transaction || transaction.kind === 'adjustment') return values
 
   const amountText = (amount: number | null, currency: string | null) =>
@@ -121,6 +132,46 @@ export function initialValues({
     }
   }
   return values
+}
+
+function fromTemplate(
+  values: TransactionFormValues,
+  template: Transaction,
+  active: readonly Account[],
+  currencies: readonly Currency[],
+  categories: readonly Category[] = [],
+): TransactionFormValues {
+  if (template.kind === 'adjustment') return values
+  const activeId = (id: string | null) => (active.some((a) => a.id === id) ? id : null)
+  const amountText = (amount: number | null, currency: string | null) =>
+    amount === null || currency === null
+      ? ''
+      : formatMoneyInput(amount, minorUnitsOf(currency, currencies))
+  const next: TransactionFormValues = {
+    ...values,
+    kind: template.kind,
+    amount: amountText(template.amount, template.currency),
+    comment: template.comment,
+  }
+  const account = activeId(template.accountId)
+  if (template.kind === 'transfer') {
+    const to = activeId(template.toAccountId)
+    if (account && to) {
+      next.fromAccountId = account
+      next.toAccountId = to
+    }
+    if (template.currency !== template.toCurrency) {
+      next.toAmount = amountText(template.toAmount, template.toCurrency)
+    }
+    return next
+  }
+  if (account) {
+    if (template.kind === 'expense') next.expenseAccountId = account
+    else next.incomeAccountId = account
+  }
+  const category = categories.find((c) => c.id === template.categoryId)
+  next.categoryId = category && category.archivedAt === null ? category.id : null
+  return next
 }
 
 /**

@@ -203,6 +203,19 @@ export const WithAuthor: Story = {
   },
 }
 
+/**
+ * Активируемая строка (лента): вся строка, кроме меню, — кнопка «открыть операцию»
+ * (клик, Enter, пробел); подсветка при наведении, кольцо фокуса внутри строки.
+ */
+export const Activatable: Story = {
+  args: {
+    transaction: tx({ comment: 'Хлеб и молоко' }),
+    actions: menu,
+    onActivate: () => {},
+    expanded: false,
+  },
+}
+
 /** Узкая колонка (телефон с крупным шрифтом): строка перестраивается в столбик. */
 export const Narrow: Story = {
   args: {

@@ -40,7 +40,7 @@ export function Sidebar() {
           // Размер шрифта Mantine задаёт inline-переменной, поэтому меняем через vars.
           vars={() => ({ root: { '--button-fz': 'var(--mantine-font-size-sm)' } })}
           leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
-          onClick={quickAdd.open}
+          onClick={() => quickAdd.open()}
           aria-haspopup="dialog"
           className={classes.add}
           data-highlight={introVisible || undefined}

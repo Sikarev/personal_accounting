@@ -2,12 +2,13 @@ import { Button } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconRefresh } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Component, lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import {
   getGetTransactionDefaultsQueryOptions,
   getListCategoriesQueryOptions,
   getListCurrenciesQueryOptions,
+  type Transaction,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { TransactionFormSkeleton } from '../transactions/TransactionFormSkeleton'
@@ -39,7 +40,18 @@ function whenIdle(callback: () => void): () => void {
  */
 export function QuickAddProvider({ children }: { children: ReactNode }) {
   const [opened, { open, close }] = useDisclosure(false)
-  const api = useMemo<QuickAddApi>(() => ({ open }), [open])
+  // Образец для дублирования. Сбрасывается, когда окно доиграло закрытие: раньше —
+  // форма на глазах сменилась бы на пустую.
+  const [template, setTemplate] = useState<Transaction | null>(null)
+  const api = useMemo<QuickAddApi>(
+    () => ({
+      open: (next?: Transaction) => {
+        setTemplate(next ?? null)
+        open()
+      },
+    }),
+    [open],
+  )
   const t = useT()
   const queryClient = useQueryClient()
 
@@ -65,11 +77,17 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
       {/* fullHeight: на телефоне быстрый ввод — на всю высоту, клавиатура сразу (ux.md, §3).
           Заодно Select категорий не зацикливает ResizeObserver: высота окна не зависит
           от выпадающего списка (техдолг №36). */}
-      <ResponsiveSheet opened={opened} onClose={close} title={t.quickAdd.title} fullHeight>
+      <ResponsiveSheet
+        opened={opened}
+        onClose={close}
+        title={t.quickAdd.title}
+        fullHeight
+        onExitTransitionEnd={() => setTemplate(null)}
+      >
         <LoadErrorBoundary>
           {/* Чанк не успел загрузиться заранее — скелетон формы (если дольше 300 мс). */}
           <Suspense fallback={<TransactionFormSkeleton />}>
-            <QuickAddContent onClose={close} />
+            <QuickAddContent onClose={close} template={template} />
           </Suspense>
         </LoadErrorBoundary>
       </ResponsiveSheet>

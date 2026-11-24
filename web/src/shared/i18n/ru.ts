@@ -507,9 +507,18 @@ export const ru = {
       actions: (title: string) => `Действия с операцией «${title}»`,
     },
     actions: {
+      edit: 'Изменить',
+      duplicate: 'Дублировать',
       delete: 'Удалить',
     },
+    edit: {
+      title: 'Изменить операцию',
+      cancel: 'Отмена',
+      inlineLabel: (title: string) => `Изменение операции «${title}»`,
+    },
     toasts: {
+      edited: 'Операция изменена',
+      editFailed: 'Не удалось изменить операцию',
       deleted: 'Операция удалена',
       restoreFailed: 'Не удалось вернуть операцию.',
     },

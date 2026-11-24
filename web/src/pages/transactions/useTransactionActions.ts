@@ -1,35 +1,36 @@
 import { notifications } from '@mantine/notifications'
-import { useQueryClient, type Mutation, type QueryKey } from '@tanstack/react-query'
+import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 
+import {
+  invalidateWhenQueueSettles,
+  TRANSACTIONS_SCOPE,
+} from '../../features/transactions/transactionsCache'
 import {
   apiErrorText,
   useDeleteTransaction,
   useRestoreTransaction,
+  useUpdateTransaction,
+  type Account,
   type Transaction,
+  type TransactionRequest,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { notifyWithUndo } from '../../shared/ui'
 import {
+  applyEdit,
   cancelFeedFetches,
-  invalidateTransactionData,
   removeFromFeeds,
+  replaceInFeeds,
   returnToFeeds,
 } from './feedCache'
 
 /**
- * Очередь изменений операций (как у счетов и категорий, handoff 5.5): мутации одного
- * `scope` TanStack Query выполняет строго по одной, в порядке вызова. «Отменить» не обгонит
- * удаление, которое отменяет, а два быстрых удаления не перепутаются на сервере.
- */
-const SCOPE = { id: 'transactions' }
-
-const inScope = (m: Mutation<unknown, unknown, unknown, unknown>) =>
-  m.options.scope?.id === SCOPE.id
-
-/**
- * Удаление операции с отменой (ux.md, принцип 4: отмена вместо подтверждения).
+ * Изменения операций из ленты: удаление с отменой (ux.md, принцип 4: отмена вместо
+ * подтверждения) и правка. Мутации — в общей очереди с быстрым вводом (`TRANSACTIONS_SCOPE`):
+ * «Отменить» не обгонит удаление, а перезапрос после создания не вернёт строку,
+ * удаление которой ещё не дошло до сервера.
  *
- * Строка исчезает из ленты сразу (оптимистично). Итоги дня и выборки, остатки счетов
+ * Строка исчезает (меняется) в ленте сразу — оптимистично. Итоги дня и выборки, остатки счетов
  * и умные значения быстрого ввода зависят от сервера — они обновляются перезапросом после
  * ответа, когда завершилась последняя мутация очереди: перезапрос посреди очереди вернул бы
  * на экран операцию, удаление которой ещё не дошло до сервера.
@@ -37,15 +38,40 @@ const inScope = (m: Mutation<unknown, unknown, unknown, unknown>) =>
 export function useTransactionActions() {
   const t = useT()
   const qc = useQueryClient()
-  const mutation = {
-    scope: SCOPE,
-    // Вызывается, пока сама мутация ещё в счёте `isMutating`: 1 — она последняя в очереди.
-    onSettled: () => {
-      if (qc.isMutating({ predicate: inScope }) <= 1) return invalidateTransactionData(qc)
-    },
-  }
+  const mutation = { scope: TRANSACTIONS_SCOPE, onSettled: () => invalidateWhenQueueSettles(qc) }
   const deleteMutation = useDeleteTransaction({ mutation })
   const restoreMutation = useRestoreTransaction({ mutation })
+  const updateMutation = useUpdateTransaction({ mutation })
+
+  /**
+   * Правка (решение PM, handoff 5.6): строка в лентах меняется сразу, форма закрывается,
+   * не дожидаясь ответа. Ошибка — прежняя версия строки и тост с причиной; изменения
+   * при этом не теряются насовсем: их можно ввести заново. «Отменить» в тосте нет —
+   * правку отменяют правкой. Возвращает операцию «как будет» — для `onSaved` формы.
+   */
+  const edit = (
+    transaction: Transaction,
+    body: TransactionRequest,
+    accounts: readonly Account[],
+  ): Promise<Transaction> => {
+    cancelFeedFetches(qc)
+    const optimistic = applyEdit(transaction, body, accounts)
+    replaceInFeeds(qc, optimistic)
+    updateMutation.mutateAsync({ transactionId: transaction.id, data: body }).then(
+      (saved) => void replaceInFeeds(qc, saved),
+      (error: unknown) => {
+        // Откат — прежняя версия строки в тех же лентах.
+        replaceInFeeds(qc, transaction)
+        notifications.show({
+          color: 'red',
+          title: t.feed.toasts.editFailed,
+          message: apiErrorText(error, t),
+        })
+      },
+    )
+    notifications.show({ message: t.feed.toasts.edited })
+    return Promise.resolve(optimistic)
+  }
 
   /**
    * Отмена удаления: строка сразу возвращается в те ленты, откуда ушла (`keys`),
@@ -91,7 +117,12 @@ export function useTransactionActions() {
     return done
   }
 
-  return { remove }
+  return { remove, edit }
+}
+
+/** Дублировать можно расход, доход и перевод между своими счетами (не корректировку). */
+export function canDuplicate(transaction: Transaction): boolean {
+  return transaction.kind !== 'adjustment' && transaction.editable
 }
 
 /** Можно ли удалить: видны все счета операции; корректировку — всегда (docs/api.md). */

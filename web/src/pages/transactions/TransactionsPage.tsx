@@ -14,6 +14,7 @@ import {
   useListCategories,
   useListTransactionsInfinite,
   type Transaction,
+  type TransactionRequest,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { formatCount } from '../../shared/lib/plural'
@@ -27,14 +28,22 @@ import {
   type FeedFilters,
 } from '../../shared/lib/transactionFilters'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
-import { EmptyState, PageHeader, TransactionListSkeleton } from '../../shared/ui'
+import { useMobileLayout } from '../../shared/lib/useMobileLayout'
+import {
+  EmptyState,
+  PageHeader,
+  ResponsiveSheet,
+  TransactionListSkeleton,
+  transactionTitle,
+} from '../../shared/ui'
 import { icons } from '../../theme'
 import { ActiveFilterChips, FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
-import { FeedList, LoadMore } from './FeedList'
+import { EditTransaction } from './EditTransaction'
+import { FeedList, LoadMore, type RowAction } from './FeedList'
 import { FeedSummary } from './FeedSummary'
 import { activeFilterChips } from './filterOptions'
-import { rowMenuSelector, SEARCH_FIELD } from './focusTargets'
-import { canDelete, useTransactionActions } from './useTransactionActions'
+import { rowButtonSelector, SEARCH_FIELD } from './focusTargets'
+import { useTransactionActions } from './useTransactionActions'
 import classes from './TransactionsPage.module.css'
 
 /**
@@ -52,6 +61,24 @@ function useFeedFilters(): [FeedFilters, SetFilters] {
     [setSearchParams],
   )
   return [filters, setFilters]
+}
+
+/**
+ * Запустить после того, как закрытое окно убрало свою запись из истории: `useCloseOnBack`
+ * делает `history.back()` асинхронно, и новое окно, открытое раньше `popstate`, встало бы
+ * поверх уходящей записи — «Назад» потом сработал бы не так. Нет `popstate` (запись уже
+ * не наша) — запуск по таймеру.
+ */
+function afterHistorySettles(run: () => void) {
+  let done = false
+  const go = () => {
+    if (done) return
+    done = true
+    window.removeEventListener('popstate', go)
+    setTimeout(run)
+  }
+  window.addEventListener('popstate', go)
+  setTimeout(go, 400)
 }
 
 /**
@@ -146,14 +173,16 @@ export function TransactionsPage() {
     setAnnounced({ key: loadedKey, pages: pageCount, message })
   }
 
-  // ——— Фокус после удаления ———
-  // Строка исчезает вместе с кнопкой меню, на которой был фокус. Фокус переводим на меню
-  // соседней строки (следующей, иначе предыдущей), а если удалять больше нечего — на поиск.
-  // Ставим, когда строки уже нет на экране, — иначе фокус ушёл бы вместе с ней на `body`.
-  const pendingFocus = useRef<{ id: string; targets: string[] } | null>(null)
+  // ——— Фокус ———
+  // Элемент с фокусом может исчезнуть: удалённая строка (с кнопкой меню), закрытая форма
+  // правки на месте строки. Фокус ставим, когда изменение уже на экране, — иначе он ушёл бы
+  // вместе с элементом на `body`. `ready` — «изменение отрисовано».
+  const pendingFocus = useRef<{ ready: () => boolean; targets: string[] } | null>(null)
+  const itemsRef = useRef(items)
   useEffect(() => {
+    itemsRef.current = items
     const pending = pendingFocus.current
-    if (!pending || items.some((item) => item.id === pending.id)) return
+    if (!pending || !pending.ready()) return
     pendingFocus.current = null
     // Два кадра — запас на закрытие меню Mantine, которое тоже двигает фокус.
     requestAnimationFrame(() =>
@@ -166,22 +195,103 @@ export function TransactionsPage() {
     )
   })
 
-  // Обработчик удаления — постоянный: иначе мемоизированный список перерисовывался бы
-  // на каждую букву поиска. Свежие строки и действия он берёт из ref.
-  const latest = useRef({ items, remove: actions.remove })
-  useEffect(() => {
-    latest.current = { items, remove: actions.remove }
-  })
-  const onDelete = useCallback((transaction: Transaction) => {
-    const deletable = latest.current.items.filter(canDelete)
-    const index = deletable.findIndex((item) => item.id === transaction.id)
-    const neighbors = [deletable[index + 1], deletable[index - 1]].filter(Boolean)
+  // ——— Правка ———
+  // Desktop — форма на месте строки (одна за раз), mobile — окно. Вид выбирается в момент
+  // открытия (как у ResponsiveSheet) и не меняется, пока правка открыта.
+  const mobile = useMobileLayout()
+  const [editing, setEditing] = useState<{ id: string; inline: boolean } | null>(null)
+  const [sheetOpened, setSheetOpened] = useState(false)
+  // Окно закрылось действием, которое убрало строку (удаление) — фокус ставит экран.
+  const [sheetReturnFocus, setSheetReturnFocus] = useState(true)
+  const afterSheetClose = useRef<(() => void) | null>(null)
+  const editingTransaction = editing ? items.find((item) => item.id === editing.id) : undefined
+
+  const focusRow = (id: string) => {
     pendingFocus.current = {
-      id: transaction.id,
-      targets: [...neighbors.map((n) => rowMenuSelector(n.id)), `[${SEARCH_FIELD}]`],
+      ready: () => document.querySelector(rowButtonSelector(id)) !== null,
+      targets: [rowButtonSelector(id)],
     }
-    void latest.current.remove(transaction)
+  }
+
+  const closeInline = useCallback((id: string) => {
+    setEditing((current) => (current?.id === id ? null : current))
+    focusRow(id)
   }, [])
+
+  // Обработчики строк — постоянные: иначе мемоизированный список перерисовывался бы
+  // на каждую букву поиска. Свежие данные они берут из ref.
+  const latest = useRef({ actions, mobile, quickAdd })
+  useEffect(() => {
+    latest.current = { actions, mobile, quickAdd }
+  })
+
+  const remove = useCallback((transaction: Transaction) => {
+    const list = itemsRef.current
+    const index = list.findIndex((item) => item.id === transaction.id)
+    const neighbors = [list[index + 1], list[index - 1]].filter(Boolean)
+    pendingFocus.current = {
+      ready: () => !itemsRef.current.some((item) => item.id === transaction.id),
+      targets: [...neighbors.map((n) => rowButtonSelector(n.id)), `[${SEARCH_FIELD}]`],
+    }
+    void latest.current.actions.remove(transaction)
+  }, [])
+
+  const onAction = useCallback(
+    (action: RowAction, transaction: Transaction) => {
+      if (action === 'delete') {
+        setEditing((current) => (current?.id === transaction.id ? null : current))
+        return remove(transaction)
+      }
+      if (action === 'duplicate') {
+        setEditing((current) => (current?.id === transaction.id ? null : current))
+        return latest.current.quickAdd.open(transaction)
+      }
+      const inline = !latest.current.mobile
+      setEditing({ id: transaction.id, inline })
+      if (!inline) {
+        setSheetReturnFocus(true)
+        setSheetOpened(true)
+      }
+    },
+    [remove, setEditing, setSheetReturnFocus, setSheetOpened],
+  )
+
+  /** Действие из окна правки: окно закрывается, действие — после закрытия. */
+  const onSheetAction = (action: Exclude<RowAction, 'open'>, transaction: Transaction) => {
+    if (action === 'delete') {
+      // Строка уйдёт вместе с кнопкой, открывшей окно, — фокус ставит экран.
+      setSheetReturnFocus(false)
+      setSheetOpened(false)
+      remove(transaction)
+      return
+    }
+    // Быстрый ввод — после того как окно правки закрылось и ушло из истории «Назад».
+    afterSheetClose.current = () => quickAdd.open(transaction)
+    setSheetOpened(false)
+  }
+
+  const saveEdit = useCallback(
+    (transaction: Transaction, body: TransactionRequest) =>
+      latest.current.actions.edit(transaction, body, accounts),
+    [accounts],
+  )
+
+  const inlineForm =
+    editing?.inline && editingTransaction
+      ? {
+          id: editingTransaction.id,
+          form: (
+            <EditTransaction
+              inline
+              transaction={editingTransaction}
+              title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
+              saveEdit={saveEdit}
+              onClose={() => closeInline(editingTransaction.id)}
+              onAction={onAction}
+            />
+          ),
+        }
+      : null
 
   const resetFilters = () => setFilters(EMPTY_FILTERS)
 
@@ -238,7 +348,7 @@ export function TransactionsPage() {
               variant="light"
               size="md"
               leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
-              onClick={quickAdd.open}
+              onClick={() => quickAdd.open()}
             >
               {t.nav.addTransaction}
             </Button>
@@ -255,7 +365,8 @@ export function TransactionsPage() {
           accountNames={accountNames}
           categories={categories}
           showAuthor={showAuthor}
-          onDelete={onDelete}
+          onAction={onAction}
+          editing={inlineForm}
         />
         <LoadMore
           hasNextPage={feed.hasNextPage}
@@ -297,6 +408,29 @@ export function TransactionsPage() {
           {announced.message}
         </VisuallyHidden>
       </div>
+      <ResponsiveSheet
+        opened={sheetOpened}
+        onClose={() => setSheetOpened(false)}
+        title={t.feed.edit.title}
+        fullHeight
+        returnFocus={sheetReturnFocus}
+        onExitTransitionEnd={() => {
+          setEditing(null)
+          const next = afterSheetClose.current
+          afterSheetClose.current = null
+          if (next) afterHistorySettles(next)
+        }}
+      >
+        {editing && !editing.inline && editingTransaction && (
+          <EditTransaction
+            transaction={editingTransaction}
+            title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
+            saveEdit={saveEdit}
+            onClose={() => setSheetOpened(false)}
+            onAction={onSheetAction}
+          />
+        )}
+      </ResponsiveSheet>
     </>
   )
 }

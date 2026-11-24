@@ -193,12 +193,6 @@
   min-height: var(--app-touch-target);
 }
 
-/* Место меню у строк без меню: суммы всех строк — в одну колонку. */
-.menuSpacer {
-  flex: none;
-  width: var(--app-touch-target);
-}
-
 /* Удаление — цвет «проблемы» из темы (контраст AA в обеих темах), а не red Mantine. */
 .danger {
   color: var(--app-color-negative);
@@ -210,4 +204,29 @@
   align-items: stretch;
   gap: var(--mantine-spacing-md);
   margin-top: var(--mantine-spacing-md);
+}
+
+/* ——— Правка ——— */
+
+/* «Дублировать», «Удалить», «Отмена» — над формой, в ряд, переносятся. */
+.editActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+/* «Отмена» — в конце ряда, отдельно от действий над операцией. */
+.editCancel {
+  margin-inline-start: auto;
+}
+
+.editBody {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Форма на месте строки: отступ от соседних строк. */
+.inlineEdit {
+  margin-block: var(--mantine-spacing-sm);
 }

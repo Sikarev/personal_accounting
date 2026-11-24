@@ -21,7 +21,7 @@ import { useToday } from '../auth/session'
 import { TransactionFormSkeleton } from './TransactionFormSkeleton'
 import { TransactionFormView } from './TransactionFormView'
 import { notifyTransactionCreated } from './transactionToasts'
-import { invalidateAfterTransactionChange } from './transactionsCache'
+import { invalidateAfterTransactionChange, TRANSACTIONS_SCOPE } from './transactionsCache'
 
 export type TransactionFormProps = {
   /** Правка этой операции (`PUT` тем же телом); без неё — создание. */
@@ -38,6 +38,17 @@ export type TransactionFormProps = {
   onCreateAccount?: () => void
   /** Фокус в сумму при появлении формы (быстрый ввод). */
   autoFocus?: boolean
+  /**
+   * Создание по образцу (дублирование из ленты): вид, счета, суммы, категория
+   * и комментарий — как у образца, дата — «сегодня». Сохраняется новой операцией.
+   */
+  template?: Transaction | null
+  /**
+   * Своё сохранение правки вместо `PUT` с ожиданием ответа — лента правит оптимистично:
+   * обновляет строку сама и возвращает операцию «как будет». Кэш после ответа тоже
+   * сбрасывает вызывающий.
+   */
+  saveEdit?: (transaction: Transaction, body: TransactionRequest) => Promise<Transaction>
 }
 
 /**
@@ -54,6 +65,8 @@ export function TransactionForm({
   onSaved,
   onCreateAccount,
   autoFocus,
+  template = null,
+  saveEdit,
 }: TransactionFormProps) {
   const t = useT()
   const qc = useQueryClient()
@@ -64,8 +77,9 @@ export function TransactionForm({
   const categories = useListCategories()
   const currencies = useListCurrencies()
   const defaults = useGetTransactionDefaults()
-  const create = useCreateTransaction()
-  const update = useUpdateTransaction()
+  // Общая очередь с правкой и удалением в ленте (TRANSACTIONS_SCOPE).
+  const create = useCreateTransaction({ mutation: { scope: TRANSACTIONS_SCOPE } })
+  const update = useUpdateTransaction({ mutation: { scope: TRANSACTIONS_SCOPE } })
 
   // Ждём и необязательные запросы (пока они идут): иначе счёт по умолчанию сменился бы
   // уже на глазах у пользователя. Их ошибка форму не блокирует.
@@ -107,11 +121,13 @@ export function TransactionForm({
 
   const submit = (body: TransactionRequest) =>
     transaction
-      ? update.mutateAsync({ transactionId: transaction.id, data: body })
+      ? saveEdit
+        ? saveEdit(transaction, body)
+        : update.mutateAsync({ transactionId: transaction.id, data: body })
       : create.mutateAsync({ data: body })
 
   const handleSaved = (saved: Transaction) => {
-    void invalidateAfterTransactionChange(qc)
+    if (!(transaction && saveEdit)) void invalidateAfterTransactionChange(qc)
     if (!transaction) notifyTransactionCreated(qc, saved, data, t)
     onSaved?.(saved)
   }
@@ -119,11 +135,12 @@ export function TransactionForm({
   return (
     <TransactionFormView
       // Новая операция для правки — новая форма с её значениями.
-      key={transaction?.id ?? 'new'}
+      key={transaction?.id ?? (template ? `copy-${template.id}` : 'new')}
       {...data}
       defaults={defaults.data ?? null}
       today={today}
       transaction={transaction}
+      template={template}
       onSubmit={submit}
       onSaved={handleSaved}
       onCreateAccount={onCreateAccount ?? (() => void navigate(paths.accounts))}

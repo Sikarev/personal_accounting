@@ -7,12 +7,45 @@
   align-items: center;
   /* Узкие промежутки: в плотной строке место нужнее названию. */
   gap: var(--mantine-spacing-sm);
-  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
-  padding-block: var(--mantine-spacing-sm);
 }
 
+/* Кнопка строки (или её неактивный вариант): иконка и текст; меню — рядом, вне кнопки. */
+.activate,
+.static {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding-block: var(--mantine-spacing-sm);
+  color: var(--mantine-color-text);
+}
+
+.activate {
+  border-radius: var(--mantine-radius-md);
+
+  &:hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+
+  /* Кольцо фокуса внутрь: снаружи его обрезали бы соседние строки. */
+  &:focus-visible {
+    outline-offset: calc(-1 * var(--mantine-spacing-xs) / 2);
+  }
+}
+
+/* Как ThemeIcon lg variant="light" color="gray": кружок 34 px. */
 .icon {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 50%;
+  background-color: var(--mantine-color-gray-light);
+  color: var(--mantine-color-gray-light-color);
 }
 
 /* Название и сумма в ряд, сумма справа. Огромная сумма не сжимает название в пару букв:
@@ -28,6 +61,7 @@
 }
 
 .main {
+  display: block;
   flex: 1 1 6em;
   min-width: 0;
 }
@@ -38,6 +72,7 @@
 }
 
 .side {
+  display: block;
   flex: none;
   max-width: 100%;
   margin-inline-start: auto;
@@ -46,6 +81,7 @@
 
 /* Запас: Money wrap переносит по разрядам, этого хватает почти всегда. */
 .amount {
+  display: block;
   overflow-wrap: anywhere;
 }
 

@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Menu, Paper, Text } from '@mantine/core'
-import { IconDots, IconTrash } from '@tabler/icons-react'
-import { memo, useEffect, useId, useState } from 'react'
+import { IconCopy, IconDots, IconPencil, IconTrash } from '@tabler/icons-react'
+import { memo, useEffect, useId, useState, type ReactNode } from 'react'
 
 import type { Category, Transaction } from '../../shared/api'
 import { useT } from '../../shared/i18n'
@@ -13,8 +13,11 @@ import {
 } from '../../shared/ui'
 import { icons } from '../../theme'
 import { ROW_MENU } from './focusTargets'
-import { canDelete } from './useTransactionActions'
+import { canDelete, canDuplicate } from './useTransactionActions'
 import classes from './TransactionsPage.module.css'
+
+/** Что сделать с операцией из строки ленты. */
+export type RowAction = 'open' | 'duplicate' | 'delete'
 
 type FeedListProps = {
   groups: DayGroup[]
@@ -22,33 +25,20 @@ type FeedListProps = {
   accountNames: ReadonlyMap<string, string>
   categories: ReadonlyMap<string, Category>
   showAuthor: boolean
-  onDelete: (transaction: Transaction) => void
+  onAction: (action: RowAction, transaction: Transaction) => void
+  /** Операция, раскрытая в форму правки на месте (desktop), и сама форма. */
+  editing: { id: string; form: ReactNode } | null
 }
 
 /**
  * Лента по дням: заголовок дня с итогом и строки операций. Мемоизирована: при вводе в поиск
  * адрес меняется на каждую букву, а список перерисовывается, только когда пришли данные.
  */
-export const FeedList = memo(function FeedList({
-  groups,
-  today,
-  accountNames,
-  categories,
-  showAuthor,
-  onDelete,
-}: FeedListProps) {
+export const FeedList = memo(function FeedList({ groups, ...rest }: FeedListProps) {
   return (
     <div className={classes.days}>
       {groups.map((group) => (
-        <DaySection
-          key={group.date}
-          group={group}
-          today={today}
-          accountNames={accountNames}
-          categories={categories}
-          showAuthor={showAuthor}
-          onDelete={onDelete}
-        />
+        <DaySection key={group.date} group={group} {...rest} />
       ))}
     </div>
   )
@@ -59,10 +49,8 @@ export const FeedList = memo(function FeedList({
 const DaySection = memo(function DaySection({
   group,
   today,
-  accountNames,
-  categories,
-  showAuthor,
-  onDelete,
+  editing,
+  ...rowProps
 }: Omit<FeedListProps, 'groups'> & { group: DayGroup }) {
   const headingId = useId()
   return (
@@ -71,13 +59,11 @@ const DaySection = memo(function DaySection({
       <ul className={classes.rows}>
         {group.items.map((transaction) => (
           <li key={transaction.id}>
-            <FeedRow
-              transaction={transaction}
-              accountNames={accountNames}
-              categories={categories}
-              showAuthor={showAuthor}
-              onDelete={onDelete}
-            />
+            {editing?.id === transaction.id ? (
+              editing.form
+            ) : (
+              <FeedRow transaction={transaction} {...rowProps} />
+            )}
           </li>
         ))}
       </ul>
@@ -91,8 +77,8 @@ const FeedRow = memo(function FeedRow({
   accountNames,
   categories,
   showAuthor,
-  onDelete,
-}: Omit<FeedListProps, 'groups' | 'today'> & { transaction: Transaction }) {
+  onAction,
+}: Omit<FeedListProps, 'groups' | 'today' | 'editing'> & { transaction: Transaction }) {
   const t = useT()
   return (
     <TransactionRow
@@ -100,37 +86,35 @@ const FeedRow = memo(function FeedRow({
       accountNames={accountNames}
       categories={categories}
       showAuthor={showAuthor}
+      onActivate={() => onAction('open', transaction)}
+      expanded={false}
       actions={
-        canDelete(transaction) ? (
-          <RowMenu
-            transaction={transaction}
-            // Подпись меню нужна только у строк с меню; считается вместе со строкой.
-            title={transactionTitle(transaction, { accountNames, categories }, t)}
-            onDelete={onDelete}
-          />
-        ) : (
-          // Место меню — чтобы суммы всех строк стояли в одну колонку.
-          <span className={classes.menuSpacer} aria-hidden />
-        )
+        <RowMenu
+          transaction={transaction}
+          title={transactionTitle(transaction, { accountNames, categories }, t)}
+          onAction={onAction}
+        />
       }
     />
   )
 })
 
 /**
- * Меню строки. Удалить можно операцию, у которой видны все счета (`editable`),
- * и корректировку остатка; у остальных (перевод с чужим личным счётом) меню нет.
+ * Меню строки: «Изменить» (то же, что касание строки), «Дублировать» — кроме корректировки
+ * и перевода со скрытым чужим счётом, «Удалить» — если видны все счета операции (`editable`)
+ * или это корректировка.
  */
 function RowMenu({
   transaction,
   title,
-  onDelete,
+  onAction,
 }: {
   transaction: Transaction
   title: string
-  onDelete: (transaction: Transaction) => void
+  onAction: FeedListProps['onAction']
 }) {
   const t = useT()
+  const icon = (I: typeof IconPencil) => <I size={icons.size.md} stroke={icons.stroke} />
   return (
     // Без портала: меню остаётся внутри <main> (axe: всё содержимое — в ориентирах).
     <Menu position="bottom-end" withinPortal={false}>
@@ -147,14 +131,27 @@ function RowMenu({
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item
-          // Цвет «проблемы» из темы: у color="red" в меню контраст ниже AA.
-          className={classes.danger}
-          leftSection={<IconTrash size={icons.size.md} stroke={icons.stroke} />}
-          onClick={() => onDelete(transaction)}
-        >
-          {t.feed.actions.delete}
+        <Menu.Item leftSection={icon(IconPencil)} onClick={() => onAction('open', transaction)}>
+          {t.feed.actions.edit}
         </Menu.Item>
+        {canDuplicate(transaction) && (
+          <Menu.Item
+            leftSection={icon(IconCopy)}
+            onClick={() => onAction('duplicate', transaction)}
+          >
+            {t.feed.actions.duplicate}
+          </Menu.Item>
+        )}
+        {canDelete(transaction) && (
+          <Menu.Item
+            // Цвет «проблемы» из темы: у color="red" в меню контраст ниже AA.
+            className={classes.danger}
+            leftSection={icon(IconTrash)}
+            onClick={() => onAction('delete', transaction)}
+          >
+            {t.feed.actions.delete}
+          </Menu.Item>
+        )}
       </Menu.Dropdown>
     </Menu>
   )

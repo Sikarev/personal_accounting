@@ -61,6 +61,8 @@ export type TransactionFormViewProps = {
   today: string
   /** Правка этой операции; без неё — создание новой. */
   transaction?: Transaction | null
+  /** Создание по образцу (дублирование): значения образца, дата — «сегодня». */
+  template?: Transaction | null
   /** Отправить на сервер (`POST` или `PUT`); ошибка — `ApiError` / `NetworkError`. */
   onSubmit: (body: TransactionRequest) => Promise<Transaction>
   /** Сервер сохранил операцию. После создания форма уже очищена, фокус — в сумме. */
@@ -93,6 +95,7 @@ export function TransactionFormView({
   defaults,
   today,
   transaction = null,
+  template = null,
   onSubmit,
   onSaved,
   onCreateAccount,
@@ -100,7 +103,7 @@ export function TransactionFormView({
 }: TransactionFormViewProps) {
   const t = useT()
   const form = useFormState<TransactionFormValues>(
-    initialValues({ accounts, defaults, currencies, today, transaction }),
+    initialValues({ accounts, defaults, currencies, today, transaction, template, categories }),
   )
   const { values } = form
   const [formError, setFormError] = useState<FormError | null>(null)

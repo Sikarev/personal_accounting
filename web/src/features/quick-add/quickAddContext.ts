@@ -1,8 +1,13 @@
 import { createContext, useContext } from 'react'
 
+import type { Transaction } from '../../shared/api'
+
 export type QuickAddApi = {
-  /** Открыть быстрый ввод операции поверх текущего экрана. */
-  open: () => void
+  /**
+   * Открыть быстрый ввод операции поверх текущего экрана. `template` — создать по образцу
+   * (дублирование из ленты): значения образца, дата — «сегодня».
+   */
+  open: (template?: Transaction) => void
 }
 
 export const QuickAddContext = createContext<QuickAddApi | null>(null)

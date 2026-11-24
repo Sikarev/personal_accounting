@@ -189,14 +189,18 @@ export type FeedMock = {
    * обычная обработка (например, после задержки).
    */
   failNext: Map<string, (route: Route, proceed: () => Promise<void>) => Promise<void>>
+  /** Тела `PUT /transactions/{id}`. */
+  updates: { id: string; body: Record<string, unknown> }[]
+  /** Тела `POST /transactions` (дублирование через быстрый ввод). */
+  created: Record<string, unknown>[]
 }
 
 /**
- * Подменить API операций вместе со справочниками: `GET /accounts`, `/categories`,
- * `/transactions` (фильтры, курсор, итоги дней), `/transactions/summary`, удаление
- * и восстановление. Фильтры и итоги считаются так же, как на сервере (docs/api.md →
- * «Операции»), курсор — позиция последней строки, как в API. Регистрировать после `mockSignedIn`: свой мок
- * `GET /accounts` перекрывает умолчание.
+ * Подменить API ленты вместе со справочниками: `GET /accounts`, `/categories`, `/currencies`,
+ * `/transactions` (фильтры, курсор, итоги дней), `/transactions/summary`, `defaults`, создание,
+ * правка, удаление и восстановление. Фильтры и итоги считаются так же, как на сервере
+ * (docs/api.md → «Операции»), курсор — позиция последней строки, как в API. Регистрировать
+ * после `mockSignedIn`: свой мок `GET /accounts` перекрывает умолчание.
  */
 export async function mockFeedApi(
   page: Page,
@@ -213,8 +217,11 @@ export async function mockFeedApi(
     listRequests: [],
     received: [],
     failNext: new Map(),
+    updates: [],
+    created: [],
   }
   const categories = data.categories ?? []
+  await page.route(`**${API}/currencies`, (route) => route.fulfill({ json: currenciesFixture }))
   const pageSize = data.pageSize ?? 50
 
   await page.route(`**${API}/accounts`, (route) =>
@@ -314,8 +321,53 @@ export async function mockFeedApi(
         api.transactions.push(found)
         return route.fulfill({ json: found })
       }
+      case 'GET /transactions/defaults':
+        return route.fulfill({
+          json: {
+            expenseAccountId: null,
+            incomeAccountId: null,
+            transfer: null,
+            frequentCategories: { expense: [], income: [] },
+          },
+        })
+      case 'PUT /transactions/:id': {
+        const index = api.transactions.findIndex((i) => i.id === id)
+        if (index === -1) return problem(route, 404, 'not_found')
+        const body = route.request().postDataJSON()
+        api.updates.push({ id, body })
+        const updated = { ...api.transactions[index], ...fromBody(body) }
+        api.transactions[index] = updated
+        return route.fulfill({ json: updated })
+      }
+      case 'POST /transactions': {
+        const body = route.request().postDataJSON()
+        api.created.push(body)
+        const created = transaction({ ...fromBody(body), date: body.date })
+        api.transactions.push(created)
+        return route.fulfill({ status: 201, json: created })
+      }
     }
     return problem(route, 404, 'not_found')
+  }
+
+  /** Поля операции из тела `POST`/`PUT` — валюты по счетам, как на сервере. */
+  function fromBody(body: Record<string, unknown>): Partial<Transaction> {
+    const currencyOf = (accountId: unknown) =>
+      ((data.accounts ?? [existingAccount]).find((a) => a.id === accountId)?.currency as string) ??
+      null
+    const transfer = body.kind === 'transfer'
+    return {
+      kind: body.kind as Transaction['kind'],
+      date: body.date as string,
+      accountId: body.accountId as string,
+      amount: body.amount as number,
+      currency: currencyOf(body.accountId),
+      toAccountId: transfer ? (body.toAccountId as string) : null,
+      toAmount: transfer ? ((body.toAmount ?? body.amount) as number) : null,
+      toCurrency: transfer ? currencyOf(body.toAccountId) : null,
+      categoryId: transfer ? null : ((body.categoryId as string) ?? null),
+      comment: (body.comment as string) ?? '',
+    }
   }
   return api
 }

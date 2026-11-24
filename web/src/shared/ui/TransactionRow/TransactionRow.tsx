@@ -1,4 +1,4 @@
-import { Text, ThemeIcon } from '@mantine/core'
+import { Text, UnstyledButton } from '@mantine/core'
 import {
   IconArrowDownLeft,
   IconArrowsRightLeft,
@@ -26,7 +26,17 @@ export type TransactionRowProps = {
   showAuthor?: boolean
   /** Действия справа (меню «⋯»). */
   actions?: ReactNode
+  /**
+   * Строка активируется (клик, Enter, пробел) — открыть операцию. Вся строка, кроме
+   * действий справа, становится кнопкой.
+   */
+  onActivate?: () => void
+  /** Операция раскрыта в форму на месте (desktop) — `aria-expanded` у кнопки строки. */
+  expanded?: boolean
 }
+
+/** Атрибут кнопки строки (значение — id операции): по нему экран ставит фокус. */
+export const ROW_BUTTON = 'data-transaction-open'
 
 // Иконка вида операции: у категорий нет своих иконок и цветов, а вид помогает глазу
 // отличить перевод и корректировку от расходов. Декоративна — смысл есть в тексте и знаке.
@@ -57,6 +67,8 @@ export function TransactionRow({
   categories,
   showAuthor = false,
   actions,
+  onActivate,
+  expanded,
 }: TransactionRowProps) {
   const t = useT()
   const view = describeTransaction(transaction, { accountNames, categories }, t)
@@ -64,20 +76,14 @@ export function TransactionRow({
   const author = showAuthor ? (transaction.author?.name ?? t.feed.row.deletedAuthor) : null
   const secondary = [author, transaction.comment].filter(Boolean).join(' · ')
 
-  return (
-    <div className={classes.row} data-transaction-row={transaction.id}>
-      <ThemeIcon
-        aria-hidden
-        radius="xl"
-        size="lg"
-        variant="light"
-        color="gray"
-        className={classes.icon}
-      >
+  const content = (
+    <>
+      {/* Не ThemeIcon: внутри кнопки допустимы только строчные элементы, а он — div. */}
+      <span aria-hidden className={classes.icon}>
         <KindIcon size={icons.size.md} stroke={icons.stroke} />
-      </ThemeIcon>
-      <div className={classes.body}>
-        <div className={classes.main}>
+      </span>
+      <span className={classes.body}>
+        <span className={classes.main}>
           <Text component="span" display="block" fw={500} truncate="end">
             {view.title.parent !== null && (
               <span className={classes.parent}>
@@ -92,14 +98,14 @@ export function TransactionRow({
               {secondary}
             </Text>
           )}
-        </div>
-        <div className={classes.side}>
+        </span>
+        <span className={classes.side}>
           {view.amount && (
             <Money
               amount={view.amount.value}
               currency={view.amount.currency}
               variant={view.amount.flow ? 'flow' : 'plain'}
-              component="div"
+              component="span"
               fw={500}
               wrap
               className={classes.amount}
@@ -117,8 +123,25 @@ export function TransactionRow({
               )}
             </Text>
           )}
-        </div>
-      </div>
+        </span>
+      </span>
+    </>
+  )
+
+  return (
+    <div className={classes.row} data-transaction-row={transaction.id}>
+      {onActivate ? (
+        <UnstyledButton
+          className={classes.activate}
+          onClick={onActivate}
+          aria-expanded={expanded}
+          {...{ [ROW_BUTTON]: transaction.id }}
+        >
+          {content}
+        </UnstyledButton>
+      ) : (
+        <div className={classes.static}>{content}</div>
+      )}
       {actions && <div className={classes.actions}>{actions}</div>}
     </div>
   )

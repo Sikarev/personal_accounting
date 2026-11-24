@@ -1,8 +1,6 @@
-import { Button } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconRefresh } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import {
   getGetTransactionDefaultsQueryOptions,
@@ -11,8 +9,9 @@ import {
   type Transaction,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { ChunkLoadBoundary } from '../transactions/ChunkLoadBoundary'
 import { TransactionFormSkeleton } from '../transactions/TransactionFormSkeleton'
-import { EmptyState, ResponsiveSheet } from '../../shared/ui'
+import { ResponsiveSheet } from '../../shared/ui'
 import { QuickAddContext, type QuickAddApi, type QuickAddOpenOptions } from './quickAddContext'
 
 // Содержимое окна — отдельным чанком (техдолг №37): форма операции с пикерами
@@ -95,43 +94,13 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
           setReturnFocus(null)
         }}
       >
-        <LoadErrorBoundary>
+        <ChunkLoadBoundary>
           {/* Чанк не успел загрузиться заранее — скелетон формы (если дольше 300 мс). */}
           <Suspense fallback={<TransactionFormSkeleton />}>
             <QuickAddContent onClose={close} template={template} />
           </Suspense>
-        </LoadErrorBoundary>
+        </ChunkLoadBoundary>
       </ResponsiveSheet>
     </QuickAddContext.Provider>
-  )
-}
-
-/** Чанк окна не загрузился (нет сети, вышла новая версия) — объяснение вместо пустого окна. */
-class LoadErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
-
-  static getDerivedStateFromError() {
-    return { failed: true }
-  }
-
-  render() {
-    return this.state.failed ? <LoadError /> : this.props.children
-  }
-}
-
-function LoadError() {
-  const t = useT()
-  return (
-    <EmptyState
-      icon={IconRefresh}
-      titleOrder={3}
-      title={t.lazyRoute.errorTitle}
-      description={t.lazyRoute.errorDescription}
-      action={
-        <Button variant="light" size="md" onClick={() => window.location.reload()}>
-          {t.lazyRoute.reload}
-        </Button>
-      }
-    />
   )
 }

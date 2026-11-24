@@ -2,10 +2,6 @@ import { notifications } from '@mantine/notifications'
 import { useQueryClient, type QueryKey } from '@tanstack/react-query'
 
 import {
-  invalidateWhenQueueSettles,
-  TRANSACTIONS_SCOPE,
-} from '../../features/transactions/transactionsCache'
-import {
   apiErrorText,
   useDeleteTransaction,
   useRestoreTransaction,
@@ -14,11 +10,12 @@ import {
 import { useT } from '../../shared/i18n'
 import { notifyWithUndo } from '../../shared/ui'
 import { cancelFeedFetches, removeFromFeeds, replaceInFeeds, returnToFeeds } from './feedCache'
+import { invalidateWhenQueueSettles, TRANSACTIONS_SCOPE } from './transactionsCache'
 
 /**
- * Изменения операций из ленты: удаление с отменой (ux.md, принцип 4: отмена вместо
- * подтверждения) и обновление строки ответом сервера после правки (сама правка ждёт ответа
- * в форме). Мутации — в общей очереди с быстрым вводом (`TRANSACTIONS_SCOPE`): «Отменить»
+ * Изменения операций из списка (лента «Операции», последние операции на главной): удаление
+ * с отменой (ux.md, принцип 4: отмена вместо подтверждения) и обновление строки ответом
+ * сервера после правки (сама правка ждёт ответа в форме). Мутации — в общей очереди с быстрым вводом (`TRANSACTIONS_SCOPE`): «Отменить»
  * не обгонит удаление, а перезапрос после создания не вернёт строку, удаление которой ещё
  * не дошло до сервера.
  *

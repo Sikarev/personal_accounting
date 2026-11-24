@@ -1,9 +1,15 @@
 import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 
-import { getListTransactionsInfiniteQueryKey, type Transaction } from '../../shared/api'
+import {
+  getListTransactionsInfiniteQueryKey,
+  getListTransactionsQueryKey,
+  type Transaction,
+  type TransactionList,
+} from '../../shared/api'
 import {
   removeFromFeeds,
+  replaceInFeeds,
   replaced,
   returnToFeeds,
   withoutTransaction,
@@ -134,5 +140,35 @@ describe('replaced', () => {
     const moved = { ...t5, date: '2026-11-21' }
     const next = replaced(feed([t5, t4], [t3, t2]), t5, moved)
     expect(ids(next)).toEqual([['4'], ['3', '5', '2']])
+  })
+})
+
+describe('обычный список (последние операции на главной)', () => {
+  const recent = getListTransactionsQueryKey({ limit: 10 })
+  const list = (...items: Transaction[]): TransactionList => ({ items, days: [] })
+  const listIds = (qc: QueryClient) =>
+    qc.getQueryData<TransactionList>(recent)!.items.map((t) => t.id.slice(-1))
+
+  it('удаление и возврат — как у ленты, вместе с лентой', () => {
+    const qc = new QueryClient()
+    const all = getListTransactionsInfiniteQueryKey()
+    qc.setQueryData(recent, list(t5, t4, t3))
+    qc.setQueryData(all, feed([t5, t4], [t3]))
+
+    const keys = removeFromFeeds(qc, t4.id)
+    expect(keys).toEqual(expect.arrayContaining([recent, all]))
+    expect(listIds(qc)).toEqual(['5', '3'])
+
+    returnToFeeds(qc, keys, t4)
+    expect(listIds(qc)).toEqual(['5', '4', '3'])
+    // В ленте — в первую страницу, где после неё есть операция (см. withTransaction).
+    expect(ids(qc.getQueryData<FeedData>(all)!)).toEqual([['5'], ['4', '3']])
+  })
+
+  it('правка заменяет строку, смена даты переставляет её', () => {
+    const qc = new QueryClient()
+    qc.setQueryData(recent, list(t5, t3, t2))
+    expect(replaceInFeeds(qc, { ...t5, date: '2026-11-21' })).toEqual([recent])
+    expect(listIds(qc)).toEqual(['3', '5', '2'])
   })
 })

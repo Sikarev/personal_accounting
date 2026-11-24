@@ -11,9 +11,14 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // В разработке фронт и API на одном origin: cookie сессии работают без CORS.
+    // changeOrigin: false — заголовок Host остаётся адресом dev-сервера. Короткая запись
+    // ('/api': target) подменяет Host на адрес API, и защита от CSRF в API
+    // (http.CrossOriginProtection) отклоняла запросы с телефона по адресу в локальной
+    // сети: там браузер не шлёт Sec-Fetch-Site (только для localhost и HTTPS), и API
+    // сравнивает Origin с Host — а они расходились.
     proxy: {
-      '/api': apiTarget,
-      '/healthz': apiTarget,
+      '/api': { target: apiTarget, changeOrigin: false },
+      '/healthz': { target: apiTarget, changeOrigin: false },
     },
   },
   test: {

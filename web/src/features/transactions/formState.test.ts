@@ -24,6 +24,8 @@ function account(id: string, overrides: Partial<Account> = {}): Account {
     sortOrder: 0,
     archivedAt: null,
     hasTransactions: true,
+    // Фикстуры в рублях (базовой валюте): эквивалент равен остатку.
+    baseBalance: overrides.balance ?? 0,
     ...overrides,
   }
 }

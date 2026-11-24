@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // accUser — зарегистрированный пользователь: cookie сессии, id и семья.
@@ -166,7 +168,7 @@ func TestAccountCRUD(t *testing.T) {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	wantKeys := []string{"archivedAt", "balance", "color", "currency", "hasTransactions", "id",
+	wantKeys := []string{"archivedAt", "balance", "baseBalance", "color", "currency", "hasTransactions", "id",
 		"includeInTotal", "initialBalance", "name", "sortOrder", "type", "visibility"}
 	if !reflect.DeepEqual(keys, wantKeys) {
 		t.Fatalf("поля счёта: %v, ожидались %v", keys, wantKeys)
@@ -176,6 +178,8 @@ func TestAccountCRUD(t *testing.T) {
 		"visibility": "private", "initialBalance": float64(-150050), "balance": float64(-150050),
 		"includeInTotal": false, "color": "grape", "sortOrder": float64(0), "archivedAt": nil,
 		"hasTransactions": false,
+		// Курсов USD в тестовой БД нет (тесты отчётов удаляют свои после себя).
+		"baseBalance": nil,
 	}
 	if !reflect.DeepEqual(acc, want) {
 		t.Fatalf("счёт:\n%v\nожидался\n%v", acc, want)
@@ -185,7 +189,7 @@ func TestAccountCRUD(t *testing.T) {
 	// Минимальный запрос: умолчания.
 	minimal := e.createAccount(t, u, `{"name":"Наличные","type":"cash","currency":"RUB","visibility":"shared"}`)
 	if minimal["initialBalance"] != float64(0) || minimal["includeInTotal"] != true ||
-		minimal["color"] != nil || minimal["visibility"] != "shared" {
+		minimal["color"] != nil || minimal["visibility"] != "shared" || minimal["baseBalance"] != float64(0) {
 		t.Fatalf("умолчания: %v", minimal)
 	}
 
@@ -353,6 +357,43 @@ func TestAccountBalance(t *testing.T) {
 	}
 	if acc := e.findAccount(t, u, a); acc["hasTransactions"] != true || acc["initialBalance"] != float64(10000) {
 		t.Errorf("A: %v", acc)
+	}
+}
+
+// Регрессия: внутри транзакции корректировки не должно быть чтений через
+// пул. Иначе запрос держит одно соединение и ждёт второе — на пуле из одного
+// соединения (или при N одновременных корректировках на пуле из N) API
+// зависает. Роутер — на отдельном пуле с MaxConns = 1 к той же БД.
+func TestAdjustBalanceSingleConnectionPool(t *testing.T) {
+	e := newAuthEnv(t, Options{})
+	u := e.newUser(t)
+	acc := e.createAccount(t, u, accountBody("Наличные", "shared", 100))["id"].(string)
+
+	cfg := e.pool.Config() // копия настроек тестового пула
+	cfg.MaxConns = 1
+	one, err := pgxpool.NewWithConfig(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(one.Close)
+	h, err := NewRouter(discardLogger, one, Options{Now: e.clock.Now, Mail: e.mail})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/accounts/"+acc+"/adjust-balance",
+		strings.NewReader(`{"balance":250}`)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(u.cookie)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("корректировка на пуле из одного соединения: %d %s (ctx: %v)", rec.Code, rec.Body, ctx.Err())
+	}
+	if b := decodeJSON(t, rec)["account"].(map[string]any)["balance"]; b != float64(250) {
+		t.Fatalf("остаток после корректировки: %v", b)
 	}
 }
 

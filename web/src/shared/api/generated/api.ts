@@ -38,16 +38,22 @@ import type {
   AccountList,
   AdjustBalanceRequest,
   AdjustBalanceResponse,
+  BalanceReport,
   Category,
   CategoryList,
+  CategoryReport,
   CreateAccountRequest,
   CreateCategoryRequest,
   CurrencyList,
+  GetBalanceReportParams,
+  GetCategoryReportParams,
+  GetMonthlyReportParams,
   GetTransactionsSummaryParams,
   ListTransactionsParams,
   LoginRequest,
   Me,
   MergeCategoryRequest,
+  MonthlyReport,
   MoveCategoryRequest,
   PasswordResetConfirmRequest,
   PasswordResetRequest,
@@ -3703,4 +3709,611 @@ export const useRestoreTransaction = <TError = ErrorType<ProblemResponse>, TCont
   TContext
 > => {
   return useMutation(getRestoreTransactionMutationOptions(options), queryClient)
+}
+
+export const getGetCategoryReportUrl = (params: GetCategoryReportParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['accountId', 'authorId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/reports/categories?${stringifiedParams}`
+    : `/api/v1/reports/categories`
+}
+
+/**
+ * Сумма операций вида `kind` за период по каждой категории, в которую они
+ * записаны **прямо** (у родителя — только его собственные операции,
+ * подкатегории — отдельными строками; дерево и доли собирает клиент).
+ * Архивные категории тоже входят. Переводы и корректировки не входят.
+ * Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+ * суммой нет.
+ *
+ * `total` — точная сумма всех операций, округлённая один раз, а `amount`
+ * каждой категории округляется отдельно, поэтому сумма `items` может
+ * отличаться от `total` на несколько минимальных единиц.
+ *
+ * Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+ * `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+ * @summary Расходы или доходы по категориям
+ */
+export const getCategoryReport = async (
+  params: GetCategoryReportParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<CategoryReport> => {
+  return apiFetch<CategoryReport>(getGetCategoryReportUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetCategoryReportQueryKey = (params?: GetCategoryReportParams) => {
+  return [`/api/v1/reports/categories`, ...(params ? [params] : [])] as const
+}
+
+export const getGetCategoryReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCategoryReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetCategoryReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategoryReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetCategoryReportQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCategoryReport>>> = ({ signal }) =>
+    getCategoryReport(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCategoryReport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCategoryReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCategoryReport>>
+>
+export type GetCategoryReportQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Сумма операций вида `kind` за период по каждой категории, в которую они
+ * записаны **прямо** (у родителя — только его собственные операции,
+ * подкатегории — отдельными строками; дерево и доли собирает клиент).
+ * Архивные категории тоже входят. Переводы и корректировки не входят.
+ * Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+ * суммой нет.
+ *
+ * `total` — точная сумма всех операций, округлённая один раз, а `amount`
+ * каждой категории округляется отдельно, поэтому сумма `items` может
+ * отличаться от `total` на несколько минимальных единиц.
+ *
+ * Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+ * `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+ * @summary Расходы или доходы по категориям
+ */
+export function useGetCategoryReport<
+  TData = Awaited<ReturnType<typeof getCategoryReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetCategoryReportParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategoryReport>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCategoryReport>>,
+          TError,
+          Awaited<ReturnType<typeof getCategoryReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма операций вида `kind` за период по каждой категории, в которую они
+ * записаны **прямо** (у родителя — только его собственные операции,
+ * подкатегории — отдельными строками; дерево и доли собирает клиент).
+ * Архивные категории тоже входят. Переводы и корректировки не входят.
+ * Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+ * суммой нет.
+ *
+ * `total` — точная сумма всех операций, округлённая один раз, а `amount`
+ * каждой категории округляется отдельно, поэтому сумма `items` может
+ * отличаться от `total` на несколько минимальных единиц.
+ *
+ * Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+ * `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+ * @summary Расходы или доходы по категориям
+ */
+export function useGetCategoryReport<
+  TData = Awaited<ReturnType<typeof getCategoryReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetCategoryReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategoryReport>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCategoryReport>>,
+          TError,
+          Awaited<ReturnType<typeof getCategoryReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма операций вида `kind` за период по каждой категории, в которую они
+ * записаны **прямо** (у родителя — только его собственные операции,
+ * подкатегории — отдельными строками; дерево и доли собирает клиент).
+ * Архивные категории тоже входят. Переводы и корректировки не входят.
+ * Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+ * суммой нет.
+ *
+ * `total` — точная сумма всех операций, округлённая один раз, а `amount`
+ * каждой категории округляется отдельно, поэтому сумма `items` может
+ * отличаться от `total` на несколько минимальных единиц.
+ *
+ * Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+ * `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+ * @summary Расходы или доходы по категориям
+ */
+export function useGetCategoryReport<
+  TData = Awaited<ReturnType<typeof getCategoryReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetCategoryReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategoryReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма операций вида `kind` за период по каждой категории, в которую они
+ * записаны **прямо** (у родителя — только его собственные операции,
+ * подкатегории — отдельными строками; дерево и доли собирает клиент).
+ * Архивные категории тоже входят. Переводы и корректировки не входят.
+ * Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+ * суммой нет.
+ *
+ * `total` — точная сумма всех операций, округлённая один раз, а `amount`
+ * каждой категории округляется отдельно, поэтому сумма `items` может
+ * отличаться от `total` на несколько минимальных единиц.
+ *
+ * Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+ * `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+ * @summary Расходы или доходы по категориям
+ */
+export function useGetCategoryReport<
+  TData = Awaited<ReturnType<typeof getCategoryReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetCategoryReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getCategoryReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetCategoryReportQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetMonthlyReportUrl = (params: GetMonthlyReportParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['accountId', 'authorId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/reports/monthly?${stringifiedParams}`
+    : `/api/v1/reports/monthly`
+}
+
+/**
+ * По строке на каждый календарный месяц, пересекающийся с периодом
+ * (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+ * `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+ * корректировки не входят. Ошибки периода — как у `/reports/categories`.
+ * @summary Расходы и доходы по месяцам
+ */
+export const getMonthlyReport = async (
+  params: GetMonthlyReportParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<MonthlyReport> => {
+  return apiFetch<MonthlyReport>(getGetMonthlyReportUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetMonthlyReportQueryKey = (params?: GetMonthlyReportParams) => {
+  return [`/api/v1/reports/monthly`, ...(params ? [params] : [])] as const
+}
+
+export const getGetMonthlyReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetMonthlyReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlyReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetMonthlyReportQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMonthlyReport>>> = ({ signal }) =>
+    getMonthlyReport(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyReport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetMonthlyReportQueryResult = NonNullable<Awaited<ReturnType<typeof getMonthlyReport>>>
+export type GetMonthlyReportQueryError = ErrorType<ProblemResponse>
+
+/**
+ * По строке на каждый календарный месяц, пересекающийся с периодом
+ * (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+ * `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+ * корректировки не входят. Ошибки периода — как у `/reports/categories`.
+ * @summary Расходы и доходы по месяцам
+ */
+export function useGetMonthlyReport<
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetMonthlyReportParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlyReport>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMonthlyReport>>,
+          TError,
+          Awaited<ReturnType<typeof getMonthlyReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По строке на каждый календарный месяц, пересекающийся с периодом
+ * (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+ * `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+ * корректировки не входят. Ошибки периода — как у `/reports/categories`.
+ * @summary Расходы и доходы по месяцам
+ */
+export function useGetMonthlyReport<
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetMonthlyReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlyReport>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getMonthlyReport>>,
+          TError,
+          Awaited<ReturnType<typeof getMonthlyReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По строке на каждый календарный месяц, пересекающийся с периодом
+ * (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+ * `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+ * корректировки не входят. Ошибки периода — как у `/reports/categories`.
+ * @summary Расходы и доходы по месяцам
+ */
+export function useGetMonthlyReport<
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetMonthlyReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlyReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * По строке на каждый календарный месяц, пересекающийся с периодом
+ * (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+ * `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+ * корректировки не входят. Ошибки периода — как у `/reports/categories`.
+ * @summary Расходы и доходы по месяцам
+ */
+export function useGetMonthlyReport<
+  TData = Awaited<ReturnType<typeof getMonthlyReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetMonthlyReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getMonthlyReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetMonthlyReportQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getGetBalanceReportUrl = (params: GetBalanceReportParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['accountId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/reports/balance?${stringifiedParams}`
+    : `/api/v1/reports/balance`
+}
+
+/**
+ * Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+ * дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+ * до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+ * последний день шага, обрезанный по `to`: первая — конец шага, в который
+ * попадает `from`, последняя — всегда `to`.
+ *
+ * Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+ * с датой не позже неё (обе стороны переводов, корректировки); начальный
+ * остаток действует с начала времён. Может быть отрицательным.
+ *
+ * Счета: без `accountId` — все видимые с `includeInTotal`, включая
+ * архивные; с `accountId` — ровно указанные видимые (независимо от
+ * `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+ * Ошибки периода — как у `/reports/categories`.
+ * @summary Динамика общего баланса
+ */
+export const getBalanceReport = async (
+  params: GetBalanceReportParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<BalanceReport> => {
+  return apiFetch<BalanceReport>(getGetBalanceReportUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetBalanceReportQueryKey = (params?: GetBalanceReportParams) => {
+  return [`/api/v1/reports/balance`, ...(params ? [params] : [])] as const
+}
+
+export const getGetBalanceReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBalanceReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetBalanceReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getBalanceReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getGetBalanceReportQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBalanceReport>>> = ({ signal }) =>
+    getBalanceReport(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBalanceReport>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetBalanceReportQueryResult = NonNullable<Awaited<ReturnType<typeof getBalanceReport>>>
+export type GetBalanceReportQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+ * дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+ * до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+ * последний день шага, обрезанный по `to`: первая — конец шага, в который
+ * попадает `from`, последняя — всегда `to`.
+ *
+ * Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+ * с датой не позже неё (обе стороны переводов, корректировки); начальный
+ * остаток действует с начала времён. Может быть отрицательным.
+ *
+ * Счета: без `accountId` — все видимые с `includeInTotal`, включая
+ * архивные; с `accountId` — ровно указанные видимые (независимо от
+ * `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+ * Ошибки периода — как у `/reports/categories`.
+ * @summary Динамика общего баланса
+ */
+export function useGetBalanceReport<
+  TData = Awaited<ReturnType<typeof getBalanceReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetBalanceReportParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof getBalanceReport>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getBalanceReport>>,
+          TError,
+          Awaited<ReturnType<typeof getBalanceReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+ * дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+ * до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+ * последний день шага, обрезанный по `to`: первая — конец шага, в который
+ * попадает `from`, последняя — всегда `to`.
+ *
+ * Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+ * с датой не позже неё (обе стороны переводов, корректировки); начальный
+ * остаток действует с начала времён. Может быть отрицательным.
+ *
+ * Счета: без `accountId` — все видимые с `includeInTotal`, включая
+ * архивные; с `accountId` — ровно указанные видимые (независимо от
+ * `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+ * Ошибки периода — как у `/reports/categories`.
+ * @summary Динамика общего баланса
+ */
+export function useGetBalanceReport<
+  TData = Awaited<ReturnType<typeof getBalanceReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetBalanceReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getBalanceReport>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getBalanceReport>>,
+          TError,
+          Awaited<ReturnType<typeof getBalanceReport>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+ * дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+ * до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+ * последний день шага, обрезанный по `to`: первая — конец шага, в который
+ * попадает `from`, последняя — всегда `to`.
+ *
+ * Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+ * с датой не позже неё (обе стороны переводов, корректировки); начальный
+ * остаток действует с начала времён. Может быть отрицательным.
+ *
+ * Счета: без `accountId` — все видимые с `includeInTotal`, включая
+ * архивные; с `accountId` — ровно указанные видимые (независимо от
+ * `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+ * Ошибки периода — как у `/reports/categories`.
+ * @summary Динамика общего баланса
+ */
+export function useGetBalanceReport<
+  TData = Awaited<ReturnType<typeof getBalanceReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetBalanceReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getBalanceReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+ * дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+ * до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+ * последний день шага, обрезанный по `to`: первая — конец шага, в который
+ * попадает `from`, последняя — всегда `to`.
+ *
+ * Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+ * с датой не позже неё (обе стороны переводов, корректировки); начальный
+ * остаток действует с начала времён. Может быть отрицательным.
+ *
+ * Счета: без `accountId` — все видимые с `includeInTotal`, включая
+ * архивные; с `accountId` — ровно указанные видимые (независимо от
+ * `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+ * Ошибки периода — как у `/reports/categories`.
+ * @summary Динамика общего баланса
+ */
+export function useGetBalanceReport<
+  TData = Awaited<ReturnType<typeof getBalanceReport>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: GetBalanceReportParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof getBalanceReport>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getGetBalanceReportQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }

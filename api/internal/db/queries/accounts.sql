@@ -12,8 +12,19 @@
 -- has_transactions учитывает и удалённые операции: удалить счёт с ними нельзя.
 -- Каждый EXISTS явно указывает deleted_at IS NULL / IS NOT NULL, чтобы попасть
 -- в свой частичный индекс (00001 и 00004); без этого условия — полный скан.
+-- base_balance — остаток в базовой валюте семьи по курсу на today («сегодня»
+-- пользователя): формула и правило выбора курса — как в отчётах (reports.sql,
+-- CTE fx). Если у валюты нет ни одного курса, has_base_balance =
+-- false (base_balance тогда 0): так sqlc выводит обычные bool и int64, а не
+-- interface{} — nullability выражения из LATERAL он не выводит.
 SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance,
        a.include_in_total, a.color, a.sort_order, a.archived_at,
+       b.balance, b.has_transactions,
+       (conv.base_balance IS NOT NULL)::boolean AS has_base_balance,
+       COALESCE(conv.base_balance, 0)::bigint AS base_balance
+FROM accounts a
+CROSS JOIN LATERAL (
+    SELECT
        (a.initial_balance
         + COALESCE((SELECT SUM(t.amount) FROM transactions t
                     WHERE t.family_id = a.family_id AND t.account_id = a.id
@@ -35,7 +46,23 @@ SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance
                    WHERE t.family_id = a.family_id AND t.to_account_id = a.id
                      AND t.deleted_at IS NOT NULL)
        )::boolean AS has_transactions
-FROM accounts a
+) b
+LEFT JOIN LATERAL (
+    SELECT round(b.balance * CASE WHEN a.currency_code = f.base_currency THEN 1::numeric
+                ELSE COALESCE(
+                    (SELECT r.rate FROM exchange_rates r
+                     WHERE r.currency_code = a.currency_code AND r.rate_date <= @today::date
+                     ORDER BY r.rate_date DESC LIMIT 1),
+                    (SELECT r.rate FROM exchange_rates r
+                     WHERE r.currency_code = a.currency_code AND r.rate_date > @today::date
+                     ORDER BY r.rate_date LIMIT 1))
+                    * power(10::numeric, (bc.minor_units - c.minor_units)::numeric)
+           END)::bigint AS base_balance
+    FROM families f
+    JOIN currencies bc ON bc.code = f.base_currency
+    JOIN currencies c ON c.code = a.currency_code
+    WHERE f.id = a.family_id
+) conv ON true
 WHERE a.family_id = @family_id
   AND (a.owner_user_id IS NULL OR a.owner_user_id = @user_id::uuid)
   AND (sqlc.narg(only_id)::uuid IS NULL OR a.id = sqlc.narg(only_id)::uuid)

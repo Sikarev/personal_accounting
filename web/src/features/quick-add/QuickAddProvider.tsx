@@ -1,8 +1,14 @@
 import { Button } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconRefresh } from '@tabler/icons-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Component, lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react'
 
+import {
+  getGetTransactionDefaultsQueryOptions,
+  getListCategoriesQueryOptions,
+  getListCurrenciesQueryOptions,
+} from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { TransactionFormSkeleton } from '../transactions/TransactionFormSkeleton'
 import { EmptyState, ResponsiveSheet } from '../../shared/ui'
@@ -35,6 +41,7 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
   const [opened, { open, close }] = useDisclosure(false)
   const api = useMemo<QuickAddApi>(() => ({ open }), [open])
   const t = useT()
+  const queryClient = useQueryClient()
 
   useEffect(
     () =>
@@ -42,8 +49,14 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
         // Ошибку загрузки здесь не показываем: при открытии окна lazy() попробует снова
         // и покажет её в окне.
         loadContent().catch(() => {})
+        // Данные формы — заранее, теми же ключами и функциями, что у хуков orval: первое
+        // открытие окна не ждёт сети. Счета обычно уже в кэше (главная, онбординг).
+        // prefetchQuery ошибок не бросает; при открытии хуки запросят заново.
+        void queryClient.prefetchQuery(getListCategoriesQueryOptions())
+        void queryClient.prefetchQuery(getListCurrenciesQueryOptions())
+        void queryClient.prefetchQuery(getGetTransactionDefaultsQueryOptions())
       }),
-    [],
+    [queryClient],
   )
 
   return (

@@ -103,18 +103,38 @@ export function initialValues({
   values.date = transaction.date
   values.amount = amountText(transaction.amount, transaction.currency)
   values.comment = transaction.comment
+  // Смена вида при правке — счёт остаётся счётом правимой операции (у перевода — «Откуда»),
+  // а не последним из defaults: пользователь исправляет эту операцию, а не вносит новую.
+  values.expenseAccountId = transaction.accountId
+  values.incomeAccountId = transaction.accountId
+  values.fromAccountId = transaction.accountId
   if (transaction.kind === 'transfer') {
-    values.fromAccountId = transaction.accountId
     values.toAccountId = transaction.toAccountId
     if (transaction.currency !== transaction.toCurrency) {
       values.toAmount = amountText(transaction.toAmount, transaction.toCurrency)
     }
   } else {
     values.categoryId = transaction.categoryId
-    if (transaction.kind === 'expense') values.expenseAccountId = transaction.accountId
-    else values.incomeAccountId = transaction.accountId
+    // «Куда» для возможного перевода — любой другой активный счёт.
+    if (values.toAccountId === transaction.accountId) {
+      values.toAccountId = active.find((a) => a.id !== transaction.accountId)?.id ?? null
+    }
   }
   return values
+}
+
+/**
+ * Почему операцию нельзя изменить в форме, или `null`, если можно: корректировку остатка
+ * не правят (только удаляют), а перевод со скрытым чужим личным счётом правит только
+ * владелец того счёта (`editable: false`).
+ */
+export function readonlyReason(
+  transaction: Transaction | null | undefined,
+): 'adjustment' | 'notEditable' | null {
+  if (!transaction) return null
+  if (transaction.kind === 'adjustment') return 'adjustment'
+  if (!transaction.editable) return 'notEditable'
+  return null
 }
 
 /**

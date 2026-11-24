@@ -25,8 +25,9 @@ const meta = {
       description: {
         component:
           'Поле суммы с калькулятором: `+ − * /`, скобки, запятая или точка, пробелы игнорируются. ' +
-          'Итог выражения — под полем. На телефоне — ряд кнопок со знаками (на цифровой клавиатуре ' +
-          'их нет); кнопки не забирают фокус у поля. Ошибку показывает форма при сохранении.',
+          'Итог выражения — справа в строке подписи. На телефоне — кнопка «Калькулятор» открывает ряд ' +
+          'знаков (на цифровой клавиатуре их нет); кнопки не забирают фокус у поля. Ошибку ' +
+          'показывает форма при сохранении.',
       },
     },
   },
@@ -41,7 +42,7 @@ export const Empty: Story = {}
 /** Одно число — итога под полем нет. */
 export const PlainNumber: Story = { args: { initialValue: '1 250,50' } }
 
-/** Выражение: под полем «= 590 ₽». */
+/** Выражение: «= 590 ₽» справа в строке подписи. */
 export const Expression: Story = { args: { initialValue: '350+120*2' } }
 
 /** Ввод с клавиатуры: итог появляется, как только выражение разбирается. */
@@ -53,13 +54,19 @@ export const Typing: Story = {
   },
 }
 
-/** Мобильная раскладка: кнопки знаков под полем. */
+/** Мобильная раскладка: кнопка «Калькулятор» в поле, ряд знаков скрыт. */
+export const CalculatorClosed: Story = {
+  args: { initialValue: '1200', showOperators: true },
+}
+
+/** Ряд знаков открыт кнопкой «Калькулятор»: знак вставляется, фокус остаётся в поле. */
 export const WithOperators: Story = {
   args: { initialValue: '1200', showOperators: true },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement)
     const input = canvas.getByLabelText<HTMLInputElement>('Сумма')
     await userEvent.click(input)
+    await userEvent.click(canvas.getByRole('button', { name: 'Калькулятор' }))
     await userEvent.click(canvas.getByRole('button', { name: 'Разделить' }))
     await userEvent.type(input, '3')
     await expect(input).toHaveValue('1200÷3')
@@ -79,7 +86,7 @@ export const Invalid: Story = {
 
 /** Огромная сумма: итог переносится, а не ломает вёрстку. */
 export const Huge: Story = {
-  args: { initialValue: '99999999999,99*1', showOperators: true },
+  args: { initialValue: '99999999999,99*1', showOperators: true, defaultOperatorsOpen: true },
 }
 
 /** Валюта без копеек и другая валюта. */

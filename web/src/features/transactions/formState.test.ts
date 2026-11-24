@@ -6,6 +6,7 @@ import {
   buildRequest,
   clearedAfterCreate,
   initialValues,
+  readonlyReason,
   type TransactionFormValues,
 } from './formState'
 
@@ -99,6 +100,84 @@ describe('initialValues', () => {
       toAmount: '100',
       comment: 'Обмен',
     })
+  })
+})
+
+function tx(overrides: Partial<Transaction>): Transaction {
+  return {
+    id: 'tx',
+    kind: 'expense',
+    date: '2026-11-20',
+    accountId: 'cash',
+    amount: 59_000,
+    currency: 'RUB',
+    toAccountId: null,
+    toAmount: null,
+    toCurrency: null,
+    categoryId: 'food',
+    comment: '',
+    author: null,
+    counterparty: null,
+    editable: true,
+    createdAt: '',
+    updatedAt: '',
+    ...overrides,
+  }
+}
+
+describe('initialValues: правка и смена вида', () => {
+  it('расход: счёт операции — у всех видов, «Куда» — другой счёт, не из defaults', () => {
+    const values = initialValues({
+      accounts,
+      defaults: { ...defaults, transfer: { accountId: 'usd', toAccountId: 'cash' } },
+      currencies,
+      today,
+      transaction: tx({ accountId: 'cash' }),
+    })
+    expect(values).toMatchObject({
+      kind: 'expense',
+      expenseAccountId: 'cash',
+      incomeAccountId: 'cash',
+      fromAccountId: 'cash',
+      amount: '590',
+      categoryId: 'food',
+    })
+    expect(values.toAccountId).not.toBe('cash')
+    expect(values.toAccountId).not.toBeNull()
+  })
+
+  it('перевод: «Откуда» — счёт операции, он же у расхода и дохода', () => {
+    const values = initialValues({
+      accounts,
+      defaults,
+      currencies,
+      today,
+      transaction: tx({
+        kind: 'transfer',
+        accountId: 'cash',
+        toAccountId: 'card',
+        toAmount: 59_000,
+        toCurrency: 'RUB',
+        categoryId: null,
+      }),
+    })
+    expect(values).toMatchObject({
+      kind: 'transfer',
+      fromAccountId: 'cash',
+      toAccountId: 'card',
+      expenseAccountId: 'cash',
+      incomeAccountId: 'cash',
+      toAmount: '',
+    })
+  })
+})
+
+describe('readonlyReason', () => {
+  it('корректировку и чужой перевод изменить нельзя', () => {
+    expect(readonlyReason(null)).toBeNull()
+    expect(readonlyReason(tx({}))).toBeNull()
+    expect(readonlyReason(tx({ kind: 'adjustment', editable: false }))).toBe('adjustment')
+    expect(readonlyReason(tx({ kind: 'transfer', editable: false }))).toBe('notEditable')
   })
 })
 

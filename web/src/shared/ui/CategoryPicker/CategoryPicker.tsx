@@ -1,4 +1,12 @@
-import { Chip, Select, Stack, Text, type ComboboxItem, type OptionsFilter } from '@mantine/core'
+import {
+  Chip,
+  Select,
+  Stack,
+  Text,
+  VisuallyHidden,
+  type ComboboxItem,
+  type OptionsFilter,
+} from '@mantine/core'
 import { useId, useMemo, type ReactNode } from 'react'
 
 import type { Category, CategoryKind } from '../../api'
@@ -34,6 +42,12 @@ export type CategoryPickerProps = {
   autoFocus?: boolean
   /** Поле обязательно — для подписи и `aria-required`. */
   required?: boolean
+  /**
+   * Раскладка частых: `wrap` — строками на всю высоту (по умолчанию); `scroll` — не больше
+   * двух строк с горизонтальной прокруткой и скрытой подписью (быстрый ввод на телефоне:
+   * чипы остаются над клавиатурой).
+   */
+  chipsLayout?: 'wrap' | 'scroll'
 }
 
 /**
@@ -56,6 +70,7 @@ export function CategoryPicker({
   error,
   autoFocus,
   required,
+  chipsLayout = 'wrap',
 }: CategoryPickerProps) {
   const t = useT()
   const frequentLabelId = useId()
@@ -90,11 +105,16 @@ export function CategoryPicker({
     <Stack gap="sm">
       {chips.length > 0 && (
         <div role="group" aria-labelledby={frequentLabelId}>
-          <Text id={frequentLabelId} size="sm" fw={500} mb="xs">
-            {t.categories.picker.frequent}
-          </Text>
+          {chipsLayout === 'scroll' ? (
+            // Подпись не видна, но остаётся доступным именем группы.
+            <VisuallyHidden id={frequentLabelId}>{t.categories.picker.frequent}</VisuallyHidden>
+          ) : (
+            <Text id={frequentLabelId} size="sm" fw={500} mb="xs">
+              {t.categories.picker.frequent}
+            </Text>
+          )}
           <Chip.Group value={value} onChange={(id) => onChange(id)}>
-            <div className={classes.chips}>
+            <div className={chipsLayout === 'scroll' ? classes.chipsScroll : classes.chips}>
               {chips.map((o) => (
                 <Chip
                   key={o.id}

@@ -53,8 +53,9 @@ export function AdjustBalanceForm({
         onSuccess: ({ account: updated, transactionId }) => {
           upsertAccount(qc, updated)
           onDone()
-          const diff = updated.balance - before
-          if (diff === 0 || !transactionId) {
+          // Изменился ли остаток, решает сервер: операция-корректировка создана — есть её id.
+          // Разница по кэшу нужна только для текста (кэш мог устареть).
+          if (!transactionId) {
             notifications.show({ message: t.accounts.adjust.unchanged })
             return
           }
@@ -63,7 +64,11 @@ export function AdjustBalanceForm({
             message: (
               <>
                 {t.accounts.adjust.done}{' '}
-                <Money amount={diff} currency={updated.currency} variant="flow" />
+                <Money
+                  amount={updated.balance - before}
+                  currency={updated.currency}
+                  variant="flow"
+                />
               </>
             ),
             onUndo: () => void undoTransaction(qc, transactionId, t, t.accounts.adjust.undoFailed),

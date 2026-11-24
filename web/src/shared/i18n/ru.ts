@@ -168,6 +168,7 @@ export const ru = {
     notPositive: 'Сумма должна быть больше нуля',
     divisionByZero: 'На ноль делить нельзя',
     invalidExpression: 'Не получается посчитать. Проверьте знаки и скобки',
+    calculator: 'Калькулятор',
     operatorsLabel: 'Знаки для расчёта',
     operators: {
       plus: 'Плюс',
@@ -217,6 +218,11 @@ export const ru = {
       action: 'Создать счёт',
     },
     loadError: 'Не удалось загрузить счета и категории',
+    readonly: {
+      adjustment: 'Корректировку остатка нельзя изменить. Если она лишняя, удалите её.',
+      notEditable:
+        'Эту операцию может изменить только владелец личного счёта, на который она записана.',
+    },
     toasts: {
       expense: (amount: string, category: string) => `Расход ${amount} · ${category}`,
       income: (amount: string, category: string) => `Доход ${amount} · ${category}`,

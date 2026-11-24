@@ -552,7 +552,14 @@ test.describe('кнопки знаков калькулятора', () => {
       await mockApi(page)
       const dialog = await openQuickAdd(page)
       const operators = dialog.getByRole('group', { name: t.amountInput.operatorsLabel })
+      const toggle = dialog.getByRole('button', { name: t.amountInput.calculator })
+      // Ряд скрыт, пока его не открыли кнопкой в поле.
+      await expect(operators).toHaveCount(0)
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
       await page.keyboard.type('350')
+      await toggle.tap()
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      await expect(amountField(dialog)).toBeFocused()
       await operators.getByRole('button', { name: t.amountInput.operators.plus }).tap()
       await page.keyboard.type('120')
       await operators.getByRole('button', { name: t.amountInput.operators.times }).tap()
@@ -567,8 +574,82 @@ test.describe('кнопки знаков калькулятора', () => {
         expect(box.height).toBeGreaterThanOrEqual(44)
         expect(box.width).toBeGreaterThanOrEqual(44)
       }
+      // Открытый ряд остаётся открытым и после сохранения.
+      await pickChip(dialog, food.name)
+      await page.keyboard.press('Enter')
+      await expect(toast(page, /^Расход/)).toBeVisible()
+      await expect(operators).toBeVisible()
     },
   )
+})
+
+test.describe('раскладка на телефоне: «≤ 3 касаний» не мешает клавиатура', () => {
+  test.skip(({ isMobile }) => !isMobile, 'Раскладка телефона')
+
+  test(
+    '375×360 (клавиатура поднята): первый чип целиком виден при фокусе в сумме',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 360 })
+      await mockApi(page)
+      const dialog = await openQuickAdd(page)
+      await page.keyboard.type('350+120*2')
+      const box = (await chip(dialog, food.name).locator('..').boundingBox())!
+      expect(box.y).toBeGreaterThanOrEqual(0)
+      expect(box.y + box.height).toBeLessThanOrEqual(360)
+      expect(box.height).toBeGreaterThanOrEqual(44)
+      // И ничем не закрыт (например, закреплённой кнопкой «Сохранить»).
+      const hit = await page.evaluate(
+        ([x, y]) => document.elementFromPoint(x, y)?.textContent ?? '',
+        [box.x + box.width / 2, box.y + box.height / 2],
+      )
+      expect(hit).toBe(food.name)
+      expect(await horizontalOverflow(page)).toBe(0)
+    },
+  )
+
+  test('375×667: «Сохранить» видна без прокрутки', { tag: '@a11y' }, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 })
+    await mockApi(page)
+    const dialog = await openQuickAdd(page)
+    await page.keyboard.type('350+120*2')
+    const submit = dialog.getByRole('button', { name: t.transactions.submit.expense })
+    const box = (await submit.boundingBox())!
+    expect(box.y + box.height).toBeLessThanOrEqual(667)
+    // И после выбора чипа — тоже (кнопка закреплена внизу окна).
+    await pickChip(dialog, food.name)
+    const after = (await submit.boundingBox())!
+    expect(after.y + after.height).toBeLessThanOrEqual(667)
+  })
+
+  test('частые категории — две строки с прокруткой вбок', { tag: '@a11y' }, async ({ page }) => {
+    const extra = Array.from({ length: 6 }, (_, i) => category(20 + i, `Категория ${i + 1}`))
+    await mockApi(page, {
+      categories: [...categories, ...extra],
+      defaults: {
+        ...defaults,
+        frequentCategories: {
+          expense: [food.id, taxi.id, cafe.id, health.id, ...extra.map((c) => c.id)].slice(0, 8),
+          income: [],
+        },
+      },
+    })
+    const dialog = await openQuickAdd(page)
+    const group = dialog.getByRole('group', { name: t.categories.picker.frequent })
+    const tops = await group
+      .getByRole('radio')
+      .evaluateAll((els) => els.map((el) => el.parentElement!.getBoundingClientRect().top))
+    expect(new Set(tops.map(Math.round)).size).toBe(2)
+    // Прокрутка вбок, а не горизонтальный скролл страницы.
+    expect(await horizontalOverflow(page)).toBe(0)
+    // С клавиатуры последний чип достижим и прокручивается в видимую область.
+    const last = chip(dialog, 'Категория 4')
+    await last.focus()
+    await page.keyboard.press('Space')
+    await expect(last).toBeChecked()
+    await expect(last.locator('..')).toBeInViewport()
+    await expectNoAxeViolations(page)
+  })
 })
 
 test.describe('«Назад» закрывает окно', () => {
@@ -646,6 +727,50 @@ test.describe('«Назад» закрывает окно', () => {
     await page.goBack()
     await expect(page).toHaveURL(/\/$/)
   })
+
+  test(
+    'после перезагрузки страницы «Назад» закрывает новое окно',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await openFromTransactions(page)
+      // Перезагрузка с открытым окном: в history.state осталась метка прежнего окна.
+      await page.reload()
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+      await navAddButton(page).click()
+      await expect(amountField(quickAdd(page))).toBeFocused()
+      await page.goBack()
+      await expect(quickAdd(page)).toBeHidden()
+    },
+  )
+
+  test(
+    'замена адреса изнутри окна (replace) не оставляет лишнего шага',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockApi(page)
+      await openHome(page, '/settings')
+      await page
+        .getByRole('main')
+        .getByRole('link', { name: new RegExp(t.categories.title) })
+        .click()
+      await expect(page.getByRole('heading', { level: 1, name: t.categories.title })).toBeVisible()
+      await page.getByRole('button', { name: t.categories.add }).first().click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialog).toBeVisible()
+      // Вкладка под окном переключается с replace: true — так же лента меняет фильтры
+      // в открытом окне. Щелчок из кода: подложка окна перехватила бы настоящий.
+      await page
+        .getByRole('tab', { name: t.categories.kinds.income })
+        .evaluate((el) => (el as HTMLElement).click())
+      await expect(page).toHaveURL(/kind=income/)
+      await dialog.getByRole('button', { name: t.common.close }).click()
+      await expect(dialog).toBeHidden()
+      // Адрес, сменённый в окне, сохранился, а «Назад» уводит на прежний экран.
+      await expect(page).toHaveURL(/\/settings\/categories\?kind=income$/)
+      await page.goBack()
+      await expect(page).toHaveURL(/\/settings$/)
+    },
+  )
 
   test('окна «Счетов» и «Категорий»', { tag: '@a11y' }, async ({ page }) => {
     await mockApi(page)

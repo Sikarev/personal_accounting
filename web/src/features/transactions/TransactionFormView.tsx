@@ -1,5 +1,5 @@
 import { Button, Stack, Text, TextInput } from '@mantine/core'
-import { IconArrowRight, IconWallet } from '@tabler/icons-react'
+import { IconArrowRight, IconLock, IconWallet } from '@tabler/icons-react'
 import { useRef, useState, type KeyboardEvent } from 'react'
 
 import {
@@ -19,6 +19,7 @@ import { evaluateAmount } from '../../shared/lib/amountExpression'
 import { formatExchangeRate } from '../../shared/lib/money'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import { useFormState } from '../../shared/lib/useFormState'
+import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import {
   AccountPicker,
   AmountInput,
@@ -35,6 +36,7 @@ import {
   initialValues,
   INLINE_FIELDS,
   isExchange,
+  readonlyReason,
   ROW_FIELDS,
   sourceAccountId,
   type TransactionFormKind,
@@ -108,6 +110,14 @@ export function TransactionFormView({
   const showLoader = useDelayedLoading(submitting)
   const containerRef = useRef<HTMLDivElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
+
+  const mobile = useMobileLayout()
+
+  const readonly = readonlyReason(transaction)
+  if (readonly) {
+    // Без полей и без PUT: сервер всё равно ответил бы 409 / 403.
+    return <EmptyState icon={IconLock} titleOrder={3} title={t.transactions.readonly[readonly]} />
+  }
 
   const active = activeAccountsInOrder(accounts)
   if (active.length === 0 && !transaction) {
@@ -263,6 +273,8 @@ export function TransactionFormView({
           submitLabel={t.transactions.submit[kind]}
           pending={submitting}
           loading={showLoader}
+          // Телефон: «Сохранить» закреплена внизу окна, содержимое прокручивается над ней.
+          stickySubmit={mobile}
         >
           <Stack gap="xs">
             <div className={classes.context}>
@@ -351,6 +363,8 @@ export function TransactionFormView({
               value={values.categoryId}
               onChange={(id) => form.setValue('categoryId', id)}
               frequent={defaults?.frequentCategories[kind]}
+              // Телефон: частые — не больше двух строк, чтобы остаться над клавиатурой.
+              chipsLayout={mobile ? 'scroll' : 'wrap'}
               error={form.errors.categoryId}
             />
           )}

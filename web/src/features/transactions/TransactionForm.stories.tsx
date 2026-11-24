@@ -258,3 +258,27 @@ export const Edit: Story = {
     },
   },
 }
+
+/** Правка корректировки остатка: вместо полей — объяснение, без «Сохранить». */
+export const EditAdjustment: Story = {
+  args: {
+    transaction: {
+      id: 'adj',
+      kind: 'adjustment',
+      date: '2026-11-20',
+      accountId: card.id,
+      amount: -50_000,
+      currency: 'RUB',
+      toAccountId: null,
+      toAmount: null,
+      toCurrency: null,
+      categoryId: null,
+      comment: '',
+      author: null,
+      counterparty: null,
+      editable: false,
+      createdAt: '',
+      updatedAt: '',
+    },
+  },
+}

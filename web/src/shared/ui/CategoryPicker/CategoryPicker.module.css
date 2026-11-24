@@ -4,6 +4,39 @@
   gap: var(--mantine-spacing-sm);
 }
 
+/* Две строки чипов с горизонтальной прокруткой: столбцы заполняются сверху вниз, чип,
+   обрезанный краем, показывает, что дальше есть ещё. Лента выходит под отступы окна
+   (до краёв экрана), а отступ сверху и снизу — место для кольца фокуса. */
+.chipsScroll {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  /* Столбец — по ширине чипа: ряд не сжимается, а уходит вбок под прокрутку. */
+  grid-auto-columns: max-content;
+  justify-content: start;
+  /* Чип — по ширине подписи, а не столбца: иначе щелчок справа от подписи мимо чипа. */
+  justify-items: start;
+  align-items: start;
+  gap: var(--mantine-spacing-sm);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  margin-inline: calc(var(--mantine-spacing-lg) * -1);
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+  scroll-padding-inline: var(--mantine-spacing-lg);
+
+  /* Скрытый input и подпись — в одну строку (иначе подпись уходит под невидимый input). */
+  & .chipRoot {
+    display: flex;
+    max-width: none;
+  }
+
+  /* Длинное имя — с многоточием, не шире 70 % экрана: соседний столбец виден краем. */
+  & .chipLabel {
+    max-width: 70vw;
+  }
+}
+
 /* Длинное имя не раздвигает ряд: чип не шире контейнера, текст обрезается многоточием. */
 .chipRoot {
   max-width: 100%;

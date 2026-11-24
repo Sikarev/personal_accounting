@@ -14,7 +14,6 @@ import {
   useListCategories,
   useListTransactionsInfinite,
   type Transaction,
-  type TransactionRequest,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { formatCount } from '../../shared/lib/plural'
@@ -61,24 +60,6 @@ function useFeedFilters(): [FeedFilters, SetFilters] {
     [setSearchParams],
   )
   return [filters, setFilters]
-}
-
-/**
- * Запустить после того, как закрытое окно убрало свою запись из истории: `useCloseOnBack`
- * делает `history.back()` асинхронно, и новое окно, открытое раньше `popstate`, встало бы
- * поверх уходящей записи — «Назад» потом сработал бы не так. Нет `popstate` (запись уже
- * не наша) — запуск по таймеру.
- */
-function afterHistorySettles(run: () => void) {
-  let done = false
-  const go = () => {
-    if (done) return
-    done = true
-    window.removeEventListener('popstate', go)
-    setTimeout(run)
-  }
-  window.addEventListener('popstate', go)
-  setTimeout(go, 400)
 }
 
 /**
@@ -270,11 +251,8 @@ export function TransactionsPage() {
     setSheetOpened(false)
   }
 
-  const saveEdit = useCallback(
-    (transaction: Transaction, body: TransactionRequest) =>
-      latest.current.actions.edit(transaction, body, accounts),
-    [accounts],
-  )
+  /** Сервер сохранил правку: строка — ответом сервера, тост; форму закрывает вызывающий. */
+  const onEdited = (saved: Transaction) => actions.edited(saved)
 
   const inlineForm =
     editing?.inline && editingTransaction
@@ -285,7 +263,10 @@ export function TransactionsPage() {
               inline
               transaction={editingTransaction}
               title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
-              saveEdit={saveEdit}
+              onSaved={(saved) => {
+                onEdited(saved)
+                closeInline(editingTransaction.id)
+              }}
               onClose={() => closeInline(editingTransaction.id)}
               onAction={onAction}
             />
@@ -414,18 +395,23 @@ export function TransactionsPage() {
         title={t.feed.edit.title}
         fullHeight
         returnFocus={sheetReturnFocus}
-        onExitTransitionEnd={() => {
-          setEditing(null)
+        onExitTransitionEnd={() => setEditing(null)}
+        // Быстрый ввод (дублирование) — когда запись окна правки ушла из истории «Назад»:
+        // открытое раньше, оно встало бы поверх уходящей записи.
+        onHistoryReleased={() => {
           const next = afterSheetClose.current
           afterSheetClose.current = null
-          if (next) afterHistorySettles(next)
+          next?.()
         }}
       >
         {editing && !editing.inline && editingTransaction && (
           <EditTransaction
             transaction={editingTransaction}
             title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
-            saveEdit={saveEdit}
+            onSaved={(saved) => {
+              onEdited(saved)
+              setSheetOpened(false)
+            }}
             onClose={() => setSheetOpened(false)}
             onAction={onSheetAction}
           />

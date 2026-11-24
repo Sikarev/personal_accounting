@@ -3,7 +3,7 @@ import { IconCopy, IconTrash } from '@tabler/icons-react'
 import type { KeyboardEvent } from 'react'
 
 import { TransactionForm } from '../../features/transactions/TransactionForm'
-import type { Transaction, TransactionRequest } from '../../shared/api'
+import type { Transaction } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
 import type { RowAction } from './FeedList'
@@ -14,9 +14,9 @@ type EditTransactionProps = {
   transaction: Transaction
   /** Подпись операции («Продукты › Молочное») — для имени области правки. */
   title: string
-  /** Сохранение правки (оптимистичное — `useTransactionActions().edit`). */
-  saveEdit: (transaction: Transaction, body: TransactionRequest) => Promise<Transaction>
-  /** Сохранено или отменено: закрыть форму. */
+  /** Сервер сохранил правку (форма ждёт ответа и при ошибке остаётся открытой). */
+  onSaved: (saved: Transaction) => void
+  /** Отмена: закрыть форму. */
   onClose: () => void
   /** «Дублировать» и «Удалить» — как из меню строки. */
   onAction: (action: Exclude<RowAction, 'open'>, transaction: Transaction) => void
@@ -38,7 +38,7 @@ type EditTransactionProps = {
 export function EditTransaction({
   transaction,
   title,
-  saveEdit,
+  onSaved,
   onClose,
   onAction,
   inline = false,
@@ -97,8 +97,7 @@ export function EditTransaction({
   const form = (
     <TransactionForm
       transaction={transaction}
-      saveEdit={saveEdit}
-      onSaved={onClose}
+      onSaved={onSaved}
       // На месте строки — сразу в сумму; в окне на телефоне клавиатура не нужна сразу.
       autoFocus={inline}
     />

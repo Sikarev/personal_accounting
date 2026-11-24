@@ -2,10 +2,8 @@ import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query'
 
 import {
   getListTransactionsInfiniteQueryKey,
-  type Account,
   type Transaction,
   type TransactionList,
-  type TransactionRequest,
 } from '../../shared/api'
 import { compareFeedOrder } from '../../shared/lib/transactionFeed'
 
@@ -83,9 +81,9 @@ export function cancelFeedFetches(qc: QueryClient) {
 }
 
 /**
- * Заменить операцию во всех загруженных лентах (правка). Возвращает ключи лент, где она
- * была, — туда же откатывается прежняя версия при ошибке. Если правка увела операцию
- * из фильтра ленты или поменяла дату, порядок и состав поправит перезапрос после ответа.
+ * Заменить операцию во всех загруженных лентах, где она есть (ответ сервера на правку).
+ * Если правка увела операцию из фильтра ленты или поменяла дату, порядок и состав
+ * поправит перезапрос. Возвращает ключи лент, где она была.
  */
 export function replaceInFeeds(qc: QueryClient, transaction: Transaction): QueryKey[] {
   const keys: QueryKey[] = []
@@ -101,31 +99,4 @@ export function replaceInFeeds(qc: QueryClient, transaction: Transaction): Query
     })
   }
   return keys
-}
-
-/**
- * Операция после правки — как её покажет сервер, пока ответа нет: поля из тела запроса,
- * валюты — по счетам. Автор, id и права не меняются.
- */
-export function applyEdit(
-  transaction: Transaction,
-  body: TransactionRequest,
-  accounts: readonly Pick<Account, 'id' | 'currency'>[],
-): Transaction {
-  const currencyOf = (id: string | null | undefined) =>
-    accounts.find((a) => a.id === id)?.currency ?? null
-  const transfer = body.kind === 'transfer'
-  return {
-    ...transaction,
-    kind: body.kind,
-    date: body.date,
-    accountId: body.accountId,
-    amount: body.amount,
-    currency: currencyOf(body.accountId),
-    toAccountId: transfer ? (body.toAccountId ?? null) : null,
-    toAmount: transfer ? (body.toAmount ?? body.amount) : null,
-    toCurrency: transfer ? currencyOf(body.toAccountId) : null,
-    categoryId: transfer ? null : (body.categoryId ?? null),
-    comment: (body.comment ?? '').trim(),
-  }
 }

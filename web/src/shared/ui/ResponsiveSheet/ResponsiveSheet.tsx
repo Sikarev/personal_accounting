@@ -28,6 +28,11 @@ export type ResponsiveSheetProps = {
   returnFocus?: boolean
   /** Окно закрылось и доиграло анимацию: содержимое уже размонтировано. */
   onExitTransitionEnd?: () => void
+  /**
+   * Запись окна ушла из истории «Назад» (`useCloseOnBack`). Следующее окно открывать
+   * после этого, а не сразу после закрытия.
+   */
+  onHistoryReleased?: () => void
 }
 
 /**
@@ -55,6 +60,7 @@ export function ResponsiveSheet({
   desktopSize = 'md',
   returnFocus = true,
   onExitTransitionEnd,
+  onHistoryReleased,
 }: ResponsiveSheetProps) {
   const mobileNow = useMobileLayout()
   const [isMobile, setIsMobile] = useState(mobileNow)
@@ -68,7 +74,7 @@ export function ResponsiveSheet({
     if (opened) setIsMobile(mobileNow)
   }
 
-  const { restoreMarker, replaceUrlRef } = useCloseOnBack(opened, onClose)
+  const { restoreMarker, replaceUrlRef } = useCloseOnBack(opened, onClose, onHistoryReleased)
   // Роутера может не быть (Storybook) — тогда синхронизация с ним не нужна.
   const inRouter = useInRouterContext()
   const routerSync = inRouter && (

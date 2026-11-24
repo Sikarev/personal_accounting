@@ -518,7 +518,6 @@ export const ru = {
     },
     toasts: {
       edited: 'Операция изменена',
-      editFailed: 'Не удалось изменить операцию',
       deleted: 'Операция удалена',
       restoreFailed: 'Не удалось вернуть операцию.',
     },

@@ -9,24 +9,15 @@ import {
   apiErrorText,
   useDeleteTransaction,
   useRestoreTransaction,
-  useUpdateTransaction,
-  type Account,
   type Transaction,
-  type TransactionRequest,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { notifyWithUndo } from '../../shared/ui'
-import {
-  applyEdit,
-  cancelFeedFetches,
-  removeFromFeeds,
-  replaceInFeeds,
-  returnToFeeds,
-} from './feedCache'
+import { cancelFeedFetches, removeFromFeeds, replaceInFeeds, returnToFeeds } from './feedCache'
 
 /**
  * Изменения операций из ленты: удаление с отменой (ux.md, принцип 4: отмена вместо
- * подтверждения) и правка. Мутации — в общей очереди с быстрым вводом (`TRANSACTIONS_SCOPE`):
+ * подтверждения) и обновление строки после правки. Мутации — в общей очереди с быстрым вводом (`TRANSACTIONS_SCOPE`):
  * «Отменить» не обгонит удаление, а перезапрос после создания не вернёт строку,
  * удаление которой ещё не дошло до сервера.
  *
@@ -41,36 +32,15 @@ export function useTransactionActions() {
   const mutation = { scope: TRANSACTIONS_SCOPE, onSettled: () => invalidateWhenQueueSettles(qc) }
   const deleteMutation = useDeleteTransaction({ mutation })
   const restoreMutation = useRestoreTransaction({ mutation })
-  const updateMutation = useUpdateTransaction({ mutation })
 
   /**
-   * Правка (решение PM, handoff 5.6): строка в лентах меняется сразу, форма закрывается,
-   * не дожидаясь ответа. Ошибка — прежняя версия строки и тост с причиной; изменения
-   * при этом не теряются насовсем: их можно ввести заново. «Отменить» в тосте нет —
-   * правку отменяют правкой. Возвращает операцию «как будет» — для `onSaved` формы.
+   * Правка сохранена (форма ждала ответа сервера — при ошибке введённое не теряется,
+   * ux.md §4): строка в лентах — ответом сервера сразу, не дожидаясь перезапроса,
+   * тост без «Отменить» — правку отменяют правкой. Кэш сбрасывает сама форма.
    */
-  const edit = (
-    transaction: Transaction,
-    body: TransactionRequest,
-    accounts: readonly Account[],
-  ): Promise<Transaction> => {
-    cancelFeedFetches(qc)
-    const optimistic = applyEdit(transaction, body, accounts)
-    replaceInFeeds(qc, optimistic)
-    updateMutation.mutateAsync({ transactionId: transaction.id, data: body }).then(
-      (saved) => void replaceInFeeds(qc, saved),
-      (error: unknown) => {
-        // Откат — прежняя версия строки в тех же лентах.
-        replaceInFeeds(qc, transaction)
-        notifications.show({
-          color: 'red',
-          title: t.feed.toasts.editFailed,
-          message: apiErrorText(error, t),
-        })
-      },
-    )
+  const edited = (saved: Transaction) => {
+    replaceInFeeds(qc, saved)
     notifications.show({ message: t.feed.toasts.edited })
-    return Promise.resolve(optimistic)
   }
 
   /**
@@ -117,7 +87,7 @@ export function useTransactionActions() {
     return done
   }
 
-  return { remove, edit }
+  return { remove, edited }
 }
 
 /** Дублировать можно расход, доход и перевод между своими счетами (не корректировку). */

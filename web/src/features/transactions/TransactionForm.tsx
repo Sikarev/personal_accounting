@@ -43,12 +43,6 @@ export type TransactionFormProps = {
    * и комментарий — как у образца, дата — «сегодня». Сохраняется новой операцией.
    */
   template?: Transaction | null
-  /**
-   * Своё сохранение правки вместо `PUT` с ожиданием ответа — лента правит оптимистично:
-   * обновляет строку сама и возвращает операцию «как будет». Кэш после ответа тоже
-   * сбрасывает вызывающий.
-   */
-  saveEdit?: (transaction: Transaction, body: TransactionRequest) => Promise<Transaction>
 }
 
 /**
@@ -66,7 +60,6 @@ export function TransactionForm({
   onCreateAccount,
   autoFocus,
   template = null,
-  saveEdit,
 }: TransactionFormProps) {
   const t = useT()
   const qc = useQueryClient()
@@ -121,13 +114,11 @@ export function TransactionForm({
 
   const submit = (body: TransactionRequest) =>
     transaction
-      ? saveEdit
-        ? saveEdit(transaction, body)
-        : update.mutateAsync({ transactionId: transaction.id, data: body })
+      ? update.mutateAsync({ transactionId: transaction.id, data: body })
       : create.mutateAsync({ data: body })
 
   const handleSaved = (saved: Transaction) => {
-    if (!(transaction && saveEdit)) void invalidateAfterTransactionChange(qc)
+    void invalidateAfterTransactionChange(qc)
     if (!transaction) notifyTransactionCreated(qc, saved, data, t)
     onSaved?.(saved)
   }

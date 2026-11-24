@@ -665,21 +665,75 @@ test.describe('правка', () => {
   )
 
   test(
-    'ошибка сохранения — строка откатывается, тост с причиной',
+    'ошибка по полю (422) — форма открыта, введённое на месте, ошибка у поля',
     { tag: '@a11y' },
     async ({ page }) => {
       const api = await setup(page)
-      failTimes(api, 'PUT /transactions/:id', 1, (route) => problem(route, 500, 'internal'))
+      failTimes(api, 'PUT /transactions/:id', 1, (route) =>
+        problem(route, 422, 'validation_failed', {
+          errors: [{ field: 'comment', code: 'too_long', message: 'x' }],
+        }),
+      )
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Кофе').click()
+      const scope = sheet(page).or(inlineEdit(page, cafe.name))
+      const comment = field(scope, t.transactions.comment)
+      await comment.fill('Кофе и круассан')
+      await comment.press('Enter')
+      await expect.poll(() => api.received).toContain('PUT /transactions/:id')
+      // Форма не закрылась, введённое на месте, ошибка — у поля.
+      await expect(comment).toHaveValue('Кофе и круассан')
+      await expect(comment).toHaveAccessibleDescription(t.errors.field.tooLong)
+      await expect(toast(page, t.feed.toasts.edited)).toHaveCount(0)
+      await expectNoAxeViolations(page)
+    },
+  )
+
+  test(
+    'нет связи — ошибка над формой, «Повторить» отправляет снова',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await setup(page)
+      failTimes(api, 'PUT /transactions/:id', 1, (route) => route.abort())
       await openFeed(page)
       await feedReady(page)
       await rowButton(page, 'Кофе').click()
       const scope = sheet(page).or(inlineEdit(page, cafe.name))
       await field(scope, t.transactions.comment).fill('Кофе и круассан')
       await field(scope, t.transactions.comment).press('Enter')
-      await expect(toast(page, t.feed.toasts.editFailed)).toBeVisible()
-      await expect(toast(page, t.feed.toasts.editFailed)).toContainText(t.errors.server)
-      await expect(page.getByText('Кофе', { exact: true })).toBeVisible()
-      await expect(page.getByText('Кофе и круассан')).toHaveCount(0)
+      await expect(scope.getByText(t.errors.network)).toBeVisible()
+      await expect(field(scope, t.transactions.comment)).toHaveValue('Кофе и круассан')
+      await scope.getByRole('button', { name: t.errors.retry }).click()
+      await expect(scope).toHaveCount(0)
+      await expect(page.getByText('Кофе и круассан')).toBeVisible()
+      await expect(toast(page, t.feed.toasts.edited)).toBeVisible()
+      expect(api.updates).toHaveLength(1)
+    },
+  )
+
+  test(
+    'mobile: «Дублировать» из окна правки — быстрый ввод, «Назад» закрывает его',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(!isMobile, 'Окно правки — только на mobile')
+      await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      const historyBefore = await page.evaluate(() => window.history.length)
+      await rowButton(page, 'Сыр и йогурт').click()
+      await sheet(page).getByRole('button', { name: t.feed.actions.duplicate }).click()
+      const quickAdd = page.getByRole('dialog', { name: t.quickAdd.title })
+      await expect(quickAdd).toBeVisible()
+      await expect(sheet(page)).toBeHidden()
+      await expect(field(quickAdd, t.transactions.amount)).toHaveValue('1290')
+      // Быстрый ввод открылся после того, как запись окна правки ушла из истории:
+      // в истории — одна запись окна, «Назад» закрывает быстрый ввод и не открывает правку.
+      await expect.poll(() => page.evaluate(() => window.history.length)).toBe(historyBefore + 1)
+      await page.goBack()
+      await expect(quickAdd).toBeHidden()
+      await expect(sheet(page)).toBeHidden()
+      await expect(page).toHaveURL(/\/transactions$/)
     },
   )
 

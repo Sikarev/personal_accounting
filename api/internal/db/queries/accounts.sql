@@ -14,7 +14,7 @@
 -- в свой частичный индекс (00001 и 00004); без этого условия — полный скан.
 -- base_balance — остаток в базовой валюте семьи по курсу на today («сегодня»
 -- пользователя): формула и правило выбора курса — как в отчётах (reports.sql,
--- выражение factor). Если у валюты нет ни одного курса, has_base_balance =
+-- CTE fx). Если у валюты нет ни одного курса, has_base_balance =
 -- false (base_balance тогда 0): так sqlc выводит обычные bool и int64, а не
 -- interface{} — nullability выражения из LATERAL он не выводит.
 SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance,

@@ -9,16 +9,16 @@ import {
   fontsReady,
   horizontalOverflow,
   mockSignedIn,
-  mockTransactionsApi,
+  mockFeedApi,
   problem,
   transaction,
   type Category,
   type Transaction,
-  type TransactionsMock,
+  type FeedMock,
 } from './support.ts'
 
 // Экран «Операции»: лента по дням с итогами, фильтры в адресе, итоги выборки, подгрузка
-// страниц, удаление с отменой. API подменяется через page.route (mockTransactionsApi),
+// страниц, удаление с отменой. API подменяется через page.route (mockFeedApi),
 // часы зафиксированы: «Сегодня» и «Вчера» в кадре не меняются день ото дня.
 
 const NOW = new Date('2026-11-23T12:00:00+03:00')
@@ -137,7 +137,7 @@ function fixture(): Transaction[] {
 async function setup(page: Page, transactions: Transaction[] = fixture(), pageSize?: number) {
   await page.clock.setFixedTime(NOW)
   await mockSignedIn(page)
-  return mockTransactionsApi(page, { transactions, accounts, categories, pageSize })
+  return mockFeedApi(page, { transactions, accounts, categories, pageSize })
 }
 
 async function openFeed(page: Page, query = '') {
@@ -171,7 +171,7 @@ const dayHeader = (page: Page, day: string) =>
  * и 5xx клиент повторяет один раз, поэтому для экрана ошибки нужно два отказа).
  */
 function failTimes(
-  api: TransactionsMock,
+  api: FeedMock,
   key: string,
   times: number,
   handler: (route: Route) => Promise<void>,
@@ -256,7 +256,7 @@ test.describe('лента', () => {
       },
     }
     await mockSignedIn(page, me)
-    await mockTransactionsApi(page, { transactions: fixture(), accounts, categories })
+    await mockFeedApi(page, { transactions: fixture(), accounts, categories })
     await openFeed(page)
     await feedReady(page)
     await expect(page.getByText('Анна · Сыр и йогурт')).toBeVisible()

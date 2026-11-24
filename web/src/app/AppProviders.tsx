@@ -34,12 +34,13 @@ export function ThemeProviders({
 
 function AppNotifications() {
   const mobile = useMobileLayout()
-  // В мобильной раскладке тосты снизу по центру, над нижней панелью — рядом с большим
-  // пальцем и кнопкой «Отменить»; на desktop — в правом нижнем углу, не перекрывая контент.
+  // В мобильной раскладке тосты сверху по центру: снизу их закрывала бы клавиатура —
+  // после сохранения в быстром вводе фокус возвращается в сумму, и клавиатура остаётся
+  // поднятой. На desktop — в правом нижнем углу, не перекрывая контент.
   return (
     <Notifications
-      position={mobile ? 'bottom-center' : 'bottom-right'}
-      classNames={{ root: mobile ? classes.aboveBottomNav : undefined }}
+      position={mobile ? 'top-center' : 'bottom-right'}
+      classNames={{ root: mobile ? classes.belowSafeArea : undefined }}
     />
   )
 }

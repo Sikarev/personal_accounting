@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatMoney, formatMoneyParts, getMinorUnits, MINUS, moneyTone } from './money'
+import {
+  formatExchangeRate,
+  formatMoney,
+  formatMoneyParts,
+  getMinorUnits,
+  MINUS,
+  moneyTone,
+} from './money'
 
 describe('moneyTone (цвет компонента Money)', () => {
   it('−40 коп. с округлением до рублей — «0 ₽» обычным цветом, не красным', () => {
@@ -110,5 +117,34 @@ describe('formatMoney', () => {
 
   it('отвергает дробное число вместо минимальных единиц', () => {
     expect(() => formatMoney(12.5, 'RUB')).toThrow(RangeError)
+  })
+})
+
+describe('formatExchangeRate', () => {
+  // Intl ставит неразрывные пробелы — сравниваем с обычными для читаемости.
+  const rate = (...args: Parameters<typeof formatExchangeRate>) =>
+    formatExchangeRate(...args)?.replace(/[  ]/g, ' ')
+
+  it('слева единица более «дорогой» валюты', () => {
+    // Списали 9 235 ₽, зачислили 100 $.
+    expect(rate(923_500, 'RUB', 10_000, 'USD')).toBe('1 $ = 92,35 ₽')
+    // Обратный обмен: списали 100 $, получили 9 235 ₽ — тот же курс.
+    expect(rate(10_000, 'USD', 923_500, 'RUB')).toBe('1 $ = 92,35 ₽')
+  })
+
+  it('2–4 знака после запятой, половина — от нуля', () => {
+    expect(rate(1_000_000, 'RUB', 10_000, 'USD')).toBe('1 $ = 100,00 ₽')
+    // 10 000 ₽ / 107,33 $ = 93,17059…
+    expect(rate(1_000_000, 'RUB', 10_733, 'USD')).toBe('1 $ = 93,1706 ₽')
+  })
+
+  it('учитывает знаки валют: иена без дробной части', () => {
+    // 15 000 ¥ за 100 $.
+    expect(rate(10_000, 'USD', 15_000, 'JPY', { toMinorUnits: 0 })).toBe('1 $ = 150,00 ¥')
+  })
+
+  it('без сумм курса нет', () => {
+    expect(formatExchangeRate(0, 'RUB', 100, 'USD')).toBeNull()
+    expect(formatExchangeRate(100, 'RUB', 0, 'USD')).toBeNull()
   })
 })

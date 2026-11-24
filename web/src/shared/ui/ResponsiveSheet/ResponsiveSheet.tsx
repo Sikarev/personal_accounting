@@ -1,7 +1,9 @@
 import { Drawer, Modal } from '@mantine/core'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode, type RefObject } from 'react'
+import { useInRouterContext, useLocation, useNavigate, useNavigationType } from 'react-router'
 
 import { useT } from '../../i18n'
+import { useCloseOnBack } from '../../lib/useCloseOnBack'
 import { useMobileLayout } from '../../lib/useMobileLayout'
 import classes from './ResponsiveSheet.module.css'
 
@@ -39,6 +41,10 @@ export type ResponsiveSheetProps = {
  * Доступность обеспечивает Mantine: фокус переходит внутрь и не выходит за пределы окна,
  * `Esc` и клик по подложке закрывают, после закрытия фокус возвращается на кнопку,
  * которая открыла окно.
+ *
+ * Системная кнопка «Назад» закрывает окно (`useCloseOnBack`): открытое окно добавляет
+ * запись в историю. Ссылка внутри окна должна переходить с `replace: true`, иначе
+ * в истории останется лишний шаг с адресом экрана под окном.
  */
 export function ResponsiveSheet({
   opened,
@@ -62,46 +68,89 @@ export function ResponsiveSheet({
     if (opened) setIsMobile(mobileNow)
   }
 
+  const { restoreMarker, replaceUrlRef } = useCloseOnBack(opened, onClose)
+  // Роутера может не быть (Storybook) — тогда синхронизация с ним не нужна.
+  const inRouter = useInRouterContext()
+  const routerSync = inRouter && (
+    <RouterSync onReplace={restoreMarker} replaceUrlRef={replaceUrlRef} />
+  )
+
   const t = useT()
   const closeButtonProps = { 'aria-label': t.common.close }
 
   if (isMobile) {
     return (
-      <Drawer
-        opened={opened}
-        onClose={onClose}
-        title={title}
-        position="bottom"
-        size={fullHeight ? '100%' : 'auto'}
-        returnFocus={returnFocus}
-        onExitTransitionEnd={onExitTransitionEnd}
-        closeButtonProps={closeButtonProps}
-        classNames={{
-          content: fullHeight ? classes.sheetFull : classes.sheet,
-          header: classes.header,
-          title: classes.title,
-          body: classes.body,
-        }}
-      >
-        {children}
-      </Drawer>
+      <>
+        {routerSync}
+        <Drawer
+          opened={opened}
+          onClose={onClose}
+          title={title}
+          position="bottom"
+          size={fullHeight ? '100%' : 'auto'}
+          returnFocus={returnFocus}
+          onExitTransitionEnd={onExitTransitionEnd}
+          closeButtonProps={closeButtonProps}
+          classNames={{
+            content: fullHeight ? classes.sheetFull : classes.sheet,
+            header: classes.header,
+            title: classes.title,
+            body: classes.body,
+          }}
+        >
+          {children}
+        </Drawer>
+      </>
     )
   }
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={title}
-      size={desktopSize}
-      returnFocus={returnFocus}
-      onExitTransitionEnd={onExitTransitionEnd}
-      radius="lg"
-      centered
-      closeButtonProps={closeButtonProps}
-      classNames={{ header: classes.header, title: classes.title, body: classes.body }}
-    >
-      {children}
-    </Modal>
+    <>
+      {routerSync}
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        title={title}
+        size={desktopSize}
+        returnFocus={returnFocus}
+        onExitTransitionEnd={onExitTransitionEnd}
+        radius="lg"
+        centered
+        closeButtonProps={closeButtonProps}
+        classNames={{ header: classes.header, title: classes.title, body: classes.body }}
+      >
+        {children}
+      </Modal>
+    </>
   )
+}
+
+/**
+ * Связь окна с React Router (`useCloseOnBack`): замена адреса изнутри открытого окна
+ * (`replace: true` — фильтры, вкладки) стирает метку окна в `history.state` — возвращаем её;
+ * переход с заменой адреса для закрытия окна — через роутер, чтобы он увидел новый адрес.
+ */
+function RouterSync({
+  onReplace,
+  replaceUrlRef,
+}: {
+  onReplace: () => void
+  replaceUrlRef: RefObject<((url: string) => void) | null>
+}) {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    replaceUrlRef.current = (url) => {
+      const { pathname, search, hash } = new URL(url)
+      void navigate(pathname + search + hash, { replace: true })
+    }
+  }, [navigate, replaceUrlRef])
+
+  useEffect(() => {
+    if (navigationType === 'REPLACE') onReplace()
+  }, [location, navigationType, onReplace])
+
+  return null
 }

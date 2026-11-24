@@ -4,6 +4,7 @@ import { useEffect, useRef, type FormEvent, type ReactNode } from 'react'
 
 import { useT } from '../../i18n'
 import { icons } from '../../../theme'
+import classes from './SubmitForm.module.css'
 
 /**
  * Каркас формы с отправкой (вход, регистрация, восстановление пароля, формы счёта):
@@ -26,7 +27,18 @@ export type SubmitFormProps = {
   /** Показать у сообщения кнопку «Повторить» (ошибка сети). */
   retryable?: boolean
   submitLabel: string
+  /** Идёт отправка: повторная отправка (второй Enter) игнорируется. */
   pending: boolean
+  /**
+   * Показывать индикатор на кнопке. По умолчанию — всё время `pending`; форма быстрого
+   * ввода передаёт `useDelayedLoading(pending)`, чтобы быстрый ответ не мигал (ux.md, §4).
+   */
+  loading?: boolean
+  /**
+   * Кнопка закреплена внизу прокручиваемого окна (sticky), содержимое прокручивается над ней:
+   * быстрый ввод на телефоне — «Сохранить» видна, даже когда чипы и комментарий ниже экрана.
+   */
+  stickySubmit?: boolean
   children: ReactNode
 }
 
@@ -37,6 +49,8 @@ export function SubmitForm({
   retryable,
   submitLabel,
   pending,
+  loading = pending,
+  stickySubmit = false,
   children,
 }: SubmitFormProps) {
   const t = useT()
@@ -78,9 +92,11 @@ export function SubmitForm({
           </Alert>
         )}
         {children}
-        <Button type="submit" size="md" fullWidth loading={pending}>
-          {submitLabel}
-        </Button>
+        <div className={stickySubmit ? classes.sticky : undefined}>
+          <Button type="submit" size="md" fullWidth loading={loading}>
+            {submitLabel}
+          </Button>
+        </div>
       </Stack>
     </form>
   )

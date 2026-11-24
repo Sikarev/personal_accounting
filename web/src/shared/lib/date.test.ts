@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatOpDate, formatPeriod, isCalendarDate, todayIn } from './date'
+import { formatOpDate, formatPeriod, isCalendarDate, shiftDate, todayIn } from './date'
 
 describe('todayIn', () => {
   // 21:30 UTC 17 ноября = 00:30 18 ноября в Москве (UTC+3).
@@ -79,22 +79,35 @@ describe('formatOpDate', () => {
   })
 })
 
-describe('isCalendarDate', () => {
-  it('существующие даты', () => {
-    expect(isCalendarDate('2026-11-23')).toBe(true)
-    expect(isCalendarDate('2024-02-29')).toBe(true)
-    // Годы 0–99 — как есть, а не 1900+ (так Date.UTC толкует двузначный год).
-    expect(isCalendarDate('0002-12-12')).toBe(true)
-    expect(isCalendarDate('0004-02-29')).toBe(true)
+describe('shiftDate', () => {
+  it.each([
+    ['2026-11-23', -1, '2026-11-22'],
+    ['2026-03-01', -1, '2026-02-28'],
+    ['2024-03-01', -1, '2024-02-29'],
+    ['2026-01-01', -1, '2025-12-31'],
+    ['2026-12-31', 1, '2027-01-01'],
+    // Переход на летнее время не сдвигает дату: считаем в UTC.
+    ['2026-03-29', -1, '2026-03-28'],
+  ])('%s %+d → %s', (date, days, expected) => {
+    expect(shiftDate(date, days)).toBe(expected)
   })
+})
 
-  it('несуществующие и не в формате YYYY-MM-DD', () => {
-    expect(isCalendarDate('2026-02-31')).toBe(false)
-    expect(isCalendarDate('2025-02-29')).toBe(false)
-    expect(isCalendarDate('0003-02-29')).toBe(false)
-    expect(isCalendarDate('2026-13-01')).toBe(false)
-    expect(isCalendarDate('2026-1-01')).toBe(false)
-    expect(isCalendarDate('')).toBe(false)
+describe('isCalendarDate', () => {
+  it.each([
+    ['2026-11-23', true],
+    ['2024-02-29', true],
+    ['2026-02-29', false],
+    ['2026-02-31', false],
+    ['2026-13-01', false],
+    ['', false],
+    ['23.11.2026', false],
+    // Годы 0–99 — как есть, а не 1900+ (так Date.UTC толкует двузначный год).
+    ['0002-12-12', true],
+    ['0004-02-29', true],
+    ['0003-02-29', false],
+  ])('%s → %s', (value, expected) => {
+    expect(isCalendarDate(value)).toBe(expected)
   })
 })
 

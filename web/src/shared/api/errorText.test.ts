@@ -108,6 +108,23 @@ describe('fieldErrorTexts', () => {
     })
   })
 
+  it('коды полей операций', () => {
+    const error = validation([
+      { field: 'accountId', code: 'invalid_account', message: '' },
+      { field: 'toAccountId', code: 'same_account', message: '' },
+      { field: 'categoryId', code: 'invalid_category', message: '' },
+      { field: 'toAmount', code: 'to_amount_mismatch', message: '' },
+      { field: 'categoryId2', code: 'not_allowed', message: '' },
+    ])
+    expect(fieldErrorTexts(error, t)).toEqual({
+      accountId: t.errors.field.invalidAccount,
+      toAccountId: t.errors.field.sameAccount,
+      categoryId: t.errors.field.invalidCategory,
+      toAmount: t.errors.field.toAmountMismatch,
+      categoryId2: t.errors.field.notAllowed,
+    })
+  })
+
   it('тексты для поля и кода из overrides важнее общих', () => {
     const error = validation([
       { field: 'email', code: 'email_taken', message: 'x' },

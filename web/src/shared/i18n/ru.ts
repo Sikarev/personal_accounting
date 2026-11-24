@@ -126,6 +126,7 @@ export const ru = {
       submit: 'Исправить остаток',
       done: 'Остаток исправлен:',
       unchanged: 'Остаток не изменился',
+      undoFailed: 'Не удалось отменить корректировку',
     },
     toasts: {
       archived: (name: string) => `Счёт «${name}» в архиве`,
@@ -160,10 +161,76 @@ export const ru = {
     integerOnly: 'В этой валюте сумма без дробной части',
     tooManyDecimals: (digits: number) => `Не больше ${digits} знаков после запятой`,
   },
+  // Поле суммы с калькулятором (AmountInput).
+  amountInput: {
+    required: 'Введите сумму',
+    notPositive: 'Сумма должна быть больше нуля',
+    divisionByZero: 'На ноль делить нельзя',
+    invalidExpression: 'Не получается посчитать. Проверьте знаки и скобки',
+    calculator: 'Калькулятор',
+    operatorsLabel: 'Знаки для расчёта',
+    operators: {
+      plus: 'Плюс',
+      minus: 'Минус',
+      times: 'Умножить',
+      divide: 'Разделить',
+      open: 'Открывающая скобка',
+      close: 'Закрывающая скобка',
+    },
+  },
+  // Выбор даты операции (DateQuickPicker).
+  datePicker: {
+    label: 'Дата',
+    other: 'Другой день',
+    apply: 'Выбрать дату',
+    invalid: 'Выберите дату',
+  },
+  // Операции: общая форма создания и правки (TransactionForm), тосты.
+  transactions: {
+    kindLabel: 'Вид операции',
+    kinds: { expense: 'Расход', income: 'Доход', transfer: 'Перевод' },
+    amount: 'Сумма',
+    fromAmount: 'Списано',
+    toAmount: 'Зачислено',
+    account: 'Счёт',
+    from: 'Откуда',
+    to: 'Куда',
+    comment: 'Комментарий',
+    rate: (rate: string) => `Курс: ${rate}`,
+    submit: {
+      expense: 'Сохранить расход',
+      income: 'Сохранить доход',
+      transfer: 'Сохранить перевод',
+    },
+    errors: {
+      categoryRequired: 'Выберите категорию',
+      toAmountRequired: 'Введите сумму зачисления',
+    },
+    noAccounts: {
+      title: 'Сначала создайте счёт',
+      description: 'Операции вносятся на счёт: карту, наличные или вклад.',
+      action: 'Создать счёт',
+    },
+    transferNeedsTwo: {
+      title: 'Для перевода нужно два счёта',
+      description: 'Перевод — это движение денег между вашими счетами. Создайте второй счёт.',
+      action: 'Создать счёт',
+    },
+    loadError: 'Не удалось загрузить счета и категории',
+    readonly: {
+      adjustment: 'Корректировку остатка нельзя изменить. Если она лишняя, удалите её.',
+      notEditable:
+        'Эту операцию может изменить только владелец личного счёта, на который она записана.',
+    },
+    toasts: {
+      expense: (amount: string, category: string) => `Расход ${amount} · ${category}`,
+      income: (amount: string, category: string) => `Доход ${amount} · ${category}`,
+      transfer: (amount: string, from: string, to: string) => `Перевод ${amount} · ${from} → ${to}`,
+      undoFailed: 'Не удалось отменить операцию',
+    },
+  },
   quickAdd: {
     title: 'Новая операция',
-    stubTitle: 'Быстрый ввод скоро появится',
-    stubDescription: 'Здесь можно будет внести расход или доход за несколько секунд.',
   },
   // Онбординг на главной: первый счёт, затем — где вносить операции.
   onboarding: {
@@ -499,6 +566,12 @@ export const ru = {
       tooShort: 'Слишком короткое значение',
       invalidFormat: 'Проверьте формат',
       invalid: 'Проверьте значение',
+      // Операции (docs/api.md → «Операции»).
+      invalidAccount: 'Этот счёт недоступен — возможно, его архивировали. Выберите другой',
+      sameAccount: 'Счета «Откуда» и «Куда» должны различаться',
+      invalidCategory: 'Эта категория недоступна — возможно, её архивировали. Выберите другую',
+      notAllowed: 'Это поле не подходит для такого вида операции',
+      toAmountMismatch: 'У счетов одна валюта — суммы списания и зачисления должны совпадать',
     },
   },
   apiStatus: {

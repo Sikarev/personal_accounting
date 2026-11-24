@@ -91,6 +91,16 @@ function genericFieldText(code: string, t: Messages): string {
       return t.errors.field.tooShort
     case 'invalid_format':
       return t.errors.field.invalidFormat
+    case 'invalid_account':
+      return t.errors.field.invalidAccount
+    case 'same_account':
+      return t.errors.field.sameAccount
+    case 'invalid_category':
+      return t.errors.field.invalidCategory
+    case 'not_allowed':
+      return t.errors.field.notAllowed
+    case 'to_amount_mismatch':
+      return t.errors.field.toAmountMismatch
     default:
       return t.errors.field.invalid
   }

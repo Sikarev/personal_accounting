@@ -33,5 +33,7 @@ export function useFormState<T extends Record<string, unknown>>(initial: T) {
     })
   }, [])
 
-  return { values, errors, setValue, setErrors, showErrors, errorsShown }
+  // setValues — заменить несколько значений разом (сброс формы после сохранения);
+  // ошибки при этом не трогает.
+  return { values, errors, setValue, setValues, setErrors, showErrors, errorsShown }
 }

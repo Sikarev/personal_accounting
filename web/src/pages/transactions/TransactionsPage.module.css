@@ -1,0 +1,242 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+/* Кнопки — зона касания не ниже 44 px (у Mantine md — 42 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}
+
+/* ——— Фильтры ——— */
+
+/* Desktop: поля в сетке, столько колонок, сколько помещается; вид операций — во всю ширину. */
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  gap: var(--mantine-spacing-md);
+  align-items: start;
+}
+
+.kinds {
+  grid-column: 1 / -1;
+}
+
+/* Mobile: поиск и кнопка «Фильтры» в ряд; кнопка по нижнему краю поля (над полем — подпись).
+   При крупном шрифте кнопка переносится под поиск. */
+.mobileBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mantine-spacing-sm);
+}
+
+.mobileSearch {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.sheetFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.period {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--mantine-spacing-sm);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Зона касания чипа — не меньше 44 px (ux.md, раздел 6); при крупном шрифте растёт. */
+.chipLabel {
+  height: auto;
+  min-height: var(--app-touch-target);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Чипы активных фильтров: перенос по строкам, «Сбросить всё» — в конце ряда. */
+.activeChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+}
+
+.chipList {
+  display: contents;
+  list-style: none;
+}
+
+.chipItem {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.activeChip {
+  max-width: 100%;
+  min-height: var(--app-touch-target);
+}
+
+/* Длинное название счёта или категории в чипе — с многоточием. */
+.activeChipText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ——— Итоги ——— */
+
+.summaryBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+/* Расходы, доходы, разница — в ряд; при нехватке места переносятся целиком. */
+.summaryStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm) var(--mantine-spacing-xl);
+  margin: 0;
+}
+
+.stat {
+  min-width: 0;
+}
+
+/* Mobile: «Расходы −1 740 ₽   Доходы +150 000 ₽   Разница …» строкой на валюту; не помещается —
+   переносится парами «подпись сумма». Разделитель — промежуток, а не «·»: точка
+   при переносе оказывалась в начале строки. */
+.summaryInline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--mantine-spacing-md);
+  margin: 0;
+}
+
+.statInline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--mantine-spacing-xs);
+  min-width: 0;
+}
+
+.summaryBodyCompact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
+.statValue {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.skeletonLabel {
+  width: 4rem;
+  height: var(--mantine-font-size-xs);
+}
+
+.skeletonValue {
+  width: 6rem;
+  height: var(--mantine-font-size-lg);
+}
+
+.inlineError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* ——— Лента ——— */
+
+.days {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  & > li + li {
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+.menuButton {
+  flex: none;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+  min-width: var(--app-touch-target);
+  min-height: var(--app-touch-target);
+}
+
+/* Удаление — цвет «проблемы» из темы (контраст AA в обеих темах), а не red Mantine. */
+.danger {
+  color: var(--app-color-negative);
+}
+
+.loadMore {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--mantine-spacing-md);
+  margin-top: var(--mantine-spacing-md);
+}
+
+/* ——— Правка ——— */
+
+/* «Дублировать», «Удалить», «Отмена» — над формой, в ряд, переносятся. */
+.editActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+/* Подсказка «Сохраните или отмените изменения» — на всю ширину ряда, под кнопками;
+   пустая не занимает места. */
+.editHint {
+  flex-basis: 100%;
+
+  &:empty {
+    display: none;
+  }
+}
+
+/* «Отмена» — в конце ряда, отдельно от действий над операцией. */
+.editCancel {
+  margin-inline-start: auto;
+}
+
+.editBody {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Форма на месте строки: отступ от соседних строк. */
+.inlineEdit {
+  margin-block: var(--mantine-spacing-sm);
+}

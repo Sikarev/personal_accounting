@@ -46,7 +46,7 @@ export function BottomNav() {
         <UnstyledButton
           className={classes.add}
           data-highlight={introVisible || undefined}
-          onClick={quickAdd.open}
+          onClick={() => quickAdd.open()}
           aria-label={t.nav.addTransaction}
           aria-haspopup="dialog"
         >

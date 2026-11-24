@@ -57,7 +57,7 @@ export function QuickAddIntro({ onDismiss }: { onDismiss: () => void }) {
           <Button
             size="md"
             leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
-            onClick={quickAdd.open}
+            onClick={() => quickAdd.open()}
             aria-haspopup="dialog"
           >
             {t.onboarding.addFirst}

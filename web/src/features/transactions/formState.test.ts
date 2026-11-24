@@ -172,6 +172,85 @@ describe('initialValues: правка и смена вида', () => {
   })
 })
 
+describe('initialValues: по образцу (дублирование)', () => {
+  const categories = [
+    {
+      id: 'food',
+      kind: 'expense' as const,
+      parentId: null,
+      name: 'Еда',
+      sortOrder: 0,
+      archivedAt: null,
+    },
+    {
+      id: 'gone',
+      kind: 'expense' as const,
+      parentId: null,
+      name: 'Старое',
+      sortOrder: 1,
+      archivedAt: '2026-01-01T00:00:00Z',
+    },
+  ]
+
+  it('значения образца, дата — сегодня', () => {
+    const values = initialValues({
+      accounts,
+      defaults,
+      currencies,
+      today,
+      categories,
+      template: tx({ accountId: 'card', comment: 'Хлеб' }),
+    })
+    expect(values).toMatchObject({
+      kind: 'expense',
+      date: today,
+      expenseAccountId: 'card',
+      amount: '590',
+      categoryId: 'food',
+      comment: 'Хлеб',
+    })
+  })
+
+  it('архивные счёт и категория образца не подставляются', () => {
+    const values = initialValues({
+      accounts,
+      defaults,
+      currencies,
+      today,
+      categories,
+      template: tx({ accountId: 'old', categoryId: 'gone' }),
+    })
+    expect(values.expenseAccountId).toBe('cash')
+    expect(values.categoryId).toBeNull()
+  })
+
+  it('обмен валют — обе суммы', () => {
+    const values = initialValues({
+      accounts,
+      defaults,
+      currencies,
+      today,
+      template: tx({
+        kind: 'transfer',
+        accountId: 'card',
+        amount: 925_000,
+        toAccountId: 'usd',
+        toAmount: 10_000,
+        toCurrency: 'USD',
+        categoryId: null,
+      }),
+    })
+    expect(values).toMatchObject({
+      kind: 'transfer',
+      fromAccountId: 'card',
+      toAccountId: 'usd',
+      amount: '9250',
+      toAmount: '100',
+      date: today,
+    })
+  })
+})
+
 describe('readonlyReason', () => {
   it('корректировку и чужой перевод изменить нельзя', () => {
     expect(readonlyReason(null)).toBeNull()

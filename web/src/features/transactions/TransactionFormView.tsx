@@ -1,6 +1,7 @@
 import { Button, Stack, Text, TextInput } from '@mantine/core'
 import { IconArrowRight, IconLock, IconWallet } from '@tabler/icons-react'
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { notifications } from '@mantine/notifications'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 
 import {
   fieldErrorTexts,
@@ -61,6 +62,8 @@ export type TransactionFormViewProps = {
   today: string
   /** Правка этой операции; без неё — создание новой. */
   transaction?: Transaction | null
+  /** Создание по образцу (дублирование): значения образца, дата — «сегодня». */
+  template?: Transaction | null
   /** Отправить на сервер (`POST` или `PUT`); ошибка — `ApiError` / `NetworkError`. */
   onSubmit: (body: TransactionRequest) => Promise<Transaction>
   /** Сервер сохранил операцию. После создания форма уже очищена, фокус — в сумме. */
@@ -69,7 +72,11 @@ export type TransactionFormViewProps = {
   onCreateAccount: () => void
   /** Фокус в сумму при появлении формы. */
   autoFocus?: boolean
+  /** Идёт ли отправка и есть ли несохранённые изменения — при каждой смене. */
+  onStateChange?: (state: TransactionFormState) => void
 }
+
+export type TransactionFormState = { submitting: boolean; dirty: boolean }
 
 type FormError = { text: string; retryable: boolean }
 
@@ -93,15 +100,18 @@ export function TransactionFormView({
   defaults,
   today,
   transaction = null,
+  template = null,
   onSubmit,
   onSaved,
   onCreateAccount,
   autoFocus,
+  onStateChange,
 }: TransactionFormViewProps) {
   const t = useT()
-  const form = useFormState<TransactionFormValues>(
-    initialValues({ accounts, defaults, currencies, today, transaction }),
+  const [initial] = useState(() =>
+    initialValues({ accounts, defaults, currencies, today, transaction, template, categories }),
   )
+  const form = useFormState<TransactionFormValues>(initial)
   const { values } = form
   const [formError, setFormError] = useState<FormError | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -110,6 +120,25 @@ export function TransactionFormView({
   const showLoader = useDelayedLoading(submitting)
   const containerRef = useRef<HTMLDivElement>(null)
   const amountRef = useRef<HTMLInputElement>(null)
+
+  // Состояние для того, кто держит форму (лента: не переключать строку, пока форма
+  // отправляется или в ней несохранённые изменения).
+  const dirty = (Object.keys(initial) as (keyof TransactionFormValues)[]).some(
+    (key) => values[key] !== initial[key],
+  )
+  useEffect(() => {
+    onStateChange?.({ submitting, dirty })
+  }, [onStateChange, submitting, dirty])
+
+  // Форма могла исчезнуть, пока шёл запрос (окно закрыли «Назад», строку удалили):
+  // тогда ошибку показать негде — она уходит тостом, а не теряется молча.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const mobile = useMobileLayout()
 
@@ -199,6 +228,10 @@ export function TransactionFormView({
       }
       onSaved?.(saved)
     } catch (error) {
+      if (!mountedRef.current) {
+        notifications.show({ color: 'red', message: apiErrorText(error, t) })
+        return
+      }
       const amountOverrides = {
         too_small: t.amountInput.notPositive,
         too_large: t.moneyInput.tooLarge,

@@ -2,17 +2,18 @@ import { Button } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconRefresh } from '@tabler/icons-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Component, lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import {
   getGetTransactionDefaultsQueryOptions,
   getListCategoriesQueryOptions,
   getListCurrenciesQueryOptions,
+  type Transaction,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { TransactionFormSkeleton } from '../transactions/TransactionFormSkeleton'
 import { EmptyState, ResponsiveSheet } from '../../shared/ui'
-import { QuickAddContext, type QuickAddApi } from './quickAddContext'
+import { QuickAddContext, type QuickAddApi, type QuickAddOpenOptions } from './quickAddContext'
 
 // Содержимое окна — отдельным чанком (техдолг №37): форма операции с пикерами
 // не входит в первую загрузку. Загрузка начинается сразу после первой отрисовки оболочки,
@@ -39,7 +40,24 @@ function whenIdle(callback: () => void): () => void {
  */
 export function QuickAddProvider({ children }: { children: ReactNode }) {
   const [opened, { open, close }] = useDisclosure(false)
-  const api = useMemo<QuickAddApi>(() => ({ open }), [open])
+  // Образец для дублирования. Сбрасывается, когда окно доиграло закрытие: раньше —
+  // форма на глазах сменилась бы на пустую.
+  const [template, setTemplate] = useState<Transaction | null>(null)
+  // Явная цель фокуса после закрытия (`open(template, { returnFocus })`): кнопка, с которой
+  // открыли окно, к этому моменту могла исчезнуть (форма правки закрылась).
+  const [returnFocus, setReturnFocus] = useState<(() => void) | null>(null)
+  const api = useMemo<QuickAddApi>(
+    () => ({
+      open: (next?: Transaction, options?: QuickAddOpenOptions) => {
+        setTemplate(next ?? null)
+        // Функция в состоянии — через обёртку: иначе React вызвал бы её как «следующее
+        // значение из предыдущего».
+        setReturnFocus(() => options?.returnFocus ?? null)
+        open()
+      },
+    }),
+    [open],
+  )
   const t = useT()
   const queryClient = useQueryClient()
 
@@ -65,11 +83,22 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
       {/* fullHeight: на телефоне быстрый ввод — на всю высоту, клавиатура сразу (ux.md, §3).
           Заодно Select категорий не зацикливает ResizeObserver: высота окна не зависит
           от выпадающего списка (техдолг №36). */}
-      <ResponsiveSheet opened={opened} onClose={close} title={t.quickAdd.title} fullHeight>
+      <ResponsiveSheet
+        opened={opened}
+        onClose={close}
+        title={t.quickAdd.title}
+        fullHeight
+        returnFocus={returnFocus === null}
+        onExitTransitionEnd={() => {
+          setTemplate(null)
+          returnFocus?.()
+          setReturnFocus(null)
+        }}
+      >
         <LoadErrorBoundary>
           {/* Чанк не успел загрузиться заранее — скелетон формы (если дольше 300 мс). */}
           <Suspense fallback={<TransactionFormSkeleton />}>
-            <QuickAddContent onClose={close} />
+            <QuickAddContent onClose={close} template={template} />
           </Suspense>
         </LoadErrorBoundary>
       </ResponsiveSheet>

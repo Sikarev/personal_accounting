@@ -25,6 +25,13 @@ export default defineConfig({
           // не-2xx мутатор бросает как ApiError, статус успешного ответа не нужен.
           includeHttpResponseReturnType: false,
         },
+        operations: {
+          // Лента подгружается страницами: кроме обычного хука — useListTransactionsInfinite
+          // (useInfiniteQuery), курсор следующей страницы подставляется в параметр `cursor`.
+          listTransactions: {
+            query: { useQuery: true, useInfinite: true, useInfiniteQueryParam: 'cursor' },
+          },
+        },
       },
     },
   },

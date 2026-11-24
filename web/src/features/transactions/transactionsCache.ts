@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query'
+import type { Mutation, QueryClient } from '@tanstack/react-query'
 
 import { getListAccountsQueryKey, getListTransactionsQueryKey } from '../../shared/api'
 
@@ -25,4 +25,26 @@ export function invalidateAfterTransactionChange(qc: QueryClient): Promise<void>
     }),
     qc.invalidateQueries({ queryKey: getListAccountsQueryKey() }),
   ]).then(() => undefined)
+}
+
+/**
+ * Общая очередь изменений операций: создание и «Отменить» быстрого ввода, правка,
+ * удаление и восстановление в ленте. Мутации одного `scope` TanStack Query выполняет
+ * строго по одной, в порядке вызова. Без общей очереди перезапрос после создания мог бы
+ * вернуть в ленту строку, удаление которой ещё не дошло до сервера, а «Отменить» —
+ * обогнать действие, которое отменяет. Ждать приходится, только пока идёт другое
+ * изменение операций — обычно это доли секунды.
+ */
+export const TRANSACTIONS_SCOPE = { id: 'transactions' }
+
+const inScope = (m: Mutation<unknown, unknown, unknown, unknown>) =>
+  m.options.scope?.id === TRANSACTIONS_SCOPE.id
+
+/**
+ * Сброс кэша после мутации из очереди — только когда она последняя (вызывать из
+ * `onSettled`, где сама мутация ещё считается идущей, отсюда `<= 1`): перезапрос посреди
+ * очереди затёр бы оптимистичные изменения, которые ещё не дошли до сервера.
+ */
+export function invalidateWhenQueueSettles(qc: QueryClient): Promise<void> | undefined {
+  if (qc.isMutating({ predicate: inScope }) <= 1) return invalidateAfterTransactionChange(qc)
 }

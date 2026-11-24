@@ -1,0 +1,30 @@
+/* Дата слева, итог дня справа; при нехватке места итог уходит на следующую строку. */
+.root {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--mantine-spacing-md);
+  padding-block: var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.date {
+  color: var(--mantine-color-dimmed);
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  column-gap: var(--mantine-spacing-sm);
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+/* Суммы переносятся целиком; огромная (при крупном шрифте) — ещё и по разрядам. */
+.amount {
+  overflow-wrap: anywhere;
+}

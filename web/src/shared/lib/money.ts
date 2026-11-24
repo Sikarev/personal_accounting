@@ -67,31 +67,35 @@ export function formatMoneyParts(
   currency: string,
   { minorUnits, roundToMajor = false, signDisplay = 'auto' }: FormatMoneyOptions = {},
 ): MoneyParts {
-  if (!Number.isSafeInteger(amount)) {
+  // Дробное число — ошибка вызывающего кода (суммы — целые минимальные единицы).
+  // А целое больше 2^53 бывает в честных данных: итог «за всё время» по огромным суммам
+  // приходит из JSON уже с потерей точности. Экран из-за него падать не должен —
+  // считаем в BigInt и показываем значение как есть.
+  if (!Number.isInteger(amount)) {
     throw new RangeError(
       `formatMoney: сумма должна быть целым числом минимальных единиц, получено ${amount}`,
     )
   }
 
   const digits = minorUnits ?? getMinorUnits(currency)
-  const factor = 10 ** digits
-  const abs = Math.abs(amount)
-  let major = Math.floor(abs / factor)
+  const factor = 10n ** BigInt(digits)
+  const abs = BigInt(Math.abs(amount))
+  let major = abs / factor
   let minor = abs % factor
 
   if (roundToMajor) {
     // Округление «половина вверх» по модулю: −0,50 ₽ → −1 ₽, как и 0,50 ₽ → 1 ₽.
-    if (minor * 2 >= factor) major += 1
-    minor = 0
+    if (minor * 2n >= factor) major += 1n
+    minor = 0n
   }
 
-  const fractionDigits = minor === 0 ? 0 : digits
+  const fractionDigits = minor === 0n ? 0 : digits
   // Считаем в целых числах и передаём в Intl строку, а не float: 0.1 + 0.2 здесь не случится.
   const decimal = fractionDigits ? `${major}.${String(minor).padStart(digits, '0')}` : `${major}`
 
   const body = getFormatter(currency, fractionDigits).format(decimal as `${number}`)
 
-  if (major === 0 && minor === 0) return { text: body, sign: 0 }
+  if (major === 0n && minor === 0n) return { text: body, sign: 0 }
   if (amount < 0) return { text: MINUS + body, sign: -1 }
   return { text: signDisplay === 'always' ? '+' + body : body, sign: 1 }
 }

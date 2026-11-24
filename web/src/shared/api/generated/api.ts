@@ -13,16 +13,20 @@
  *
  * OpenAPI spec version: 1.0.0
  */
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query'
 import type {
   DataTag,
   DefinedInitialDataOptions,
+  DefinedUseInfiniteQueryResult,
   DefinedUseQueryResult,
+  InfiniteData,
   MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseInfiniteQueryOptions,
+  UseInfiniteQueryResult,
   UseMutationOptions,
   UseMutationResult,
   UseQueryOptions,
@@ -2477,8 +2481,237 @@ export const listTransactions = async (
   })
 }
 
+export const getListTransactionsInfiniteQueryKey = (params?: ListTransactionsParams) => {
+  return ['infinite', `/api/v1/transactions`, ...(params ? [params] : [])] as const
+}
+
 export const getListTransactionsQueryKey = (params?: ListTransactionsParams) => {
   return [`/api/v1/transactions`, ...(params ? [params] : [])] as const
+}
+
+export const getListTransactionsInfiniteQueryOptions = <
+  TData = InfiniteData<
+    Awaited<ReturnType<typeof listTransactions>>,
+    ListTransactionsParams['cursor']
+  >,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<
+      UseInfiniteQueryOptions<
+        Awaited<ReturnType<typeof listTransactions>>,
+        TError,
+        TData,
+        QueryKey,
+        ListTransactionsParams['cursor']
+      >
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListTransactionsInfiniteQueryKey(params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listTransactions>>,
+    QueryKey,
+    ListTransactionsParams['cursor']
+  > = ({ signal, pageParam }) =>
+    listTransactions(
+      { ...params, cursor: pageParam ?? params?.['cursor'] },
+      { signal, ...requestOptions },
+    )
+
+  return { queryKey, queryFn, ...queryOptions } as UseInfiniteQueryOptions<
+    Awaited<ReturnType<typeof listTransactions>>,
+    TError,
+    TData,
+    QueryKey,
+    ListTransactionsParams['cursor']
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListTransactionsInfiniteQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listTransactions>>
+>
+export type ListTransactionsInfiniteQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactionsInfinite<
+  TData = InfiniteData<
+    Awaited<ReturnType<typeof listTransactions>>,
+    ListTransactionsParams['cursor']
+  >,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: undefined | ListTransactionsParams,
+  options: {
+    query: Partial<
+      UseInfiniteQueryOptions<
+        Awaited<ReturnType<typeof listTransactions>>,
+        TError,
+        TData,
+        QueryKey,
+        ListTransactionsParams['cursor']
+      >
+    > &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof listTransactions>>,
+          QueryKey
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactionsInfinite<
+  TData = InfiniteData<
+    Awaited<ReturnType<typeof listTransactions>>,
+    ListTransactionsParams['cursor']
+  >,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<
+      UseInfiniteQueryOptions<
+        Awaited<ReturnType<typeof listTransactions>>,
+        TError,
+        TData,
+        QueryKey,
+        ListTransactionsParams['cursor']
+      >
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof listTransactions>>,
+          QueryKey
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactionsInfinite<
+  TData = InfiniteData<
+    Awaited<ReturnType<typeof listTransactions>>,
+    ListTransactionsParams['cursor']
+  >,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<
+      UseInfiniteQueryOptions<
+        Awaited<ReturnType<typeof listTransactions>>,
+        TError,
+        TData,
+        QueryKey,
+        ListTransactionsParams['cursor']
+      >
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции. Порядок: дата ↓, затем момент создания ↓.
+ * Курсорная пагинация (docs/api.md → «Списки и пагинация»): `nextCursor`
+ * нет на последней странице; неразбираемый курсор — 422 `invalid_format`
+ * у поля `cursor`.
+ *
+ * `days` — итоги каждой даты, попавшей в `items`, по **всем** операциям
+ * этой даты под теми же фильтрами (даже если день разрезан границей
+ * страницы). В итоги входят только расходы и доходы.
+ *
+ * Значения одного параметра объединяются через «или», разные параметры —
+ * через «и». Невидимый, чужой или несуществующий id в фильтре просто
+ * ничего не находит.
+ * @summary Лента операций
+ */
+export function useListTransactionsInfinite<
+  TData = InfiniteData<
+    Awaited<ReturnType<typeof listTransactions>>,
+    ListTransactionsParams['cursor']
+  >,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ListTransactionsParams,
+  options?: {
+    query?: Partial<
+      UseInfiniteQueryOptions<
+        Awaited<ReturnType<typeof listTransactions>>,
+        TError,
+        TData,
+        QueryKey,
+        ListTransactionsParams['cursor']
+      >
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseInfiniteQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListTransactionsInfiniteQueryOptions(params, options)
+
+  const query = useInfiniteQuery(queryOptions, queryClient) as UseInfiniteQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+
+  return withQueryKey(query, queryOptions.queryKey)
 }
 
 export const getListTransactionsQueryOptions = <

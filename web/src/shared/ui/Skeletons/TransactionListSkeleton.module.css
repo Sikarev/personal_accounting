@@ -30,15 +30,16 @@
 .row {
   display: flex;
   align-items: center;
-  gap: var(--mantine-spacing-md);
+  gap: var(--mantine-spacing-sm);
   min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
   padding-block: var(--mantine-spacing-sm);
 }
 
+/* Как иконка TransactionRow (ThemeIcon lg — 34 px). */
 .icon {
   flex: none;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.125rem;
+  height: 2.125rem;
 }
 
 .text {

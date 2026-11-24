@@ -109,6 +109,12 @@ describe('formatMoney', () => {
     expect(formatMoney(120000, 'RUB')).not.toContain(' ')
   })
 
+  it('сумма больше 2^53 не роняет экран: показывается как пришла', () => {
+    // 2^60 — точно представимое целое; так приходит итог по огромным суммам.
+    expect(visible(formatMoney(2 ** 60, 'RUB'))).toBe('11 529 215 046 068 469,76 ₽')
+    expect(visible(formatMoney(-(2 ** 60), 'RUB'))).toBe('−11 529 215 046 068 469,76 ₽')
+  })
+
   it('отвергает дробное число вместо минимальных единиц', () => {
     expect(() => formatMoney(12.5, 'RUB')).toThrow(RangeError)
   })

@@ -62,7 +62,13 @@ function replaceUrlDirectly(url: string) {
   window.history.replaceState(window.history.state, '', url)
 }
 
-export function useCloseOnBack(opened: boolean, onClose: () => void) {
+/**
+ * `onReleased` — запись окна ушла из истории (или её и не было): после `popstate`
+ * от нашего `history.back()`, после «Назад» пользователя или сразу, если запись уже
+ * не текущая. Следующее окно, открытое раньше, встало бы поверх уходящей записи —
+ * и «Назад» потом закрывал бы не то окно.
+ */
+export function useCloseOnBack(opened: boolean, onClose: () => void, onReleased?: () => void) {
   const idRef = useRef<string | null>(null)
   const activeRef = useRef(false)
   /** Адрес в момент открытия: сменился внутри окна — перенести его на запись под окном. */
@@ -70,8 +76,10 @@ export function useCloseOnBack(opened: boolean, onClose: () => void) {
   /** Переход с заменой адреса через роутер (ставит `ResponsiveSheet`, если роутер есть). */
   const replaceUrlRef = useRef<((url: string) => void) | null>(null)
   const onCloseRef = useRef(onClose)
+  const onReleasedRef = useRef(onReleased)
   useEffect(() => {
     onCloseRef.current = onClose
+    onReleasedRef.current = onReleased
   })
 
   useEffect(() => {
@@ -96,6 +104,7 @@ export function useCloseOnBack(opened: boolean, onClose: () => void) {
       idRef.current = null
       forget(ownId)
       onCloseRef.current()
+      onReleasedRef.current?.()
     }
     window.addEventListener('popstate', handlePopState)
 
@@ -107,7 +116,11 @@ export function useCloseOnBack(opened: boolean, onClose: () => void) {
         if (activeRef.current || idRef.current !== ownId) return
         idRef.current = null
         forget(ownId)
-        if (sheetsOf(window.history.state).at(-1) !== ownId) return
+        if (sheetsOf(window.history.state).at(-1) !== ownId) {
+          onReleasedRef.current?.()
+          return
+        }
+        window.addEventListener('popstate', () => onReleasedRef.current?.(), { once: true })
         const url = window.location.href
         if (url !== openUrlRef.current) {
           // Нужна именно текущая функция роутера, а не снятая при открытии окна.

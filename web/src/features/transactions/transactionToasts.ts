@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications'
-import type { QueryClient } from '@tanstack/react-query'
+import { MutationObserver, type QueryClient } from '@tanstack/react-query'
 
 import {
   apiErrorText,
@@ -13,12 +13,13 @@ import type { Messages } from '../../shared/i18n'
 import { minorUnitsOf } from '../../shared/lib/accounts'
 import { formatMoney } from '../../shared/lib/money'
 import { notifyWithUndo } from '../../shared/ui'
-import { invalidateAfterTransactionChange } from './transactionsCache'
+import { invalidateWhenQueueSettles, TRANSACTIONS_SCOPE } from './transactionsCache'
 
 /**
  * Отменить только что созданную операцию (кнопка «Отменить» в тосте): `DELETE` и сброс
- * кэша. Вызывается и после того, как форма или окно уже закрыты, поэтому — прямой вызов
- * API, а не хук мутации (колбэки хука после размонтирования не вызываются).
+ * кэша. Вызывается и после того, как форма или окно уже закрыты, поэтому — не хук мутации
+ * (колбэки хука после размонтирования не вызываются), а `MutationObserver` без компонента:
+ * так `DELETE` встаёт в общую очередь изменений операций (`TRANSACTIONS_SCOPE`).
  * Ошибка — тост с текстом по коду (`apiErrorText`) и заголовком `failedTitle`.
  */
 export function undoTransaction(
@@ -27,11 +28,23 @@ export function undoTransaction(
   t: Messages,
   failedTitle: string,
 ): Promise<void> {
-  return deleteTransaction(transactionId).then(
-    () => invalidateAfterTransactionChange(qc),
-    (error: unknown) => {
-      notifications.show({ color: 'red', title: failedTitle, message: apiErrorText(error, t) })
-    },
+  const observer = new MutationObserver(qc, {
+    mutationFn: (id: string) => deleteTransaction(id),
+    scope: TRANSACTIONS_SCOPE,
+    // Сброс кэша — после последней мутации очереди, как у остальных изменений операций.
+    onSettled: () => invalidateWhenQueueSettles(qc),
+  })
+  return (
+    observer
+      .mutate(transactionId)
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          notifications.show({ color: 'red', title: failedTitle, message: apiErrorText(error, t) })
+        },
+      )
+      // Наблюдатель без компонента сам не отписывается — мутация осталась бы в кэше навсегда.
+      .finally(() => observer.reset())
   )
 }
 

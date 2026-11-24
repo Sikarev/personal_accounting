@@ -22,7 +22,10 @@ function toCalendarDate(input: CalendarDateInput): CalendarDate {
 // Все вычисления — в UTC: так переход на летнее время и часовой пояс браузера
 // не сдвигают дату на день.
 function toUtc({ year, month, day }: CalendarDate): Date {
-  return new Date(Date.UTC(year, month - 1, day))
+  // Не `Date.UTC(year, …)`: он переводит годы 0–99 в 1900–1999 (`0002` → 1902).
+  const date = new Date(0)
+  date.setUTCFullYear(year, month - 1, day)
+  return date
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -114,4 +117,53 @@ export function formatOpDate(date: CalendarDateInput, today: CalendarDateInput):
     .filter((part) => part.type === 'day' || part.type === 'month' || part.type === 'year')
     .map((part) => part.value)
     .join(' ')
+}
+
+const dayMonthFormat = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: 'UTC',
+  day: 'numeric',
+  month: 'long',
+})
+
+/** День и месяц в родительном падеже из Intl: `{ day: '1', month: 'ноября' }`. */
+function dayMonth(date: CalendarDate) {
+  const parts = dayMonthFormat.formatToParts(toUtc(date))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return { day: get('day'), month: get('month') }
+}
+
+/**
+ * Период для подписи фильтра (ux.md, раздел 2: «1–15 ноября»). Год пишется, только если
+ * он не текущий: «1–15 ноября», «1 ноября – 15 декабря 2025»; у периода через Новый год —
+ * у обеих дат. Открытый с одной стороны период — «с 1 ноября», «по 15 ноября 2025».
+ * Без обеих границ — пустая строка.
+ */
+export function formatPeriod(
+  from: CalendarDateInput | null,
+  to: CalendarDateInput | null,
+  today: CalendarDateInput,
+): string {
+  const now = toCalendarDate(today)
+  const withYear = (date: CalendarDate) => {
+    const { day, month } = dayMonth(date)
+    return `${day} ${month} ${date.year}`
+  }
+  const full = (date: CalendarDate) => {
+    const { day, month } = dayMonth(date)
+    return date.year === now.year ? `${day} ${month}` : `${day} ${month} ${date.year}`
+  }
+
+  if (from === null && to === null) return ''
+  if (to === null) return messages.dates.since(full(toCalendarDate(from!)))
+  if (from === null) return messages.dates.until(full(toCalendarDate(to)))
+
+  const a = toCalendarDate(from)
+  const b = toCalendarDate(to)
+  if (a.year !== b.year) return `${withYear(a)} – ${withYear(b)}`
+  const yearSuffix = b.year === now.year ? '' : ` ${b.year}`
+  const pa = dayMonth(a)
+  const pb = dayMonth(b)
+  if (a.month !== b.month) return `${pa.day} ${pa.month} – ${pb.day} ${pb.month}${yearSuffix}`
+  if (a.day !== b.day) return `${pa.day}–${pb.day} ${pb.month}${yearSuffix}`
+  return full(a)
 }

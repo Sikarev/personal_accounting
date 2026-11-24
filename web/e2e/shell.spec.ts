@@ -41,12 +41,8 @@ async function openQuickAdd(page: Page) {
   return dialog
 }
 
+// Скриншоты главной во всех состояниях — в home.spec.ts.
 test.describe('главная', () => {
-  test('скриншот', { tag: '@visual' }, async ({ page }) => {
-    await openPage(page, '/')
-    await expect(page).toHaveScreenshot('home.png')
-  })
-
   test('доступность', { tag: '@a11y' }, async ({ page }) => {
     await openPage(page, '/')
     await expectNoAxeViolations(page)
@@ -133,12 +129,6 @@ test.describe('mobile: нижняя панель и экран «Ещё»', () =
       },
     )
   }
-
-  test('скриншот главной при шрифте 200 %', { tag: '@visual' }, async ({ page }) => {
-    await openPage(page, '/')
-    await enlargeFont(page)
-    await expect(page).toHaveScreenshot('home-font-200.png')
-  })
 
   test(
     'поворот телефона с открытым быстрым вводом: раскладка мобильная, содержимое не пересоздаётся',

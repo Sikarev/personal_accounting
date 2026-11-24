@@ -78,8 +78,10 @@ export const existingAccount = {
 
 /**
  * Пользователь вошёл: `/me` отвечает профилем, а `GET /accounts` — одним счётом
- * (без счетов главная показывает онбординг, см. onboarding.spec.ts). Свой мок счетов,
- * зарегистрированный позже, перекрывает этот: Playwright проверяет обработчики
+ * (без счетов главная показывает онбординг, см. onboarding.spec.ts). Главной нужны и
+ * остальные справочники: операций нет (`GET /transactions` — пустой список), категорий нет,
+ * валюты и `defaults` — как у нового пользователя (форма быстрого ввода на desktop).
+ * Свой мок, зарегистрированный позже, перекрывает этот: Playwright проверяет обработчики
  * с последнего добавленного. `me` может быть функцией — профиль, меняющийся по ходу теста.
  */
 export async function mockSignedIn(page: Page, me: Me | (() => Me) = meFixture()) {
@@ -91,6 +93,29 @@ export async function mockSignedIn(page: Page, me: Me | (() => Me) = meFixture()
       ? route.fulfill({ json: { items: [existingAccount] } })
       : route.fallback(),
   )
+  await page.route(`**${API}/currencies`, (route) => route.fulfill({ json: currenciesFixture }))
+  await page.route(`**${API}/categories`, (route) =>
+    route.request().method() === 'GET' ? route.fulfill({ json: { items: [] } }) : route.fallback(),
+  )
+  // Лента с любыми параметрами (`?limit=10` у главной): адрес без учёта строки запроса.
+  await page.route(
+    (url) => url.pathname === `${API}/transactions`,
+    (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({ json: { items: [], days: [] } })
+        : route.fallback(),
+  )
+  await page.route(`**${API}/transactions/defaults`, (route) =>
+    route.fulfill({ json: emptyDefaults }),
+  )
+}
+
+/** `GET /transactions/defaults` нового пользователя: умных значений ещё нет. */
+export const emptyDefaults = {
+  expenseAccountId: null,
+  incomeAccountId: null,
+  transfer: null,
+  frequentCategories: { expense: [], income: [] },
 }
 
 /** Пользователь не вошёл: `/me` отвечает 401. */

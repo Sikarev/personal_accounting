@@ -28,6 +28,7 @@ import {
 } from '../../shared/lib/transactionFilters'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
+import { usePendingFocus } from '../../shared/lib/usePendingFocus'
 import { EmptyState, PageHeader, TransactionListSkeleton, transactionTitle } from '../../shared/ui'
 import { icons } from '../../theme'
 import { EditTransaction, INLINE_EDIT } from '../../features/transactions/EditTransaction'
@@ -157,26 +158,12 @@ export function TransactionsPage() {
   // Элемент с фокусом может исчезнуть: удалённая строка (с кнопкой меню), закрытая форма
   // правки на месте строки. Фокус ставим, когда изменение уже на экране, — иначе он ушёл бы
   // вместе с элементом на `body`. `ready` — «изменение отрисовано».
-  const pendingFocus = useRef<{
-    ready: () => boolean
-    targets: string[]
-  } | null>(null)
   const itemsRef = useRef(items)
   useEffect(() => {
     itemsRef.current = items
-    const pending = pendingFocus.current
-    if (!pending || !pending.ready()) return
-    pendingFocus.current = null
-    // Два кадра — запас на закрытие меню Mantine, которое тоже двигает фокус.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        for (const selector of pending.targets) {
-          const el = document.querySelector<HTMLElement>(selector)
-          if (el) return el.focus()
-        }
-      }),
-    )
   })
+  // После эффекта выше: `ready` читает уже обновлённый itemsRef.
+  const focusWhenReady = usePendingFocus()
 
   // ——— Правка ———
   // Desktop — форма на месте строки (одна за раз), mobile — окно. Вид выбирается в момент
@@ -189,12 +176,14 @@ export function TransactionsPage() {
     ? items.find((item) => item.id === sheet.editingId)
     : undefined
 
-  const focusRow = (id: string) => {
-    pendingFocus.current = {
-      ready: () => document.querySelector(rowButtonSelector(id)) !== null,
-      targets: [rowButtonSelector(id)],
-    }
-  }
+  const focusRow = useCallback(
+    (id: string) =>
+      focusWhenReady(
+        () => document.querySelector(rowButtonSelector(id)) !== null,
+        [rowButtonSelector(id)],
+      ),
+    [focusWhenReady],
+  )
 
   // Обработчики строк — постоянные: иначе мемоизированный список перерисовывался бы
   // на каждую букву поиска. Свежие данные они берут из ref.
@@ -217,24 +206,30 @@ export function TransactionsPage() {
    * Закрыть форму на месте строки `id` — только если открыта именно она: ответ сервера
    * на сохранение прежней формы не закрывает и не уводит фокус из другой.
    */
-  const closeInline = useCallback((id: string) => {
-    if (latest.current.inlineId !== id) return
-    setInlineId(null)
-    setEditHint(false)
-    formState.current = { submitting: false, dirty: false }
-    focusRow(id)
-  }, [])
+  const closeInline = useCallback(
+    (id: string) => {
+      if (latest.current.inlineId !== id) return
+      setInlineId(null)
+      setEditHint(false)
+      formState.current = { submitting: false, dirty: false }
+      focusRow(id)
+    },
+    [focusRow],
+  )
 
-  const remove = useCallback((transaction: Transaction) => {
-    const list = itemsRef.current
-    const index = list.findIndex((item) => item.id === transaction.id)
-    const neighbors = [list[index + 1], list[index - 1]].filter(Boolean)
-    pendingFocus.current = {
-      ready: () => !itemsRef.current.some((item) => item.id === transaction.id),
-      targets: [...neighbors.map((n) => rowButtonSelector(n.id)), `[${SEARCH_FIELD}]`],
-    }
-    void latest.current.actions.remove(transaction)
-  }, [])
+  const remove = useCallback(
+    (transaction: Transaction) => {
+      const list = itemsRef.current
+      const index = list.findIndex((item) => item.id === transaction.id)
+      const neighbors = [list[index + 1], list[index - 1]].filter(Boolean)
+      focusWhenReady(
+        () => !itemsRef.current.some((item) => item.id === transaction.id),
+        [...neighbors.map((n) => rowButtonSelector(n.id)), `[${SEARCH_FIELD}]`],
+      )
+      void latest.current.actions.remove(transaction)
+    },
+    [focusWhenReady],
+  )
 
   const onAction = useCallback(
     (action: RowAction, transaction: Transaction) => {

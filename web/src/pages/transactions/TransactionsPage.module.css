@@ -216,6 +216,16 @@
   margin-bottom: var(--mantine-spacing-md);
 }
 
+/* Подсказка «Сохраните или отмените изменения» — на всю ширину ряда, под кнопками;
+   пустая не занимает места. */
+.editHint {
+  flex-basis: 100%;
+
+  &:empty {
+    display: none;
+  }
+}
+
 /* «Отмена» — в конце ряда, отдельно от действий над операцией. */
 .editCancel {
   margin-inline-start: auto;

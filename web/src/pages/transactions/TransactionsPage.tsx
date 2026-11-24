@@ -37,7 +37,8 @@ import {
 } from '../../shared/ui'
 import { icons } from '../../theme'
 import { ActiveFilterChips, FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
-import { EditTransaction } from './EditTransaction'
+import type { TransactionFormState } from '../../features/transactions/TransactionFormView'
+import { EditTransaction, INLINE_EDIT } from './EditTransaction'
 import { FeedList, LoadMore, type RowAction } from './FeedList'
 import { FeedSummary } from './FeedSummary'
 import { activeFilterChips } from './filterOptions'
@@ -158,7 +159,10 @@ export function TransactionsPage() {
   // Элемент с фокусом может исчезнуть: удалённая строка (с кнопкой меню), закрытая форма
   // правки на месте строки. Фокус ставим, когда изменение уже на экране, — иначе он ушёл бы
   // вместе с элементом на `body`. `ready` — «изменение отрисовано».
-  const pendingFocus = useRef<{ ready: () => boolean; targets: string[] } | null>(null)
+  const pendingFocus = useRef<{
+    ready: () => boolean
+    targets: string[]
+  } | null>(null)
   const itemsRef = useRef(items)
   useEffect(() => {
     itemsRef.current = items
@@ -194,17 +198,34 @@ export function TransactionsPage() {
     }
   }
 
-  const closeInline = useCallback((id: string) => {
-    setEditing((current) => (current?.id === id ? null : current))
-    focusRow(id)
-  }, [])
-
   // Обработчики строк — постоянные: иначе мемоизированный список перерисовывался бы
   // на каждую букву поиска. Свежие данные они берут из ref.
-  const latest = useRef({ actions, mobile, quickAdd })
+  const latest = useRef({ actions, mobile, quickAdd, editing })
   useEffect(() => {
-    latest.current = { actions, mobile, quickAdd }
+    latest.current = { actions, mobile, quickAdd, editing }
   })
+
+  // Отправляется ли открытая форма и есть ли в ней несохранённые изменения: пока да,
+  // другая строка не открывается (решение PM), а фокус возвращается в эту форму
+  // с подсказкой «Сохраните или отмените изменения».
+  const formState = useRef<TransactionFormState>({ submitting: false, dirty: false })
+  const [editHint, setEditHint] = useState(false)
+  const onFormState = useCallback((state: TransactionFormState) => {
+    formState.current = state
+    if (!state.dirty && !state.submitting) setEditHint(false)
+  }, [])
+
+  /**
+   * Закрыть форму на месте строки `id` — только если открыта именно она: ответ сервера
+   * на сохранение прежней формы не закрывает и не уводит фокус из другой.
+   */
+  const closeInline = useCallback((id: string) => {
+    if (latest.current.editing?.id !== id) return
+    setEditing(null)
+    setEditHint(false)
+    formState.current = { submitting: false, dirty: false }
+    focusRow(id)
+  }, [])
 
   const remove = useCallback((transaction: Transaction) => {
     const list = itemsRef.current
@@ -224,17 +245,41 @@ export function TransactionsPage() {
         return remove(transaction)
       }
       if (action === 'duplicate') {
-        setEditing((current) => (current?.id === transaction.id ? null : current))
-        return latest.current.quickAdd.open(transaction)
+        // Окно быстрого ввода вернуло бы фокус на кнопку, с которой его открыли, — пункт
+        // меню или кнопку формы правки, а их к закрытию окна уже нет (фокус ушёл бы
+        // на `body`). Цель возврата — строка операции.
+        const focusRowButton = () =>
+          document.querySelector<HTMLElement>(rowButtonSelector(transaction.id))?.focus()
+        if (latest.current.editing?.id === transaction.id) {
+          setEditing(null)
+          setEditHint(false)
+        }
+        return latest.current.quickAdd.open(transaction, { returnFocus: focusRowButton })
       }
       const inline = !latest.current.mobile
+      const current = latest.current.editing
+      if (inline && current?.inline && current.id !== transaction.id) {
+        const { submitting, dirty } = formState.current
+        if (submitting || dirty) {
+          setEditHint(true)
+          // В сумму — главное поле формы; рядом с кнопками формы — подсказка.
+          const form = document.querySelector(`[${INLINE_EDIT}="${current.id}"]`)
+          ;(
+            form?.querySelector<HTMLElement>('input[inputmode="decimal"]') ??
+            form?.querySelector<HTMLElement>('input, button')
+          )?.focus()
+          return
+        }
+      }
+      formState.current = { submitting: false, dirty: false }
+      setEditHint(false)
       setEditing({ id: transaction.id, inline })
       if (!inline) {
         setSheetReturnFocus(true)
         setSheetOpened(true)
       }
     },
-    [remove, setEditing, setSheetReturnFocus, setSheetOpened],
+    [remove, setEditing, setSheetReturnFocus, setSheetOpened, setEditHint],
   )
 
   /** Действие из окна правки: окно закрывается, действие — после закрытия. */
@@ -269,6 +314,8 @@ export function TransactionsPage() {
               }}
               onClose={() => closeInline(editingTransaction.id)}
               onAction={onAction}
+              onStateChange={onFormState}
+              hint={editHint}
             />
           ),
         }
@@ -348,6 +395,7 @@ export function TransactionsPage() {
           showAuthor={showAuthor}
           onAction={onAction}
           editing={inlineForm}
+          opensDialog={mobile}
         />
         <LoadMore
           hasNextPage={feed.hasNextPage}

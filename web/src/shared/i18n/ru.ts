@@ -515,6 +515,7 @@ export const ru = {
       title: 'Изменить операцию',
       cancel: 'Отмена',
       inlineLabel: (title: string) => `Изменение операции «${title}»`,
+      unsavedHint: 'Сохраните или отмените изменения',
     },
     toasts: {
       edited: 'Операция изменена',

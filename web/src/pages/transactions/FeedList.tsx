@@ -1,6 +1,6 @@
 import { ActionIcon, Button, Menu, Paper, Text } from '@mantine/core'
 import { IconCopy, IconDots, IconPencil, IconTrash } from '@tabler/icons-react'
-import { memo, useEffect, useId, useState, type ReactNode } from 'react'
+import { memo, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 
 import type { Category, Transaction } from '../../shared/api'
 import { useT } from '../../shared/i18n'
@@ -28,6 +28,8 @@ type FeedListProps = {
   onAction: (action: RowAction, transaction: Transaction) => void
   /** Операция, раскрытая в форму правки на месте (desktop), и сама форма. */
   editing: { id: string; form: ReactNode } | null
+  /** Строка открывает окно правки (mobile), а не форму на месте. */
+  opensDialog: boolean
 }
 
 /**
@@ -78,6 +80,7 @@ const FeedRow = memo(function FeedRow({
   categories,
   showAuthor,
   onAction,
+  opensDialog,
 }: Omit<FeedListProps, 'groups' | 'today' | 'editing'> & { transaction: Transaction }) {
   const t = useT()
   return (
@@ -87,7 +90,7 @@ const FeedRow = memo(function FeedRow({
       categories={categories}
       showAuthor={showAuthor}
       onActivate={() => onAction('open', transaction)}
-      expanded={false}
+      opensDialog={opensDialog}
       actions={
         <RowMenu
           transaction={transaction}
@@ -115,9 +118,26 @@ function RowMenu({
 }) {
   const t = useT()
   const icon = (I: typeof IconPencil) => <I size={icons.size.md} stroke={icons.stroke} />
+  // Действие выполняется, когда меню закрылось совсем и вернуло фокус на свою кнопку:
+  // иначе окно, открытое из пункта меню (правка на mobile), запомнило бы для возврата
+  // исчезающий пункт — и после закрытия окна фокус ушёл бы на `body`.
+  const pending = useRef<RowAction | null>(null)
+  const later = (action: RowAction) => () => {
+    pending.current = action
+  }
   return (
     // Без портала: меню остаётся внутри <main> (axe: всё содержимое — в ориентирах).
-    <Menu position="bottom-end" withinPortal={false}>
+    <Menu
+      position="bottom-end"
+      withinPortal={false}
+      transitionProps={{
+        onExited: () => {
+          const action = pending.current
+          pending.current = null
+          if (action) onAction(action, transaction)
+        },
+      }}
+    >
       <Menu.Target>
         <ActionIcon
           variant="subtle"
@@ -131,14 +151,11 @@ function RowMenu({
         </ActionIcon>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item leftSection={icon(IconPencil)} onClick={() => onAction('open', transaction)}>
+        <Menu.Item leftSection={icon(IconPencil)} onClick={later('open')}>
           {t.feed.actions.edit}
         </Menu.Item>
         {canDuplicate(transaction) && (
-          <Menu.Item
-            leftSection={icon(IconCopy)}
-            onClick={() => onAction('duplicate', transaction)}
-          >
+          <Menu.Item leftSection={icon(IconCopy)} onClick={later('duplicate')}>
             {t.feed.actions.duplicate}
           </Menu.Item>
         )}
@@ -147,7 +164,7 @@ function RowMenu({
             // Цвет «проблемы» из темы: у color="red" в меню контраст ниже AA.
             className={classes.danger}
             leftSection={icon(IconTrash)}
-            onClick={() => onAction('delete', transaction)}
+            onClick={later('delete')}
           >
             {t.feed.actions.delete}
           </Menu.Item>

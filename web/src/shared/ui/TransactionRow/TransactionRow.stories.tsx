@@ -212,7 +212,6 @@ export const Activatable: Story = {
     transaction: tx({ comment: 'Хлеб и молоко' }),
     actions: menu,
     onActivate: () => {},
-    expanded: false,
   },
 }
 

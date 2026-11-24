@@ -4,8 +4,6 @@
 /** Кнопка меню строки операции: значение — id операции. */
 export const ROW_MENU = 'data-transaction-menu'
 
-export const rowMenuSelector = (id: string) => `[${ROW_MENU}="${id}"]`
-
 /** Кнопка самой строки (открыть операцию) — `ROW_BUTTON` в TransactionRow. */
 export const rowButtonSelector = (id: string) => `[data-transaction-open="${id}"]`
 

@@ -1,8 +1,9 @@
-import { Button, Paper } from '@mantine/core'
+import { Button, Paper, Text } from '@mantine/core'
 import { IconCopy, IconTrash } from '@tabler/icons-react'
 import type { KeyboardEvent } from 'react'
 
 import { TransactionForm } from '../../features/transactions/TransactionForm'
+import type { TransactionFormState } from '../../features/transactions/TransactionFormView'
 import type { Transaction } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
@@ -25,7 +26,14 @@ type EditTransactionProps = {
    * закрывает само окно.
    */
   inline?: boolean
+  /** Отправка и несохранённые изменения — экран не переключает строку, пока они есть. */
+  onStateChange?: (state: TransactionFormState) => void
+  /** Показать подсказку «Сохраните или отмените изменения» (пытались открыть другую строку). */
+  hint?: boolean
 }
+
+/** Атрибут формы на месте строки: на неё экран возвращает фокус. */
+export const INLINE_EDIT = 'data-inline-edit'
 
 /**
  * Правка операции из ленты (ux.md, «Лента»): общая форма операции (`TransactionForm`)
@@ -42,6 +50,8 @@ export function EditTransaction({
   onClose,
   onAction,
   inline = false,
+  onStateChange,
+  hint = false,
 }: EditTransactionProps) {
   const t = useT()
   const icon = (I: typeof IconCopy) => <I size={icons.size.md} stroke={icons.stroke} />
@@ -91,6 +101,10 @@ export function EditTransaction({
           {t.feed.edit.cancel}
         </Button>
       )}
+      {/* role="status" — всегда в DOM: диктор объявит подсказку, когда она появится. */}
+      <Text role="status" size="sm" c="dimmed" className={classes.editHint}>
+        {hint ? t.feed.edit.unsavedHint : ''}
+      </Text>
     </div>
   )
 
@@ -98,6 +112,7 @@ export function EditTransaction({
     <TransactionForm
       transaction={transaction}
       onSaved={onSaved}
+      onStateChange={onStateChange}
       // На месте строки — сразу в сумму; в окне на телефоне клавиатура не нужна сразу.
       autoFocus={inline}
     />
@@ -121,6 +136,7 @@ export function EditTransaction({
       aria-label={t.feed.edit.inlineLabel(title)}
       className={classes.inlineEdit}
       onKeyDown={handleKeyDown}
+      {...{ [INLINE_EDIT]: transaction.id }}
     >
       {actions}
       {form}

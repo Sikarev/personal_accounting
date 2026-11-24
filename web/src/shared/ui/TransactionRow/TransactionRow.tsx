@@ -31,8 +31,8 @@ export type TransactionRowProps = {
    * действий справа, становится кнопкой.
    */
   onActivate?: () => void
-  /** Операция раскрыта в форму на месте (desktop) — `aria-expanded` у кнопки строки. */
-  expanded?: boolean
+  /** Строка открывает окно (mobile) — `aria-haspopup="dialog"` у кнопки строки. */
+  opensDialog?: boolean
 }
 
 /** Атрибут кнопки строки (значение — id операции): по нему экран ставит фокус. */
@@ -68,7 +68,7 @@ export function TransactionRow({
   showAuthor = false,
   actions,
   onActivate,
-  expanded,
+  opensDialog,
 }: TransactionRowProps) {
   const t = useT()
   const view = describeTransaction(transaction, { accountNames, categories }, t)
@@ -134,7 +134,7 @@ export function TransactionRow({
         <UnstyledButton
           className={classes.activate}
           onClick={onActivate}
-          aria-expanded={expanded}
+          aria-haspopup={opensDialog ? 'dialog' : undefined}
           {...{ [ROW_BUTTON]: transaction.id }}
         >
           {content}

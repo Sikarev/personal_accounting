@@ -88,15 +88,25 @@ export function cancelFeedFetches(qc: QueryClient) {
 export function replaceInFeeds(qc: QueryClient, transaction: Transaction): QueryKey[] {
   const keys: QueryKey[] = []
   for (const [key, data] of qc.getQueriesData<FeedData>({ queryKey: feedKey() })) {
-    if (!data?.pages.some((page) => page.items.some((t) => t.id === transaction.id))) continue
+    const old = data?.pages.flatMap((page) => page.items).find((t) => t.id === transaction.id)
+    if (!data || !old) continue
     keys.push(key)
-    qc.setQueryData<FeedData>(key, {
-      ...data,
-      pages: data.pages.map((page) => ({
-        ...page,
-        items: page.items.map((t) => (t.id === transaction.id ? transaction : t)),
-      })),
-    })
+    qc.setQueryData<FeedData>(key, replaced(data, old, transaction))
   }
   return keys
+}
+
+/**
+ * Замена на месте; если сменилась дата — перестановка на место по порядку ленты: иначе
+ * строка осталась бы в чужом дне (повторяющиеся заголовки дней и одинаковые `key`).
+ */
+export function replaced(data: FeedData, old: Transaction, next: Transaction): FeedData {
+  if (old.date !== next.date) return withTransaction(withoutTransaction(data, old.id), next)
+  return {
+    ...data,
+    pages: data.pages.map((page) => ({
+      ...page,
+      items: page.items.map((t) => (t.id === next.id ? next : t)),
+    })),
+  }
 }

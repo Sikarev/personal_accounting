@@ -151,6 +151,13 @@ async function feedReady(page: Page, firstDay: string = t.dates.today) {
   await expect(page.getByRole('heading', { level: 2, name: firstDay })).toBeVisible()
 }
 
+/** Текст строки ленты, внутри которой фокус (кнопка строки или её меню), иначе null. */
+const focusedRowText = (page: Page) =>
+  page.evaluate(
+    () => document.activeElement?.closest('[data-transaction-row]')?.textContent ?? null,
+  )
+const focusedTag = (page: Page) => page.evaluate(() => document.activeElement?.tagName ?? null)
+
 /** Кнопка строки (открыть операцию) — по тексту внутри строки. */
 const rowButton = (page: Page, text: string) =>
   page
@@ -734,6 +741,124 @@ test.describe('правка', () => {
       await expect(quickAdd).toBeHidden()
       await expect(sheet(page)).toBeHidden()
       await expect(page).toHaveURL(/\/transactions$/)
+    },
+  )
+
+  /** Следующий запрос с ключом `key` — с задержкой `ms`, дальше как обычно. */
+  const delayNext = (api: FeedMock, key: string, ms: number) =>
+    api.failNext.set(key, (_route, proceed) =>
+      new Promise((resolve) => setTimeout(resolve, ms)).then(proceed),
+    )
+
+  test(
+    'desktop: другая строка не открывается, пока в форме несохранённые изменения',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(isMobile, 'Форма на месте строки — только на desktop')
+      await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      // Без изменений — переключение как обычно.
+      await rowButton(page, 'Сыр и йогурт').click()
+      await rowButton(page, 'Кофе').click()
+      const cafeForm = inlineEdit(page, cafe.name)
+      await expect(cafeForm).toBeVisible()
+      // С изменениями — фокус в текущую форму и подсказка.
+      await field(cafeForm, t.transactions.comment).fill('Кофе с собой')
+      await rowButton(page, 'Сыр и йогурт').click()
+      await expect(cafeForm).toBeVisible()
+      await expect(inlineEdit(page, dairyTitle)).toHaveCount(0)
+      await expect(field(cafeForm, t.transactions.amount)).toBeFocused()
+      await expect(cafeForm.getByRole('status')).toHaveText(t.feed.edit.unsavedHint)
+      await expectNoAxeViolations(page)
+    },
+  )
+
+  test(
+    'desktop: пока форма отправляется — другая строка не открывается; ответ не уводит фокус',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(isMobile, 'Форма на месте строки — только на desktop')
+      const api = await setup(page)
+      delayNext(api, 'PUT /transactions/:id', 1500)
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Кофе').click()
+      const cafeForm = inlineEdit(page, cafe.name)
+      await field(cafeForm, t.transactions.comment).fill('Кофе с собой')
+      await field(cafeForm, t.transactions.comment).press('Enter')
+      await expect.poll(() => api.received).toContain('PUT /transactions/:id')
+      // Отправляется — другая строка не открывается, фокус — в отправляемую форму.
+      await rowButton(page, 'Сыр и йогурт').click()
+      await expect(inlineEdit(page, dairyTitle)).toHaveCount(0)
+      await expect(field(cafeForm, t.transactions.amount)).toBeFocused()
+      // Отменили, открыли другую строку — ответ первой её не закрывает и фокус не уводит.
+      await page.keyboard.press('Escape')
+      await rowButton(page, 'Сыр и йогурт').click()
+      const dairyForm = inlineEdit(page, dairyTitle)
+      await expect(field(dairyForm, t.transactions.amount)).toBeFocused()
+      await expect(toast(page, t.feed.toasts.edited)).toBeVisible({ timeout: 5000 })
+      await expect(dairyForm).toBeVisible()
+      await expect(field(dairyForm, t.transactions.amount)).toBeFocused()
+      await expect(page.getByText('Кофе с собой')).toBeVisible()
+    },
+  )
+
+  test(
+    'перезапрос после правки не обгоняет удаление в очереди',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(isMobile, 'На mobile окно правки закрывает ленту')
+      const api = await setup(page)
+      delayNext(api, 'PUT /transactions/:id', 800)
+      // Удаление медленное: перезапрос, ушедший до него, вернул бы удалённую строку.
+      delayNext(api, 'DELETE /transactions/:id', 1500)
+      await openFeed(page)
+      await feedReady(page)
+      await rowButton(page, 'Кофе').click()
+      const cafeForm = inlineEdit(page, cafe.name)
+      await field(cafeForm, t.transactions.comment).fill('Кофе с собой')
+      await field(cafeForm, t.transactions.comment).press('Enter')
+      await menuOf(page, 'Карта → Наличные').click()
+      await page.getByRole('menuitem', { name: t.feed.actions.delete }).click()
+      await expect(page.getByText('Карта → Наличные')).toHaveCount(0)
+      await expect(toast(page, t.feed.toasts.edited)).toBeVisible({ timeout: 5000 })
+      // Правка сохранена, удаление ещё идёт — строка не возвращается.
+      for (let i = 0; i < 5; i += 1) {
+        await page.waitForTimeout(200)
+        await expect(page.getByText('Карта → Наличные')).toHaveCount(0)
+      }
+      await expect.poll(() => api.deleted.length, { timeout: 5000 }).toBe(1)
+      await expect(page.getByText('Карта → Наличные')).toHaveCount(0)
+    },
+  )
+
+  test(
+    'desktop: после «Дублировать» фокус возвращается на строку',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(isMobile, 'На mobile фокус возвращает окно правки')
+      await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      const quickAdd = page.getByRole('dialog', { name: t.quickAdd.title })
+      // Из меню строки.
+      await menuOf(page, cafe.name).click()
+      await page.getByRole('menuitem', { name: t.feed.actions.duplicate }).click()
+      await expect(quickAdd).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(quickAdd).toBeHidden()
+      await expect.poll(() => focusedRowText(page)).toContain('Кофе')
+      // Из формы на месте строки.
+      await rowButton(page, 'Кофе').click()
+      await inlineEdit(page, cafe.name)
+        .getByRole('button', { name: t.feed.actions.duplicate })
+        .click()
+      await expect(quickAdd).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(quickAdd).toBeHidden()
+      await expect.poll(() => focusedRowText(page)).toContain('Кофе')
+      await expect.poll(() => focusedTag(page)).toBe('BUTTON')
     },
   )
 

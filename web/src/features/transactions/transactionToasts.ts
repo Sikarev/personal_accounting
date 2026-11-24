@@ -13,7 +13,7 @@ import type { Messages } from '../../shared/i18n'
 import { minorUnitsOf } from '../../shared/lib/accounts'
 import { formatMoney } from '../../shared/lib/money'
 import { notifyWithUndo } from '../../shared/ui'
-import { invalidateAfterTransactionChange, TRANSACTIONS_SCOPE } from './transactionsCache'
+import { invalidateWhenQueueSettles, TRANSACTIONS_SCOPE } from './transactionsCache'
 
 /**
  * Отменить только что созданную операцию (кнопка «Отменить» в тосте): `DELETE` и сброс
@@ -31,12 +31,20 @@ export function undoTransaction(
   const observer = new MutationObserver(qc, {
     mutationFn: (id: string) => deleteTransaction(id),
     scope: TRANSACTIONS_SCOPE,
+    // Сброс кэша — после последней мутации очереди, как у остальных изменений операций.
+    onSettled: () => invalidateWhenQueueSettles(qc),
   })
-  return observer.mutate(transactionId).then(
-    () => invalidateAfterTransactionChange(qc),
-    (error: unknown) => {
-      notifications.show({ color: 'red', title: failedTitle, message: apiErrorText(error, t) })
-    },
+  return (
+    observer
+      .mutate(transactionId)
+      .then(
+        () => undefined,
+        (error: unknown) => {
+          notifications.show({ color: 'red', title: failedTitle, message: apiErrorText(error, t) })
+        },
+      )
+      // Наблюдатель без компонента сам не отписывается — мутация осталась бы в кэше навсегда.
+      .finally(() => observer.reset())
   )
 }
 

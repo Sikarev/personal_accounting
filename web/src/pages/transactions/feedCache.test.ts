@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { getListTransactionsInfiniteQueryKey, type Transaction } from '../../shared/api'
 import {
   removeFromFeeds,
+  replaced,
   returnToFeeds,
   withoutTransaction,
   withTransaction,
@@ -117,5 +118,21 @@ describe('removeFromFeeds / returnToFeeds', () => {
     // В ленту доходов и в ленту без этой страницы операция не попадает.
     expect(idsOf(qc, incomes)).toEqual([['5']])
     expect(idsOf(qc, firstPageOnly)).toEqual([['5', '2']])
+  })
+})
+
+describe('replaced', () => {
+  it('та же дата — замена на месте', () => {
+    const edited = { ...t4, comment: 'новый' }
+    const next = replaced(feed([t5, t4], [t3]), t4, edited)
+    expect(ids(next)).toEqual([['5', '4'], ['3']])
+    expect(next.pages[0].items[1].comment).toBe('новый')
+  })
+
+  it('сменилась дата — строка переезжает на своё место, дублей нет', () => {
+    // t5 (23-е) перенесли на 21-е: теперь между t3 (22-е) и t2 (21-е, id меньше).
+    const moved = { ...t5, date: '2026-11-21' }
+    const next = replaced(feed([t5, t4], [t3, t2]), t5, moved)
+    expect(ids(next)).toEqual([['4'], ['3', '5', '2']])
   })
 })

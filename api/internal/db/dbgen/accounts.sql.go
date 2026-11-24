@@ -186,6 +186,12 @@ const listAccounts = `-- name: ListAccounts :many
 
 SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance,
        a.include_in_total, a.color, a.sort_order, a.archived_at,
+       b.balance, b.has_transactions,
+       (conv.base_balance IS NOT NULL)::boolean AS has_base_balance,
+       COALESCE(conv.base_balance, 0)::bigint AS base_balance
+FROM accounts a
+CROSS JOIN LATERAL (
+    SELECT
        (a.initial_balance
         + COALESCE((SELECT SUM(t.amount) FROM transactions t
                     WHERE t.family_id = a.family_id AND t.account_id = a.id
@@ -207,14 +213,31 @@ SELECT a.id, a.owner_user_id, a.name, a.type, a.currency_code, a.initial_balance
                    WHERE t.family_id = a.family_id AND t.to_account_id = a.id
                      AND t.deleted_at IS NOT NULL)
        )::boolean AS has_transactions
-FROM accounts a
-WHERE a.family_id = $1
-  AND (a.owner_user_id IS NULL OR a.owner_user_id = $2::uuid)
-  AND ($3::uuid IS NULL OR a.id = $3::uuid)
+) b
+LEFT JOIN LATERAL (
+    SELECT round(b.balance * CASE WHEN a.currency_code = f.base_currency THEN 1::numeric
+                ELSE COALESCE(
+                    (SELECT r.rate FROM exchange_rates r
+                     WHERE r.currency_code = a.currency_code AND r.rate_date <= $1::date
+                     ORDER BY r.rate_date DESC LIMIT 1),
+                    (SELECT r.rate FROM exchange_rates r
+                     WHERE r.currency_code = a.currency_code AND r.rate_date > $1::date
+                     ORDER BY r.rate_date LIMIT 1))
+                    * power(10::numeric, (bc.minor_units - c.minor_units)::numeric)
+           END)::bigint AS base_balance
+    FROM families f
+    JOIN currencies bc ON bc.code = f.base_currency
+    JOIN currencies c ON c.code = a.currency_code
+    WHERE f.id = a.family_id
+) conv ON true
+WHERE a.family_id = $2
+  AND (a.owner_user_id IS NULL OR a.owner_user_id = $3::uuid)
+  AND ($4::uuid IS NULL OR a.id = $4::uuid)
 ORDER BY a.sort_order, a.created_at, a.id
 `
 
 type ListAccountsParams struct {
+	Today    time.Time
 	FamilyID uuid.UUID
 	UserID   uuid.UUID
 	OnlyID   *uuid.UUID
@@ -233,6 +256,8 @@ type ListAccountsRow struct {
 	ArchivedAt      *time.Time
 	Balance         int64
 	HasTransactions bool
+	HasBaseBalance  bool
+	BaseBalance     int64
 }
 
 // Счета. Каждый запрос фильтрует по family_id и по видимости:
@@ -247,8 +272,18 @@ type ListAccountsRow struct {
 // has_transactions учитывает и удалённые операции: удалить счёт с ними нельзя.
 // Каждый EXISTS явно указывает deleted_at IS NULL / IS NOT NULL, чтобы попасть
 // в свой частичный индекс (00001 и 00004); без этого условия — полный скан.
+// base_balance — остаток в базовой валюте семьи по курсу на today («сегодня»
+// пользователя): формула и правило выбора курса — как в отчётах (reports.sql,
+// выражение factor). Если у валюты нет ни одного курса, has_base_balance =
+// false (base_balance тогда 0): так sqlc выводит обычные bool и int64, а не
+// interface{} — nullability выражения из LATERAL он не выводит.
 func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]ListAccountsRow, error) {
-	rows, err := q.db.Query(ctx, listAccounts, arg.FamilyID, arg.UserID, arg.OnlyID)
+	rows, err := q.db.Query(ctx, listAccounts,
+		arg.Today,
+		arg.FamilyID,
+		arg.UserID,
+		arg.OnlyID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +304,8 @@ func (q *Queries) ListAccounts(ctx context.Context, arg ListAccountsParams) ([]L
 			&i.ArchivedAt,
 			&i.Balance,
 			&i.HasTransactions,
+			&i.HasBaseBalance,
+			&i.BaseBalance,
 		); err != nil {
 			return nil, err
 		}

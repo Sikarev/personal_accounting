@@ -35,7 +35,12 @@ func errAccountNotFound() *problem.Problem { return problem.NotFound("Счёт �
 
 func (s *server) ListAccounts(ctx context.Context, _ oapi.ListAccountsRequestObject) (oapi.ListAccountsResponseObject, error) {
 	p := currentUser(ctx)
-	rows, err := s.q.ListAccounts(ctx, dbgen.ListAccountsParams{FamilyID: p.FamilyID, UserID: p.UserID})
+	// «Сегодня» пользователя — дата курса для baseBalance.
+	today, err := s.userToday(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.q.ListAccounts(ctx, dbgen.ListAccountsParams{FamilyID: p.FamilyID, UserID: p.UserID, Today: today})
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
 	}
@@ -300,7 +305,11 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 // getAccount читает один видимый счёт с остатком. q — s.q или запросы
 // внутри транзакции.
 func (s *server) getAccount(ctx context.Context, q *dbgen.Queries, p Principal, id uuid.UUID) (oapi.Account, error) {
-	rows, err := q.ListAccounts(ctx, dbgen.ListAccountsParams{FamilyID: p.FamilyID, UserID: p.UserID, OnlyID: &id})
+	today, err := s.userToday(ctx, p.UserID)
+	if err != nil {
+		return oapi.Account{}, err
+	}
+	rows, err := q.ListAccounts(ctx, dbgen.ListAccountsParams{FamilyID: p.FamilyID, UserID: p.UserID, OnlyID: &id, Today: today})
 	if err != nil {
 		return oapi.Account{}, fmt.Errorf("get account: %w", err)
 	}
@@ -322,7 +331,12 @@ func accountFromRow(r dbgen.ListAccountsRow) oapi.Account {
 		c := oapi.AccountColor(*r.Color)
 		color = &c
 	}
+	var baseBalance *int64 // null — у валюты счёта нет ни одного курса
+	if r.HasBaseBalance {
+		baseBalance = &r.BaseBalance
+	}
 	return oapi.Account{
+		BaseBalance:     baseBalance,
 		Id:              r.ID,
 		Name:            r.Name,
 		Type:            oapi.AccountType(r.Type),

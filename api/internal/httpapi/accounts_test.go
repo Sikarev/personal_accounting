@@ -166,7 +166,7 @@ func TestAccountCRUD(t *testing.T) {
 		keys = append(keys, k)
 	}
 	slices.Sort(keys)
-	wantKeys := []string{"archivedAt", "balance", "color", "currency", "hasTransactions", "id",
+	wantKeys := []string{"archivedAt", "balance", "baseBalance", "color", "currency", "hasTransactions", "id",
 		"includeInTotal", "initialBalance", "name", "sortOrder", "type", "visibility"}
 	if !reflect.DeepEqual(keys, wantKeys) {
 		t.Fatalf("поля счёта: %v, ожидались %v", keys, wantKeys)
@@ -176,6 +176,8 @@ func TestAccountCRUD(t *testing.T) {
 		"visibility": "private", "initialBalance": float64(-150050), "balance": float64(-150050),
 		"includeInTotal": false, "color": "grape", "sortOrder": float64(0), "archivedAt": nil,
 		"hasTransactions": false,
+		// Курсов USD в тестовой БД нет (тесты отчётов удаляют свои после себя).
+		"baseBalance": nil,
 	}
 	if !reflect.DeepEqual(acc, want) {
 		t.Fatalf("счёт:\n%v\nожидался\n%v", acc, want)
@@ -185,7 +187,7 @@ func TestAccountCRUD(t *testing.T) {
 	// Минимальный запрос: умолчания.
 	minimal := e.createAccount(t, u, `{"name":"Наличные","type":"cash","currency":"RUB","visibility":"shared"}`)
 	if minimal["initialBalance"] != float64(0) || minimal["includeInTotal"] != true ||
-		minimal["color"] != nil || minimal["visibility"] != "shared" {
+		minimal["color"] != nil || minimal["visibility"] != "shared" || minimal["baseBalance"] != float64(0) {
 		t.Fatalf("умолчания: %v", minimal)
 	}
 

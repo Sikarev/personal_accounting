@@ -31,6 +31,8 @@ tags:
     description: Категории расходов и доходов
   - name: transactions
     description: Операции (расходы, доходы, переводы, корректировки)
+  - name: reports
+    description: Отчёты в базовой валюте семьи
 
 paths:
   /currencies:
@@ -785,6 +787,107 @@ paths:
           $ref: "#/components/responses/Problem"
   # --- /Операции -------------------------------------------------------------
 
+  # --- Отчёты ----------------------------------------------------------------
+  # Общее для всех отчётов (docs/api.md → «Отчёты», «Пересчёт валют»): только
+  # видимые пользователю счета, без удалённых операций; суммы — целые
+  # минимальные единицы базовой валюты семьи (`currency`), пересчитанные по
+  # курсу на дату; валюты без единого курса в отчёт не входят и перечислены
+  # в `missingRates`.
+  /reports/categories:
+    get:
+      operationId: getCategoryReport
+      summary: Расходы или доходы по категориям
+      description: |
+        Сумма операций вида `kind` за период по каждой категории, в которую они
+        записаны **прямо** (у родителя — только его собственные операции,
+        подкатегории — отдельными строками; дерево и доли собирает клиент).
+        Архивные категории тоже входят. Переводы и корректировки не входят.
+        Порядок — по `amount` ↓, затем по `categoryId`; категорий с нулевой
+        суммой нет.
+
+        `total` — точная сумма всех операций, округлённая один раз, а `amount`
+        каждой категории округляется отдельно, поэтому сумма `items` может
+        отличаться от `total` на несколько минимальных единиц.
+
+        Ошибки (422 `validation_failed`): `invalid_range` у `to` (`from` позже
+        `to`), `period_too_long` у `to` (период 10 лет и длиннее).
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/ReportCategoryKind"
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+        - $ref: "#/components/parameters/ReportAccountFilter"
+        - $ref: "#/components/parameters/TransactionAuthorFilter"
+      responses:
+        "200":
+          description: Отчёт.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryReport"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /reports/monthly:
+    get:
+      operationId: getMonthlyReport
+      summary: Расходы и доходы по месяцам
+      description: |
+        По строке на каждый календарный месяц, пересекающийся с периодом
+        (пустые — с нулями), по возрастанию. Операции — только с датой внутри
+        `[from, to]`, даже если `from` и `to` — середина месяца. Переводы и
+        корректировки не входят. Ошибки периода — как у `/reports/categories`.
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+        - $ref: "#/components/parameters/ReportAccountFilter"
+        - $ref: "#/components/parameters/TransactionAuthorFilter"
+      responses:
+        "200":
+          description: Отчёт.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyReport"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /reports/balance:
+    get:
+      operationId: getBalanceReport
+      summary: Динамика общего баланса
+      description: |
+        Сумма остатков счетов на конец каждого шага, пересчитанная по курсу на
+        дату точки. Шаг выбирает сервер по длине периода (дни включительно):
+        до 31 — `day`, до 184 — `week` (ISO, пн–вс), длиннее — `month`. Точка —
+        последний день шага, обрезанный по `to`: первая — конец шага, в который
+        попадает `from`, последняя — всегда `to`.
+
+        Остаток на дату — начальный остаток счёта плюс все неудалённые операции
+        с датой не позже неё (обе стороны переводов, корректировки); начальный
+        остаток действует с начала времён. Может быть отрицательным.
+
+        Счета: без `accountId` — все видимые с `includeInTotal`, включая
+        архивные; с `accountId` — ровно указанные видимые (независимо от
+        `includeInTotal`). Фильтра по автору нет: остаток — свойство счёта.
+        Ошибки периода — как у `/reports/categories`.
+      tags: [reports]
+      parameters:
+        - $ref: "#/components/parameters/ReportFrom"
+        - $ref: "#/components/parameters/ReportTo"
+        - $ref: "#/components/parameters/ReportAccountFilter"
+      responses:
+        "200":
+          description: Отчёт.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceReport"
+        default:
+          $ref: "#/components/responses/Problem"
+  # --- /Отчёты ---------------------------------------------------------------
+
 components:
   securitySchemes:
     cookieAuth:
@@ -896,6 +999,46 @@ components:
         items:
           type: string
           format: uuid
+    # Параметры отчётов: период обязателен, оба конца включительно.
+    ReportFrom:
+      name: from
+      in: query
+      required: true
+      description: Начало периода (включительно).
+      schema:
+        type: string
+        format: date
+    ReportTo:
+      name: to
+      in: query
+      required: true
+      description: |
+        Конец периода (включительно). Не раньше `from` (иначе `invalid_range`);
+        период короче 10 лет: `to` раньше, чем `from` + 10 лет (иначе
+        `period_too_long`).
+      schema:
+        type: string
+        format: date
+    ReportAccountFilter:
+      name: accountId
+      in: query
+      required: false
+      description: |
+        Счета (как в ленте: повторением параметра). Невидимый, чужой или
+        несуществующий id просто ничего не находит.
+      schema:
+        type: array
+        maxItems: 100
+        items:
+          type: string
+          format: uuid
+    ReportCategoryKind:
+      name: kind
+      in: query
+      required: true
+      description: Расходы или доходы.
+      schema:
+        $ref: "#/components/schemas/CategoryKind"
     TransactionSearch:
       name: q
       in: query
@@ -1211,6 +1354,7 @@ components:
         - sortOrder
         - archivedAt
         - hasTransactions
+        - baseBalance
       properties:
         id:
           type: string
@@ -1255,6 +1399,15 @@ components:
           description: |
             Есть ли у счёта операции (в т. ч. удалённые). Счёт с операциями
             нельзя удалить — только архивировать.
+        baseBalance:
+          type: integer
+          format: int64
+          nullable: true
+          description: |
+            Остаток в базовой валюте семьи (минимальные единицы): `balance` ×
+            последний курс на «сегодня» пользователя (если курсов до сегодня
+            нет — ближайший следующий). У счёта в базовой валюте равен
+            `balance`; `null`, если у валюты счёта нет ни одного курса.
 
     AccountList:
       type: object
@@ -1730,3 +1883,122 @@ components:
         frequentCategories:
           $ref: "#/components/schemas/FrequentCategories"
     # --- /Операции -------------------------------------------------------------
+
+    # --- Отчёты --------------------------------------------------------------
+    BaseAmount:
+      type: integer
+      format: int64
+      description: Сумма в минимальных единицах базовой валюты семьи (поле `currency` отчёта).
+
+    MissingRates:
+      type: array
+      description: |
+        Коды валют, по которым нет ни одного курса: их счета и операции в отчёт
+        не вошли. Пусто, если пересчитано всё. По коду.
+      items:
+        type: string
+        example: USD
+
+    CategoryReportItem:
+      type: object
+      required: [categoryId, amount]
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        amount:
+          type: integer
+          format: int64
+          description: |
+            Сумма операций, записанных прямо в эту категорию, в минимальных
+            единицах базовой валюты; больше нуля.
+
+    CategoryReport:
+      type: object
+      required: [currency, total, items, missingRates]
+      properties:
+        currency:
+          type: string
+          description: Базовая валюта семьи.
+          example: RUB
+        total:
+          type: integer
+          format: int64
+          description: |
+            Точная сумма всех операций, округлённая один раз. Может отличаться
+            от суммы `items` на несколько минимальных единиц.
+        items:
+          type: array
+          description: По `amount` ↓.
+          items:
+            $ref: "#/components/schemas/CategoryReportItem"
+        missingRates:
+          $ref: "#/components/schemas/MissingRates"
+
+    MonthlyReportItem:
+      type: object
+      required: [month, expense, income]
+      properties:
+        month:
+          type: string
+          format: date
+          description: Первое число месяца.
+          example: "2026-11-01"
+        expense:
+          $ref: "#/components/schemas/BaseAmount"
+        income:
+          $ref: "#/components/schemas/BaseAmount"
+
+    MonthlyReport:
+      type: object
+      required: [currency, items, missingRates]
+      properties:
+        currency:
+          type: string
+          description: Базовая валюта семьи.
+          example: RUB
+        items:
+          type: array
+          description: Каждый месяц периода по возрастанию, пустые — с нулями.
+          items:
+            $ref: "#/components/schemas/MonthlyReportItem"
+        missingRates:
+          $ref: "#/components/schemas/MissingRates"
+
+    BalanceStep:
+      type: string
+      enum: [day, week, month]
+
+    BalancePoint:
+      type: object
+      required: [date, balance]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Последний день шага (у последней точки — `to`).
+        balance:
+          type: integer
+          format: int64
+          description: |
+            Сумма остатков на конец дня в минимальных единицах базовой валюты;
+            может быть отрицательной.
+
+    BalanceReport:
+      type: object
+      required: [currency, step, items, missingRates]
+      properties:
+        currency:
+          type: string
+          description: Базовая валюта семьи.
+          example: RUB
+        step:
+          $ref: "#/components/schemas/BalanceStep"
+        items:
+          type: array
+          description: Точки по возрастанию даты; последняя — `to`.
+          items:
+            $ref: "#/components/schemas/BalancePoint"
+        missingRates:
+          $ref: "#/components/schemas/MissingRates"
+    # --- /Отчёты ---------------------------------------------------------------

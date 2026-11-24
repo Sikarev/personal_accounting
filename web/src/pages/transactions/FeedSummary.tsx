@@ -3,7 +3,9 @@ import { useId, type ReactNode } from 'react'
 
 import { apiErrorText, type TransactionSummary } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { summaryStats } from '../../shared/lib/transactionFeed'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
+import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { Money } from '../../shared/ui'
 import classes from './TransactionsPage.module.css'
 
@@ -24,6 +26,7 @@ export function FeedSummary({ query, filtered }: { query: SummaryQuery; filtered
   const t = useT()
   const titleId = useId()
   const showSkeleton = useDelayedLoading(query.isPending)
+  const mobile = useMobileLayout()
 
   let content
   if (query.isPending) {
@@ -55,50 +58,60 @@ export function FeedSummary({ query, filtered }: { query: SummaryQuery; filtered
         </Button>
       </div>
     )
-  } else if (!query.data || query.data.totals.length === 0) {
+  } else if (!query.data || !query.data.totals.some((total) => summaryStats(total).length)) {
     content = (
       <Text size="sm" c="dimmed">
         {t.feed.summary.empty}
       </Text>
     )
   } else {
-    content = query.data.totals.map((total) => (
-      <dl key={total.currency} className={classes.summaryStats}>
-        <Stat label={t.feed.summary.expense}>
-          <Money amount={-total.expense} currency={total.currency} variant="flow" wrap />
-        </Stat>
-        <Stat label={t.feed.summary.income}>
-          <Money amount={total.income} currency={total.currency} variant="flow" wrap />
-        </Stat>
-        <Stat label={t.feed.summary.difference}>
-          <Money
-            amount={total.income - total.expense}
-            currency={total.currency}
-            variant="flow"
-            wrap
-          />
-        </Stat>
-      </dl>
-    ))
+    content = query.data.totals
+      .map((total) => ({ currency: total.currency, stats: summaryStats(total) }))
+      .filter((row) => row.stats.length > 0)
+      .map((row) => (
+        <dl key={row.currency} className={mobile ? classes.summaryInline : classes.summaryStats}>
+          {row.stats.map((stat) => (
+            <Stat key={stat.key} label={t.feed.summary[stat.key]} compact={mobile}>
+              <Money amount={stat.amount} currency={row.currency} variant="flow" wrap />
+            </Stat>
+          ))}
+        </dl>
+      ))
   }
 
   return (
-    <Paper withBorder radius="lg" p="md" component="section" aria-labelledby={titleId}>
-      <Title id={titleId} order={2} size="sm" fw={500} c="dimmed" mb="sm">
+    // На телефоне итоги компактные — по строке на валюту обычным кеглем: главное на экране —
+    // лента (ux.md, принцип 2), а крупные цифры заняли бы пол-экрана, при крупном шрифте — весь.
+    <Paper
+      withBorder
+      radius="lg"
+      p={mobile ? 'sm' : 'md'}
+      component="section"
+      aria-labelledby={titleId}
+    >
+      <Title id={titleId} order={2} size="sm" fw={500} c="dimmed" mb={mobile ? 'xs' : 'sm'}>
         {filtered ? t.feed.summary.filteredTitle : t.feed.summary.title}
       </Title>
-      <div className={classes.summaryBody}>{content}</div>
+      <div className={mobile ? classes.summaryBodyCompact : classes.summaryBody}>{content}</div>
     </Paper>
   )
 }
 
-function Stat({ label, children }: { label: string; children: ReactNode }) {
+function Stat({
+  label,
+  compact,
+  children,
+}: {
+  label: string
+  compact: boolean
+  children: ReactNode
+}) {
   return (
-    <div className={classes.stat}>
-      <Text component="dt" size="xs" c="dimmed">
+    <div className={compact ? classes.statInline : classes.stat}>
+      <Text component="dt" size={compact ? 'sm' : 'xs'} c="dimmed">
         {label}
       </Text>
-      <Text component="dd" size="lg" fw={600} className={classes.statValue}>
+      <Text component="dd" size={compact ? 'sm' : 'lg'} fw={600} className={classes.statValue}>
         {children}
       </Text>
     </div>

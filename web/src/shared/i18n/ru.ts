@@ -369,7 +369,10 @@ export const ru = {
   },
   // Экран «Операции»: лента, фильтры, итоги, строка операции (TransactionRow).
   feed: {
-    listLabel: (day: string) => `Операции за ${day.toLocaleLowerCase('ru-RU')}`,
+    // Объявления для экранного диктора (role="status").
+    updated: 'Лента обновлена',
+    loadedMore: (count: string) => `Загружено ещё ${count}`,
+    operations: { one: 'операция', few: 'операции', many: 'операций' },
     dayTotalLabel: 'Итог дня',
     loadError: 'Не удалось загрузить операции',
     nextPageError: 'Не удалось загрузить следующие операции.',

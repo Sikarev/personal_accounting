@@ -223,7 +223,8 @@ test.describe('лента', () => {
     const totals = summary(page).locator('dl')
     await expect(totals).toHaveText([
       money('Расходы −100 000 002 039,99 ₽ Доходы +150 000 ₽ Разница −99 999 852 039,99 ₽'),
-      money('Расходы −12,50 $ Доходы 0 $ Разница −12,50 $'),
+      // Нули не показываются, разница без пары — тоже.
+      money('Расходы −12,50 $'),
     ])
     await expect(page.getByText('Пополнение: Иван')).toBeVisible()
     await expect(page.getByText('Карта → Доллары')).toBeVisible()
@@ -377,6 +378,51 @@ test.describe('фильтры', () => {
     ).toBeVisible()
   })
 
+  test(
+    'поле поиска следует за адресом при переходе по меню',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await setup(page)
+      await openFeed(page)
+      await feedReady(page)
+      const field = page.getByLabel(t.feed.filters.search)
+      await field.pressSequentially('кофе')
+      await expect(page).toHaveURL(/q=/)
+      await page
+        .getByRole('navigation', { name: t.nav.label })
+        .getByRole('link', { name: t.nav.transactions })
+        .click()
+      await expect(page).toHaveURL(/\/transactions$/)
+      await expect(field).toHaveValue('')
+      await expect(page.getByText('Сыр и йогурт')).toBeVisible()
+    },
+  )
+
+  test('свой период набирается с клавиатуры', { tag: '@a11y' }, async ({ page, isMobile }) => {
+    test.skip(isMobile, 'Поля те же, на desktop — без окна')
+    const api = await setup(page)
+    await openFeed(page, '?from=2026-11-01&to=2026-11-30')
+    await feedReady(page)
+    const panel = page.getByRole('region', { name: t.feed.filters.label })
+    await panel.getByLabel(t.feed.filters.period).selectOption('custom')
+    const end = panel.getByLabel(t.feed.filters.to)
+    // Фокус на первом сегменте; дальше — цифрами, как с клавиатуры. 11.11 — чтобы не зависеть
+    // от порядка «день/месяц» в поле (он берётся из языка системы, а не страницы).
+    await end.focus()
+    await end.pressSequentially('11112026')
+    // Пока набирается — адрес прежний: промежуточные даты (`2026-01-11`, `0002-11-11`…)
+    // не уходят ни в адрес, ни в API. Enter (или уход из поля) — применить.
+    await expect(end).toHaveValue('2026-11-11')
+    await expect(page).toHaveURL(/from=2026-11-01&to=2026-11-30/)
+    await end.press('Enter')
+    await expect(page).toHaveURL(/from=2026-11-01&to=2026-11-11/)
+    await expect(end).toHaveValue('2026-11-11')
+    await expect(panel.getByLabel(t.feed.filters.from)).toHaveValue('2026-11-01')
+    await expect.poll(() => api.listRequests.length).toBe(2)
+    expect(api.listRequests.map((p) => p.get('to'))).toEqual(['2026-11-30', '2026-11-11'])
+    await expect(page.getByText('Сыр и йогурт')).toHaveCount(0)
+  })
+
   test('панель фильтров на desktop', { tag: '@a11y' }, async ({ page, isMobile }) => {
     test.skip(isMobile, 'На mobile фильтры — в нижней панели')
     const api = await setup(page)
@@ -394,24 +440,32 @@ test.describe('фильтры', () => {
   })
 })
 
-test.describe('подгрузка', () => {
-  /** 70 операций по одной в день: первая страница — 50, вторая — 20. */
-  function many(): Transaction[] {
-    return Array.from({ length: 70 }, (_, i) => {
-      const date = new Date(Date.UTC(2026, 10, 23 - i)).toISOString().slice(0, 10)
-      return transaction({ date, categoryId: food.id, comment: `Покупка ${i + 1}` })
-    })
-  }
+/** 70 операций по одной в день: первая страница — 50, вторая — 20. */
+function manyTransactions(): Transaction[] {
+  return Array.from({ length: 70 }, (_, i) => {
+    const date = new Date(Date.UTC(2026, 10, 23 - i)).toISOString().slice(0, 10)
+    return transaction({ date, categoryId: food.id, comment: `Покупка ${i + 1}` })
+  })
+}
 
+test.describe('подгрузка', () => {
   test('при прокрутке до конца — следующая страница', { tag: '@a11y' }, async ({ page }) => {
-    const api = await setup(page, many())
+    const api = await setup(page, manyTransactions())
     await openFeed(page)
     await feedReady(page)
     await expect(page.getByText('Покупка 50', { exact: true })).toBeAttached()
     await expect(page.getByText('Покупка 51', { exact: true })).toHaveCount(0)
     await page.getByText('Покупка 50', { exact: true }).scrollIntoViewIfNeeded()
     await expect(page.getByText('Покупка 70', { exact: true })).toBeAttached()
-    expect(api.listRequests.map((p) => p.get('cursor'))).toEqual([null, '50'])
+    // Курсор — позиция последней строки первой страницы («дата|id»), как в API.
+    const cursors = api.listRequests.map((p) => p.get('cursor'))
+    expect(cursors).toHaveLength(2)
+    expect(cursors[0]).toBeNull()
+    expect(Buffer.from(cursors[1]!, 'base64url').toString()).toMatch(/^2026-10-05\|/)
+    // Диктору — сколько подгрузилось.
+    await expect(page.getByRole('status').filter({ hasText: /Загружено ещё/ })).toHaveText(
+      t.feed.loadedMore('20 операций'),
+    )
     // Последняя страница — «Показать ещё» больше нет.
     await expect(page.getByRole('button', { name: t.feed.showMore })).toHaveCount(0)
   })
@@ -420,7 +474,7 @@ test.describe('подгрузка', () => {
     'ошибка следующей страницы — «Повторить», загруженное на месте',
     { tag: '@a11y' },
     async ({ page }) => {
-      const api = await setup(page, many())
+      const api = await setup(page, manyTransactions())
       await openFeed(page)
       await feedReady(page)
       // Следующий запрос (вторая страница) — ошибка сети.
@@ -431,6 +485,35 @@ test.describe('подгрузка', () => {
       await page.getByRole('button', { name: t.errors.retry }).click()
       await expect(page.getByText('Покупка 70', { exact: true })).toBeAttached()
       await expect(page.getByText(t.feed.nextPageError)).toHaveCount(0)
+    },
+  )
+})
+
+test.describe('удаление и подгрузка', () => {
+  test(
+    'удалили строку первой страницы — вторая без пропусков и дублей',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      const api = await setup(page, manyTransactions())
+      await openFeed(page)
+      await feedReady(page)
+      const row = page.locator('[data-transaction-row]', {
+        has: page.getByText('Покупка 2', { exact: true }),
+      })
+      await row.getByRole('button', { name: t.feed.row.actions(food.name) }).click()
+      await page.getByRole('menuitem', { name: t.feed.actions.delete }).click()
+      await expect.poll(() => api.received).toContain('DELETE /transactions/:id')
+      // Прокрутка к концу — подгрузка второй страницы (кнопку на mobile закрывает тост).
+      await page.getByText('Покупка 50', { exact: true }).scrollIntoViewIfNeeded()
+      await expect(page.getByText('Покупка 70', { exact: true })).toBeAttached()
+      const comments = await page
+        .locator('[data-transaction-row]')
+        .getByText(/^Покупка \d+$/)
+        .allTextContents()
+      expect(comments).toHaveLength(69)
+      expect(new Set(comments).size).toBe(69)
+      expect(comments).toContain('Покупка 51')
+      expect(comments).not.toContain('Покупка 2')
     },
   )
 })

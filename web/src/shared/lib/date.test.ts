@@ -83,11 +83,15 @@ describe('isCalendarDate', () => {
   it('существующие даты', () => {
     expect(isCalendarDate('2026-11-23')).toBe(true)
     expect(isCalendarDate('2024-02-29')).toBe(true)
+    // Годы 0–99 — как есть, а не 1900+ (так Date.UTC толкует двузначный год).
+    expect(isCalendarDate('0002-12-12')).toBe(true)
+    expect(isCalendarDate('0004-02-29')).toBe(true)
   })
 
   it('несуществующие и не в формате YYYY-MM-DD', () => {
     expect(isCalendarDate('2026-02-31')).toBe(false)
     expect(isCalendarDate('2025-02-29')).toBe(false)
+    expect(isCalendarDate('0003-02-29')).toBe(false)
     expect(isCalendarDate('2026-13-01')).toBe(false)
     expect(isCalendarDate('2026-1-01')).toBe(false)
     expect(isCalendarDate('')).toBe(false)

@@ -195,7 +195,7 @@ export type TransactionsMock = {
  * Подменить API операций вместе со справочниками: `GET /accounts`, `/categories`,
  * `/transactions` (фильтры, курсор, итоги дней), `/transactions/summary`, удаление
  * и восстановление. Фильтры и итоги считаются так же, как на сервере (docs/api.md →
- * «Операции»), курсор — смещение. Регистрировать после `mockSignedIn`: свой мок
+ * «Операции»), курсор — позиция последней строки, как в API. Регистрировать после `mockSignedIn`: свой мок
  * `GET /accounts` перекрывает умолчание.
  */
 export async function mockTransactionsApi(
@@ -273,13 +273,22 @@ export async function mockTransactionsApi(
       case 'GET /transactions': {
         api.listRequests.push(params)
         const all = sorted(api.transactions.filter(matches(params)))
-        const offset = Number(params.get('cursor') ?? 0)
-        const items = all.slice(offset, offset + pageSize)
+        // Курсор — как в API: позиция последней строки страницы («дата|id» в base64url),
+        // а не смещение. Удаление строки с прошлой страницы не сдвигает следующую.
+        const cursor = params.get('cursor')
+        const after = cursor ? Buffer.from(cursor, 'base64url').toString().split('|') : null
+        const rest = after
+          ? all.filter((i) => i.date < after[0] || (i.date === after[0] && i.id < after[1]))
+          : all
+        const items = rest.slice(0, pageSize)
+        const last = items.at(-1)
         const dates = [...new Set(items.map((i) => i.date))]
         return route.fulfill({
           json: {
             items,
-            ...(offset + pageSize < all.length ? { nextCursor: String(offset + pageSize) } : {}),
+            ...(rest.length > pageSize && last
+              ? { nextCursor: Buffer.from(`${last.date}|${last.id}`).toString('base64url') }
+              : {}),
             days: dates.map((date) => ({
               date,
               totals: totalsOf(all.filter((i) => i.date === date)),

@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient } from '@tanstack/react-query'
+import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query'
 
 import {
   getGetTransactionDefaultsQueryKey,
@@ -52,9 +52,31 @@ export function withTransaction(data: FeedData, transaction: Transaction): FeedD
   }
 }
 
-/** Изменить все загруженные ленты сразу. */
-export function patchFeeds(qc: QueryClient, update: (data: FeedData) => FeedData) {
-  qc.setQueriesData<FeedData>({ queryKey: feedKey() }, (old) => (old ? update(old) : old))
+/**
+ * Убрать операцию из загруженных лент (у каждого набора фильтров — своя). Возвращает
+ * ключи лент, где она была: вернуть её (откат, «Отменить») можно только туда — в ленту
+ * с другим фильтром она не подходит, а в ленту, где её место на незагруженной странице,
+ * попала бы дублем после подгрузки. Остальные ленты обновит перезапрос.
+ */
+export function removeFromFeeds(qc: QueryClient, id: string): QueryKey[] {
+  const keys: QueryKey[] = []
+  for (const [key, data] of qc.getQueriesData<FeedData>({ queryKey: feedKey() })) {
+    if (!data?.pages.some((page) => page.items.some((t) => t.id === id))) continue
+    keys.push(key)
+    qc.setQueryData<FeedData>(key, withoutTransaction(data, id))
+  }
+  return keys
+}
+
+/** Вернуть операцию в ленты `keys` (из `removeFromFeeds`) — на её место по порядку. */
+export function returnToFeeds(
+  qc: QueryClient,
+  keys: readonly QueryKey[],
+  transaction: Transaction,
+) {
+  for (const key of keys) {
+    qc.setQueryData<FeedData>(key, (old) => (old ? withTransaction(old, transaction) : old))
+  }
 }
 
 /** Остановить загрузку лент: ответ, начатый до правки, затёр бы оптимистичное изменение. */

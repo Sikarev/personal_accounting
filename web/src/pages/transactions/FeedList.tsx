@@ -54,7 +54,9 @@ export const FeedList = memo(function FeedList({
   )
 })
 
-function DaySection({
+// Группы пересобираются при каждом изменении ленты (подгрузка, удаление), но объекты
+// операций из кэша те же — поэтому строки мемоизированы по операции, а не по группе.
+const DaySection = memo(function DaySection({
   group,
   today,
   accountNames,
@@ -62,7 +64,6 @@ function DaySection({
   showAuthor,
   onDelete,
 }: Omit<FeedListProps, 'groups'> & { group: DayGroup }) {
-  const t = useT()
   const headingId = useId()
   return (
     <section aria-labelledby={headingId}>
@@ -70,30 +71,51 @@ function DaySection({
       <ul className={classes.rows}>
         {group.items.map((transaction) => (
           <li key={transaction.id}>
-            <TransactionRow
+            <FeedRow
               transaction={transaction}
               accountNames={accountNames}
               categories={categories}
               showAuthor={showAuthor}
-              actions={
-                canDelete(transaction) ? (
-                  <RowMenu
-                    transaction={transaction}
-                    title={transactionTitle(transaction, { accountNames, categories }, t)}
-                    onDelete={onDelete}
-                  />
-                ) : (
-                  // Место меню — чтобы суммы всех строк стояли в одну колонку.
-                  <span className={classes.menuSpacer} aria-hidden />
-                )
-              }
+              onDelete={onDelete}
             />
           </li>
         ))}
       </ul>
     </section>
   )
-}
+})
+
+/** Строка ленты с меню; перерисовывается, только если изменилась сама операция или справочники. */
+const FeedRow = memo(function FeedRow({
+  transaction,
+  accountNames,
+  categories,
+  showAuthor,
+  onDelete,
+}: Omit<FeedListProps, 'groups' | 'today'> & { transaction: Transaction }) {
+  const t = useT()
+  return (
+    <TransactionRow
+      transaction={transaction}
+      accountNames={accountNames}
+      categories={categories}
+      showAuthor={showAuthor}
+      actions={
+        canDelete(transaction) ? (
+          <RowMenu
+            transaction={transaction}
+            // Подпись меню нужна только у строк с меню; считается вместе со строкой.
+            title={transactionTitle(transaction, { accountNames, categories }, t)}
+            onDelete={onDelete}
+          />
+        ) : (
+          // Место меню — чтобы суммы всех строк стояли в одну колонку.
+          <span className={classes.menuSpacer} aria-hidden />
+        )
+      }
+    />
+  )
+})
 
 /**
  * Меню строки. Удалить можно операцию, у которой видны все счета (`editable`),

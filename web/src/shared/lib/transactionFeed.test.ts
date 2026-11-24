@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Transaction } from '../api'
-import { compareFeedOrder, groupByDay, mergeDays, totalAmounts } from './transactionFeed'
+import {
+  compareFeedOrder,
+  groupByDay,
+  mergeDays,
+  summaryStats,
+  totalAmounts,
+} from './transactionFeed'
 
 let seq = 0
 function tx(date: string, overrides: Partial<Transaction> = {}): Transaction {
@@ -123,5 +129,22 @@ describe('compareFeedOrder', () => {
     const second = tx('2026-11-23')
     // second создан позже — id меньше в этой фикстуре, значит он ниже first.
     expect([older, second, first].sort(compareFeedOrder)).toEqual([first, second, older])
+  })
+})
+
+describe('summaryStats', () => {
+  it('расходы, доходы и разница', () => {
+    expect(summaryStats({ currency: 'RUB', expense: 1500, income: 5000 })).toEqual([
+      { key: 'expense', amount: -1500 },
+      { key: 'income', amount: 5000 },
+      { key: 'difference', amount: 3500 },
+    ])
+  })
+
+  it('нули скрыты, разница без пары не показывается', () => {
+    expect(summaryStats({ currency: 'USD', expense: 1250, income: 0 })).toEqual([
+      { key: 'expense', amount: -1250 },
+    ])
+    expect(summaryStats({ currency: 'USD', expense: 0, income: 0 })).toEqual([])
   })
 })

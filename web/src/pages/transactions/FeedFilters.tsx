@@ -15,6 +15,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 
 import type { Account, Category, TransactionKind } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { isCalendarDate } from '../../shared/lib/date'
 import { matchesSearch } from '../../shared/lib/search'
 import {
   detectPreset,
@@ -242,7 +243,8 @@ function PeriodField({
     if (preset !== 'custom') onChange(presetPeriod(preset, today))
   }
 
-  // Начало позже конца — меняем местами: иначе лента молча опустела бы.
+  // Начало позже конца — меняем местами: иначе лента молча опустела бы. Сюда приходят
+  // только законченные даты (DateField), поэтому перестановка не ломает набор.
   const setFrom = (from: string | null) =>
     from && filters.to && from > filters.to
       ? onChange({ from: filters.to, to: from })
@@ -266,23 +268,78 @@ function PeriodField({
       />
       {value === 'custom' && (
         <div role="group" aria-label={t.feed.filters.customLabel} className={classes.dates}>
-          <TextInput
-            type="date"
-            size="md"
-            label={t.feed.filters.from}
-            value={filters.from ?? ''}
-            onChange={(e) => setFrom(e.currentTarget.value || null)}
-          />
-          <TextInput
-            type="date"
-            size="md"
-            label={t.feed.filters.to}
-            value={filters.to ?? ''}
-            onChange={(e) => setTo(e.currentTarget.value || null)}
-          />
+          <DateField label={t.feed.filters.from} value={filters.from} onCommit={setFrom} />
+          <DateField label={t.feed.filters.to} value={filters.to} onCommit={setTo} />
         </div>
       )}
     </div>
+  )
+}
+
+/** Год, с которого дата считается законченной: при наборе Chrome отдаёт `0002-…`. */
+const MIN_YEAR = 1900
+
+const isFinishedDate = (value: string) =>
+  isCalendarDate(value) && Number(value.slice(0, 4)) >= MIN_YEAR
+
+/**
+ * Поле даты границы периода. Значение — своё состояние, в адрес уходит в два момента:
+ * - выбор в календаре (или колесе на телефоне) — сразу: дата приходит законченной;
+ * - набор с клавиатуры — по Enter или уходу из поля. Пока набирается, браузер отдаёт
+ *   промежуточные даты: `0002-12-12`, а в уже заполненном поле — вполне правдоподобную
+ *   `2026-01-22` на полпути к `2026-11-22`. Запись каждой в адрес запускала бы запрос
+ *   и перестановку «начало позже конца» — набранное терялось бы.
+ * При применении пустое поле снимает границу, недонабранное — возвращает прежнее значение.
+ */
+function DateField({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string
+  value: string | null
+  onCommit: (value: string | null) => void
+}) {
+  const [draft, setDraft] = useState(value ?? '')
+  // Значение в адресе поменялось снаружи (перестановка, готовый период, чип) — показываем его.
+  const [lastValue, setLastValue] = useState(value)
+  if (value !== lastValue) {
+    setLastValue(value)
+    setDraft(value ?? '')
+  }
+  // Идёт набор с клавиатуры: изменения ждут Enter или ухода из поля.
+  const typing = useRef(false)
+
+  const apply = (next: string) => {
+    typing.current = false
+    if (next === '') {
+      if (value !== null) onCommit(null)
+    } else if (!isFinishedDate(next)) {
+      setDraft(value ?? '')
+    } else if (next !== value) {
+      onCommit(next)
+    }
+  }
+
+  return (
+    <TextInput
+      type="date"
+      size="md"
+      label={label}
+      value={draft}
+      onChange={(e) => {
+        const next = e.currentTarget.value
+        setDraft(next)
+        if (!typing.current && isFinishedDate(next)) apply(next)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') apply(e.currentTarget.value)
+        else if (e.key !== 'Tab' && e.key !== 'Escape') typing.current = true
+      }}
+      onBlur={(e) => {
+        if (typing.current || e.currentTarget.value === '') apply(e.currentTarget.value)
+      }}
+    />
   )
 }
 

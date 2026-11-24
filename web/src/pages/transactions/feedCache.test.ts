@@ -1,7 +1,14 @@
+import { QueryClient } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 
-import type { Transaction } from '../../shared/api'
-import { withoutTransaction, withTransaction, type FeedData } from './feedCache'
+import { getListTransactionsInfiniteQueryKey, type Transaction } from '../../shared/api'
+import {
+  removeFromFeeds,
+  returnToFeeds,
+  withoutTransaction,
+  withTransaction,
+  type FeedData,
+} from './feedCache'
 
 function tx(id: number, date: string): Transaction {
   return {
@@ -73,5 +80,42 @@ describe('withTransaction', () => {
   it('лента без страниц — без изменений', () => {
     const data = feed()
     expect(withTransaction(data, t4)).toBe(data)
+  })
+})
+
+describe('removeFromFeeds / returnToFeeds', () => {
+  const all = getListTransactionsInfiniteQueryKey()
+  const expenses = getListTransactionsInfiniteQueryKey({ kind: ['expense'] })
+  const incomes = getListTransactionsInfiniteQueryKey({ kind: ['income'] })
+  // Лента, где операция ещё на незагруженной странице: видна только первая.
+  const firstPageOnly = getListTransactionsInfiniteQueryKey({ q: 'x' })
+
+  function setup() {
+    const qc = new QueryClient()
+    qc.setQueryData(all, feed([t5, t4], [t3, t2]))
+    qc.setQueryData(expenses, feed([t4, t3]))
+    qc.setQueryData(incomes, feed([t5]))
+    qc.setQueryData(firstPageOnly, feed([t5, t2]))
+    return qc
+  }
+  const idsOf = (qc: QueryClient, key: readonly unknown[]) => ids(qc.getQueryData<FeedData>(key)!)
+
+  it('убирает только там, где операция была, и возвращает только туда', () => {
+    const qc = setup()
+    const keys = removeFromFeeds(qc, t3.id)
+    expect(keys).toEqual(expect.arrayContaining([all, expenses]))
+    expect(keys).toHaveLength(2)
+    expect(idsOf(qc, all)).toEqual([['5', '4'], ['2']])
+    expect(idsOf(qc, expenses)).toEqual([['4']])
+
+    returnToFeeds(qc, keys, t3)
+    expect(idsOf(qc, all)).toEqual([
+      ['5', '4'],
+      ['3', '2'],
+    ])
+    expect(idsOf(qc, expenses)).toEqual([['4', '3']])
+    // В ленту доходов и в ленту без этой страницы операция не попадает.
+    expect(idsOf(qc, incomes)).toEqual([['5']])
+    expect(idsOf(qc, firstPageOnly)).toEqual([['5', '2']])
   })
 })

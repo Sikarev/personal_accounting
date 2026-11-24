@@ -64,6 +64,23 @@ export function totalAmounts(totals: readonly CurrencyTotal[]): TotalAmount[] {
   return result
 }
 
+export type SummaryStat = { key: 'expense' | 'income' | 'difference'; amount: number }
+
+/**
+ * Итог выборки по одной валюте: расходы (−), доходы (+) и разница. Нули не показываются,
+ * как в заголовке дня; разница — только когда есть и расходы, и доходы (иначе она просто
+ * повторяет одну из сумм).
+ */
+export function summaryStats(total: CurrencyTotal): SummaryStat[] {
+  const stats: SummaryStat[] = []
+  if (total.expense !== 0) stats.push({ key: 'expense', amount: -total.expense })
+  if (total.income !== 0) stats.push({ key: 'income', amount: total.income })
+  if (total.expense !== 0 && total.income !== 0) {
+    stats.push({ key: 'difference', amount: total.income - total.expense })
+  }
+  return stats
+}
+
 /** Порядок ленты: дата ↓, затем id ↓ (uuidv7 растёт со временем создания). */
 export function compareFeedOrder(a: Transaction, b: Transaction): number {
   if (a.date !== b.date) return a.date < b.date ? 1 : -1

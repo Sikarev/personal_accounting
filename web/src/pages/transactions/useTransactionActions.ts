@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications'
-import { useQueryClient, type Mutation } from '@tanstack/react-query'
+import { useQueryClient, type Mutation, type QueryKey } from '@tanstack/react-query'
 
 import {
   apiErrorText,
@@ -12,9 +12,8 @@ import { notifyWithUndo } from '../../shared/ui'
 import {
   cancelFeedFetches,
   invalidateTransactionData,
-  patchFeeds,
-  withoutTransaction,
-  withTransaction,
+  removeFromFeeds,
+  returnToFeeds,
 } from './feedCache'
 
 /**
@@ -48,12 +47,15 @@ export function useTransactionActions() {
   const deleteMutation = useDeleteTransaction({ mutation })
   const restoreMutation = useRestoreTransaction({ mutation })
 
-  /** Отмена удаления: строка возвращается сразу, сервер восстанавливает операцию. */
-  const restore = (transaction: Transaction) => {
+  /**
+   * Отмена удаления: строка сразу возвращается в те ленты, откуда ушла (`keys`),
+   * сервер восстанавливает операцию.
+   */
+  const restore = (transaction: Transaction, keys: readonly QueryKey[]) => {
     cancelFeedFetches(qc)
-    patchFeeds(qc, (data) => withTransaction(data, transaction))
+    returnToFeeds(qc, keys, transaction)
     restoreMutation.mutateAsync({ transactionId: transaction.id }).catch((error: unknown) => {
-      patchFeeds(qc, (data) => withoutTransaction(data, transaction.id))
+      removeFromFeeds(qc, transaction.id)
       notifications.show({
         color: 'red',
         title: t.feed.toasts.restoreFailed,
@@ -64,14 +66,14 @@ export function useTransactionActions() {
 
   const remove = (transaction: Transaction) => {
     cancelFeedFetches(qc)
-    patchFeeds(qc, (data) => withoutTransaction(data, transaction.id))
+    const keys = removeFromFeeds(qc, transaction.id)
 
     let toastId: string | undefined
     const done = deleteMutation.mutateAsync({ transactionId: transaction.id }).then(
       () => true,
       (error: unknown) => {
         // Откат: строка возвращается на своё место, тост «Отменить» больше не нужен.
-        patchFeeds(qc, (data) => withTransaction(data, transaction))
+        returnToFeeds(qc, keys, transaction)
         if (toastId) notifications.hide(toastId)
         notifications.show({ color: 'red', message: apiErrorText(error, t) })
         return false
@@ -82,7 +84,7 @@ export function useTransactionActions() {
       message: t.feed.toasts.deleted,
       onUndo: () => {
         void done.then((ok) => {
-          if (ok) restore(transaction)
+          if (ok) restore(transaction, keys)
         })
       },
     })

@@ -120,6 +120,30 @@
   min-width: 0;
 }
 
+/* Mobile: «Расходы −1 740 ₽   Доходы +150 000 ₽   Разница …» строкой на валюту; не помещается —
+   переносится парами «подпись сумма». Разделитель — промежуток, а не «·»: точка
+   при переносе оказывалась в начале строки. */
+.summaryInline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--mantine-spacing-md);
+  margin: 0;
+}
+
+.statInline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--mantine-spacing-xs);
+  min-width: 0;
+}
+
+.summaryBodyCompact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
 .statValue {
   margin: 0;
   overflow-wrap: anywhere;

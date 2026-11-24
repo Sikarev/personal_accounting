@@ -22,7 +22,10 @@ function toCalendarDate(input: CalendarDateInput): CalendarDate {
 // Все вычисления — в UTC: так переход на летнее время и часовой пояс браузера
 // не сдвигают дату на день.
 function toUtc({ year, month, day }: CalendarDate): Date {
-  return new Date(Date.UTC(year, month - 1, day))
+  // Не `Date.UTC(year, …)`: он переводит годы 0–99 в 1900–1999 (`0002` → 1902).
+  const date = new Date(0)
+  date.setUTCFullYear(year, month - 1, day)
+  return date
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000

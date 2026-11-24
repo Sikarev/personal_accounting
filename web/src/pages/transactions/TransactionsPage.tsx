@@ -1,4 +1,4 @@
-import { Button, Paper } from '@mantine/core'
+import { Button, Paper, VisuallyHidden } from '@mantine/core'
 import { IconAlertCircle, IconListDetails, IconPlus, IconSearch } from '@tabler/icons-react'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -16,6 +16,7 @@ import {
   type Transaction,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
+import { formatCount } from '../../shared/lib/plural'
 import { groupByDay, mergeDays } from '../../shared/lib/transactionFeed'
 import {
   EMPTY_FILTERS,
@@ -66,12 +67,32 @@ export function TransactionsPage() {
   const params = useMemo(() => toListParams(filters), [filters])
 
   // Поиск печатается в поле и уходит в адрес с задержкой (FeedFilters → SearchField).
-  // Если поиск меняют снаружи поля (чип, «Сбросить»), поле пересоздаётся с новым значением.
+  // Если поиск меняется не из поля — чип, «Сбросить», переход по меню «Операции» или
+  // «Назад», — поле пересоздаётся (`epoch`) со значением из адреса, иначе в поле осталось бы
+  // «кофе» при ленте без поиска. `written` — что поле записало в адрес само: адрес
+  // обновляется не мгновенно, и его отставание от поля — не «изменение снаружи».
   const [search, setSearch] = useState<SearchState>({ epoch: 0, value: filters.q })
+  const [written, setWritten] = useState(filters.q)
+  const [urlQ, setUrlQ] = useState(filters.q)
+  if (filters.q !== urlQ) {
+    setUrlQ(filters.q)
+    if (filters.q !== written) {
+      setWritten(filters.q)
+      setSearch((s) => ({ epoch: s.epoch + 1, value: filters.q }))
+    }
+  }
+  const onSearch = useCallback<SetFilters>(
+    (patch) => {
+      if (patch.q !== undefined) setWritten(patch.q)
+      setUrlFilters(patch)
+    },
+    [setUrlFilters],
+  )
   const setFilters = useCallback<SetFilters>(
     (patch) => {
       if (patch.q !== undefined) {
         const value = patch.q
+        setWritten(value)
         setSearch((s) => ({ epoch: s.epoch + 1, value }))
       }
       setUrlFilters(patch)
@@ -107,6 +128,23 @@ export function TransactionsPage() {
   const groups = useMemo(() => groupByDay(items, mergeDays(pages ?? [])), [items, pages])
 
   const chips = activeFilterChips(filters, { accountNames, categories, today }, t)
+
+  // ——— Объявления для экранного диктора ———
+  // Лента меняется без перехода: после смены фильтра — «Лента обновлена», после подгрузки —
+  // «Загружено ещё N». Первая загрузка не объявляется: её видно по самому экрану.
+  // Считается при рендере по готовым данным (не по `placeholderData` прежнего фильтра).
+  const pageCount = pages?.length ?? 0
+  const loadedKey = feed.data && !feed.isPlaceholderData ? JSON.stringify(params) : null
+  const [announced, setAnnounced] = useState({ key: loadedKey, pages: pageCount, message: '' })
+  if (loadedKey !== null && (loadedKey !== announced.key || pageCount !== announced.pages)) {
+    let message = announced.message
+    if (announced.key !== null && loadedKey !== announced.key) {
+      message = t.feed.updated
+    } else if (loadedKey === announced.key && pageCount > announced.pages) {
+      message = t.feed.loadedMore(formatCount(pages!.at(-1)!.items.length, t.feed.operations))
+    }
+    setAnnounced({ key: loadedKey, pages: pageCount, message })
+  }
 
   // ——— Фокус после удаления ———
   // Строка исчезает вместе с кнопкой меню, на которой был фокус. Фокус переводим на меню
@@ -246,7 +284,7 @@ export function TransactionsPage() {
             today={today}
             chipCount={chips.filter((c) => c.key !== 'q').length}
             search={search}
-            onSearch={setUrlFilters}
+            onSearch={onSearch}
           />
         )}
         <ActiveFilterChips chips={chips} onChange={setFilters} onReset={resetFilters} />
@@ -255,6 +293,9 @@ export function TransactionsPage() {
           <FeedSummary query={summary} filtered={filtered} />
         )}
         <div aria-busy={feed.isPlaceholderData || undefined}>{content}</div>
+        <VisuallyHidden role="status" aria-live="polite">
+          {announced.message}
+        </VisuallyHidden>
       </div>
     </>
   )

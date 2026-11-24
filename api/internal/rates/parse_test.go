@@ -61,22 +61,14 @@ func TestParseDailySample(t *testing.T) {
 	for _, v := range d.Valutes {
 		byCode[v.CharCode] = v
 	}
-	for _, c := range []struct {
-		code, id string
-		nominal  int32
-		value    string
-	}{
-		{"USD", "R01235", 1, "91.3336"},
-		{"EUR", "R01239", 1, "98.7225"},
-		{"JPY", "R01820", 100, "60.7271"}, // номинал 100: курс за 1 иену — 0,607271
-		{"AZN", "R01020A", 1, "53.7256"},  // id с буквой — берём как есть
+	for code, id := range map[string]string{
+		"USD": "R01235",
+		"EUR": "R01239",
+		"JPY": "R01820",
+		"AZN": "R01020A", // id с буквой — берём как есть
 	} {
-		v, ok := byCode[c.code]
-		if !ok {
-			t.Fatalf("%s нет в образце", c.code)
-		}
-		if v.ID != c.id || v.Rate.Nominal != c.nominal || v.Rate.Value != c.value || !v.Rate.Date.Equal(d.Date) {
-			t.Fatalf("%s: %+v", c.code, v)
+		if v := byCode[code]; v.ID != id {
+			t.Fatalf("%s: %+v", code, v)
 		}
 	}
 }
@@ -146,9 +138,17 @@ func TestParseErrors(t *testing.T) {
 			t.Errorf("%s: принято", name)
 		}
 	}
-	if _, err := ParseDaily(strings.NewReader(head +
-		`<ValCurs Date="02.03.2024"><Valute ID="R01235"><CharCode>USD</CharCode><Nominal>1</Nominal><Value>abc</Value></Valute></ValCurs>`)); err == nil {
-		t.Error("мусор в daily принят")
+	// Daily нужен только для CharCode → ID: кривой курс или номинал
+	// не ошибка, валюта без ID или CharCode пропускается.
+	d, err := ParseDaily(strings.NewReader(head + `<ValCurs Date="02.03.2024">` +
+		`<Valute ID="R01235"><CharCode>USD</CharCode><Nominal>1</Nominal><Value>abc</Value></Valute>` +
+		`<Valute ID="R01225"><CharCode>IRR</CharCode><Nominal>10000000</Nominal><Value></Value></Valute>` +
+		`<Valute ID=""><CharCode>XXX</CharCode></Valute></ValCurs>`))
+	if err != nil || len(d.Valutes) != 2 || d.Valutes[0] != (DailyValute{"R01235", "USD"}) {
+		t.Errorf("daily с кривыми курсами: %+v, %v", d, err)
+	}
+	if _, err := ParseDaily(strings.NewReader(head + `<ValCurs Date="31.02.2024"></ValCurs>`)); err == nil {
+		t.Error("неверная дата daily принята")
 	}
 }
 

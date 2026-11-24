@@ -26,7 +26,9 @@ type Rate struct {
 	Value   string
 }
 
-// Daily — ответ XML_daily.asp: курсы всех валют на одну дату.
+// Daily — ответ XML_daily.asp: валюты, которые ЦБ котирует на дату. Нужен
+// только для сопоставления CharCode → ID; курсы из него не берутся
+// и не проверяются — в БД пишется только история из XML_dynamic.asp.
 type Daily struct {
 	Date    time.Time
 	Valutes []DailyValute
@@ -37,7 +39,6 @@ type Daily struct {
 type DailyValute struct {
 	ID       string
 	CharCode string
-	Rate     Rate
 }
 
 // Структуры, в которые encoding/xml раскладывает ответ. Теги вида
@@ -50,8 +51,6 @@ type xmlDaily struct {
 	Valutes []struct {
 		ID       string `xml:"ID,attr"`
 		CharCode string `xml:"CharCode"`
-		Nominal  string `xml:"Nominal"`
-		Value    string `xml:"Value"`
 	} `xml:"Valute"`
 }
 
@@ -66,7 +65,9 @@ type xmlDynamic struct {
 	} `xml:"Record"`
 }
 
-// ParseDaily разбирает ответ XML_daily.asp.
+// ParseDaily разбирает ответ XML_daily.asp. Курсы и номиналы в нём не
+// проверяются: кривая запись чужой валюты (у ЦБ их около 55) не должна
+// останавливать загрузку USD и EUR. Валюта без ID или CharCode пропускается.
 func ParseDaily(r io.Reader) (Daily, error) {
 	var x xmlDaily
 	if err := decode(r, &x); err != nil {
@@ -81,14 +82,11 @@ func ParseDaily(r io.Reader) (Daily, error) {
 	}
 	out := Daily{Date: date, Valutes: make([]DailyValute, 0, len(x.Valutes))}
 	for _, v := range x.Valutes {
-		rate, err := parseRate(date, v.Nominal, v.Value)
-		if err != nil {
-			return Daily{}, fmt.Errorf("%s: %w", v.CharCode, err)
+		id, code := strings.TrimSpace(v.ID), strings.TrimSpace(v.CharCode)
+		if id == "" || code == "" {
+			continue
 		}
-		if v.ID == "" || v.CharCode == "" {
-			return Daily{}, errors.New("валюта без ID или CharCode")
-		}
-		out.Valutes = append(out.Valutes, DailyValute{ID: v.ID, CharCode: v.CharCode, Rate: rate})
+		out.Valutes = append(out.Valutes, DailyValute{ID: id, CharCode: code})
 	}
 	return out, nil
 }

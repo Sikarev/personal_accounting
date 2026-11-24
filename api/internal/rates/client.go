@@ -13,9 +13,6 @@ import (
 	"time"
 )
 
-// DefaultBaseURL — официальный XML-сервис ЦБ РФ (https://www.cbr.ru/development/SXML/).
-const DefaultBaseURL = "https://www.cbr.ru/scripts"
-
 const (
 	// requestTimeout — предел на один запрос к ЦБ. История валюты с 2000 года —
 	// около 800 КБ, ЦБ отдаёт её за доли секунды.
@@ -33,7 +30,8 @@ type Client struct {
 }
 
 // NewClient создаёт клиента. baseURL — без завершающего «/»
-// (DefaultBaseURL или адрес httptest-сервера в тестах).
+// (официальный адрес — умолчание CBR_BASE_URL в internal/config;
+// в тестах — адрес httptest-сервера).
 func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
@@ -41,8 +39,8 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-// Daily возвращает курсы всех валют на дату. Если на дату курсов ещё нет
-// (будущая дата), ЦБ отдаёт последние установленные — дату смотри в Daily.Date.
+// Daily возвращает список валют ЦБ на дату (коды ЦБ по CharCode). Если на дату
+// курсов ещё нет (будущая дата), ЦБ отдаёт последний список — дату смотри в Daily.Date.
 func (c *Client) Daily(ctx context.Context, date time.Time) (Daily, error) {
 	q := url.Values{"date_req": {date.Format(cbrQueryDate)}}
 	var out Daily

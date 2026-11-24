@@ -29,7 +29,9 @@ type fakeCBR struct {
 	// broken — id, история которого отдаётся мусором; dailyDown — daily отвечает 500.
 	broken    string
 	dailyDown bool
-	requests  []string // запросы dynamic: "id from to"
+	// dailyExtra — сырые <Valute> в конце списка daily (кривые записи чужих валют).
+	dailyExtra string
+	requests   []string // запросы dynamic: "id from to"
 }
 
 type fakeRec struct{ nominal, value string }
@@ -76,6 +78,7 @@ func (f *fakeCBR) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(&b, `<Valute ID="%s"><CharCode>%s</CharCode><Nominal>1</Nominal><Name>`+
 				"\xc2\xe0\xeb\xfe\xf2\xe0"+`</Name><Value>1,0</Value></Valute>`, id, code)
 		}
+		b.WriteString(f.dailyExtra)
 		b.WriteString("</ValCurs>")
 	case "/XML_dynamic.asp":
 		id := q.Get("VAL_NM_RQ")
@@ -276,6 +279,24 @@ func TestSyncCBRErrorKeepsLoadedRates(t *testing.T) {
 	}
 	if eur := dbRates(t, pool, "EUR"); fmt.Sprint(eur) != "map[2024-02-01:97.00000000]" {
 		t.Fatalf("EUR: %v", eur)
+	}
+}
+
+func TestSyncIgnoresBrokenDailyEntries(t *testing.T) {
+	cbr, client := newFakeCBR(t)
+	pool, s, _, _ := setup(t, client)
+	// Валюты не из справочника с пустым курсом и номиналом больше предела:
+	// daily нужен только для CharCode → ID, загрузку они не останавливают.
+	cbr.dailyExtra = `<Valute ID="R01225"><CharCode>IRR</CharCode><Nominal>10000000</Nominal><Value></Value></Valute>` +
+		`<Valute ID="R01999"><CharCode>ZZZ</CharCode><Nominal>-1</Nominal><Value>н/д</Value></Valute>`
+	cbr.set("R01235", "01.02.2024", "1", "89,6741")
+
+	res := mustSync(t, s)
+	if res.Currencies != 2 || res.Written != 1 {
+		t.Fatalf("%+v", res)
+	}
+	if usd := dbRates(t, pool, "USD"); fmt.Sprint(usd) != "map[2024-02-01:89.67410000]" {
+		t.Fatalf("USD: %v", usd)
 	}
 }
 

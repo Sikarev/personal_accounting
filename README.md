@@ -17,12 +17,14 @@ api/                Go-бэкенд
   sqlc.yaml         настройки генерации кода по SQL-запросам
   cmd/api/          HTTP-сервер
   cmd/migrate/      применение миграций БД
+  cmd/rates/        разовая загрузка курсов ЦБ РФ (`go run ./cmd/rates sync`)
   internal/         код приложения (не импортируется извне — правило Go для папки internal)
     config/         настройки из переменных окружения
     httpapi/        роутер, middleware, обработчики эндпоинтов
     auth/           хеширование паролей (argon2id), токены сессий
     ratelimit/      ограничение частоты запросов в памяти процесса
     mail/           письма: SMTP (net/smtp), фоновая отправка, шаблоны
+    rates/          курсы ЦБ РФ: клиент XML-сервиса ЦБ, разбор, синхронизация с БД
     oapi/           сгенерировано oapi-codegen из openapi.yaml
     db/queries/     SQL-запросы для sqlc
     db/dbgen/       сгенерировано sqlc
@@ -46,8 +48,8 @@ docker-compose.yml  Postgres и Mailpit для разработки
 # 1. Postgres и Mailpit (перехват писем, http://localhost:8025)
 docker compose up -d
 
-# 2. Миграции
-cd api && go run ./cmd/migrate up
+# 2. Миграции и курсы ЦБ (курсы API загружает и сам при старте; команда — чтобы не ждать)
+cd api && go run ./cmd/migrate up && go run ./cmd/rates sync
 
 # 3. API (http://localhost:8080)
 cd api && go run ./cmd/api
@@ -107,9 +109,11 @@ cd web && pnpm dev --host   # Vite покажет адрес Network: http://192
 | `SMTP_HOST`, `SMTP_PORT` | `localhost`, `1025` (Mailpit) | SMTP-сервер для писем; STARTTLS включается, если сервер его предлагает |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | пусто | логин SMTP; пустой — без входа. С логином нужен TLS (STARTTLS): по открытому соединению `net/smtp` пароль не передаст (кроме localhost) |
 | `MAIL_FROM` | `Домашняя бухгалтерия <no-reply@localhost>` | отправитель писем |
+| `RATES_SYNC` | `true` | фоновая загрузка курсов ЦБ РФ в процессе API (при старте и раз в 3 часа); `false` — для работы без сети. На `cmd/rates` не влияет |
+| `CBR_BASE_URL` | `https://www.cbr.ru/scripts` | адрес XML-сервиса ЦБ РФ; менять только для проверки с заглушкой |
 | `TEST_DATABASE_URL` | Postgres из `docker-compose.yml` | сервер для временных БД тестов |
 
-Подробнее о сессиях, CSRF, лимитах, реальном IP и письмах — в [docs/api.md](docs/api.md#авторизация).
+Подробнее о сессиях, CSRF, лимитах, реальном IP и письмах — в [docs/api.md](docs/api.md#авторизация), о курсах ЦБ — в [docs/api.md](docs/api.md#курсы-цб-рф).
 
 ## Бэкенд: генерация кода и тесты
 

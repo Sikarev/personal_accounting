@@ -5,3 +5,6 @@
 web/src/shared/api/generated/** text eol=lf
 api/internal/oapi/oapi.gen.go text eol=lf
 api/internal/db/dbgen/** text eol=lf
+
+# Образцы ответов ЦБ РФ в исходной кодировке windows-1251 — байт в байт, без перевода строк.
+api/internal/rates/testdata/** -text

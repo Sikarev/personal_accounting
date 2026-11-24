@@ -102,3 +102,32 @@ func TestMailDefaults(t *testing.T) {
 		t.Fatal("неверный MAIL_FROM принят")
 	}
 }
+
+func TestRatesSettings(t *testing.T) {
+	for _, c := range []struct {
+		sync, url string
+		wantSync  bool
+		wantURL   string
+		wantErr   bool
+	}{
+		{"", "", true, "https://www.cbr.ru/scripts", false},
+		{"false", "", false, "https://www.cbr.ru/scripts", false},
+		{"true", "http://127.0.0.1:9000/scripts/", true, "http://127.0.0.1:9000/scripts", false},
+		{"maybe", "", false, "", true},
+		{"", "www.cbr.ru", false, "", true},
+	} {
+		t.Setenv("APP_ENV", EnvDevelopment)
+		t.Setenv("APP_BASE_URL", "")
+		t.Setenv("COOKIE_SECURE", "")
+		t.Setenv("TRUSTED_PROXIES", "")
+		t.Setenv("RATES_SYNC", c.sync)
+		t.Setenv("CBR_BASE_URL", c.url)
+		cfg, err := Load()
+		if (err != nil) != c.wantErr {
+			t.Fatalf("%+v: ошибка %v", c, err)
+		}
+		if err == nil && (cfg.RatesSync != c.wantSync || cfg.CBRBaseURL != c.wantURL) {
+			t.Fatalf("%+v: RatesSync = %v, CBRBaseURL = %q", c, cfg.RatesSync, cfg.CBRBaseURL)
+		}
+	}
+}

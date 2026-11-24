@@ -20,6 +20,7 @@ import (
 	"personal-accounting/api/internal/httpapi"
 	"personal-accounting/api/internal/logging"
 	"personal-accounting/api/internal/mail"
+	"personal-accounting/api/internal/rates"
 )
 
 const (
@@ -67,6 +68,21 @@ func run() error {
 		Password: cfg.SMTP.Password,
 		From:     cfg.MailFrom,
 	}, logger, mailSendTimeout)
+
+	// Курсы ЦБ загружаются в фоне: при старте догружается недостающее, затем
+	// раз в rates.DefaultInterval. Ошибки — в лог, API от них не зависит.
+	// ratesDone закрывается, когда цикл вышел (после отмены ctx).
+	ratesDone := make(chan struct{})
+	if cfg.RatesSync {
+		syncer := rates.NewSyncer(rates.NewClient(cfg.CBRBaseURL), db, logger, rates.Options{})
+		go func() {
+			defer close(ratesDone)
+			syncer.Run(ctx, rates.DefaultInterval)
+		}()
+	} else {
+		close(ratesDone)
+		logger.Info("rates: sync disabled (RATES_SYNC=false)")
+	}
 
 	router, err := httpapi.NewRouter(logger, db, httpapi.Options{
 		CookieSecure:       cfg.CookieSecure,
@@ -119,6 +135,14 @@ func run() error {
 	defer cancelMail()
 	if err := mailer.Wait(mailCtx); err != nil {
 		logger.Warn("shutdown: не все письма отправлены", "err", err)
+	}
+
+	// Синхронизация курсов видит отменённый ctx и прерывает запросы к ЦБ и БД;
+	// ждём её выхода, чтобы не закрыть пул БД (defer db.Close) под ней.
+	select {
+	case <-ratesDone:
+	case <-time.After(shutdownTimeout):
+		logger.Warn("shutdown: синхронизация курсов не остановилась вовремя")
 	}
 	return shutdownErr
 }

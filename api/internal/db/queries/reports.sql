@@ -14,14 +14,20 @@
 -- В exchange_rates — «рублей за 1 единицу», поэтому формула верна только для
 -- базовой валюты RUB (в MVP другой нет).
 --
--- Сначала операции складываются по (валюта, дата) и т. п. — так курс ищется
--- один раз на группу, а не на каждую операцию. Суммы — numeric (SUM(bigint)
--- в Postgres — numeric), умножение на курс точное; округление round(numeric)
--- (половина — от нуля) — один раз на каждое число ответа.
+-- Сначала операции складываются в группы g (валюта, дата и категория или
+-- счёт). Множитель считается в CTE fx — один раз на уникальную пару
+-- (валюта, дата) — и присоединяется к группам. fx — MATERIALIZED: иначе
+-- планировщик подставил бы выражение factor в каждое место, где оно нужно
+-- (SUM, оконная SUM, FILTER для missing), и искал бы курс по разу на
+-- каждое (замер — в docs/api.md → «Отчёты»).
 --
--- Выражение factor повторяется во всех запросах (sqlc не умеет общие
--- фрагменты SQL). Меняешь в одном — меняй во всех, включая ListAccounts
--- в accounts.sql; тесты пересчёта проверяют каждый отчёт.
+-- Суммы — numeric (SUM(bigint) в Postgres — numeric), умножение на курс
+-- точное; округление round(numeric) (половина — от нуля) — один раз на
+-- каждое число ответа.
+--
+-- CTE fx повторяется во всех запросах (sqlc не умеет общие фрагменты SQL).
+-- Меняешь в одном — меняй во всех, включая ListAccounts в accounts.sql;
+-- тесты пересчёта проверяют каждый отчёт.
 
 -- name: GetFamilyBaseCurrency :one
 SELECT base_currency::text AS code FROM families WHERE id = @family_id;
@@ -54,21 +60,26 @@ g AS (
       AND (COALESCE(cardinality(@author_ids::uuid[]), 0) = 0 OR t.created_by = ANY(@author_ids::uuid[]))
     GROUP BY t.category_id, a.currency_code, t.op_date
 ),
-conv AS (
-    SELECT g.category_id, g.cur,
-           g.amount * CASE WHEN g.cur = base.code THEN 1::numeric
+fx AS MATERIALIZED (
+    SELECT k.cur, k.d,
+           CASE WHEN k.cur = base.code THEN 1::numeric
                 ELSE COALESCE(
                     (SELECT r.rate FROM exchange_rates r
-                     WHERE r.currency_code = g.cur AND r.rate_date <= g.op_date
+                     WHERE r.currency_code = k.cur AND r.rate_date <= k.d
                      ORDER BY r.rate_date DESC LIMIT 1),
                     (SELECT r.rate FROM exchange_rates r
-                     WHERE r.currency_code = g.cur AND r.rate_date > g.op_date
+                     WHERE r.currency_code = k.cur AND r.rate_date > k.d
                      ORDER BY r.rate_date LIMIT 1))
                     * power(10::numeric, (base.minor_units - c.minor_units)::numeric)
-           END AS base_amount
-    FROM g
+           END AS factor
+    FROM (SELECT DISTINCT g.cur, g.op_date AS d FROM g) k
     CROSS JOIN base
-    JOIN currencies c ON c.code = g.cur
+    JOIN currencies c ON c.code = k.cur
+),
+conv AS (
+    SELECT g.category_id, g.cur, g.amount * fx.factor AS base_amount
+    FROM g
+    JOIN fx ON fx.cur = g.cur AND fx.d = g.op_date
 )
 SELECT conv.category_id::uuid AS category_id,
        COALESCE(round(SUM(conv.base_amount)), 0)::bigint AS amount,
@@ -103,8 +114,9 @@ g AS (
       AND (COALESCE(cardinality(@author_ids::uuid[]), 0) = 0 OR t.created_by = ANY(@author_ids::uuid[]))
     GROUP BY a.currency_code, t.op_date
 ),
-conv AS (
-    SELECT g.cur, g.op_date, g.expense, g.income,
+-- Пары (валюта, дата) в g уже уникальны, DISTINCT не нужен.
+fx AS MATERIALIZED (
+    SELECT g.cur, g.op_date AS d,
            CASE WHEN g.cur = base.code THEN 1::numeric
                 ELSE COALESCE(
                     (SELECT r.rate FROM exchange_rates r
@@ -118,6 +130,11 @@ conv AS (
     FROM g
     CROSS JOIN base
     JOIN currencies c ON c.code = g.cur
+),
+conv AS (
+    SELECT g.cur, g.op_date, g.expense, g.income, fx.factor
+    FROM g
+    JOIN fx ON fx.cur = g.cur AND fx.d = g.op_date
 )
 -- date_trunc от timestamp без пояса: от date он взял бы timestamptz,
 -- и результат зависел бы от пояса сессии.
@@ -187,8 +204,9 @@ bal AS (
     LEFT JOIN deltas ON deltas.cur = cs.cur AND deltas.n = pts.n
     GROUP BY cs.cur, pts.d, pts.n
 ),
-conv AS (
-    SELECT bal.cur, bal.d, bal.balance,
+-- Пары (валюта, точка) в bal уникальны.
+fx AS MATERIALIZED (
+    SELECT bal.cur, bal.d,
            CASE WHEN bal.cur = base.code THEN 1::numeric
                 ELSE COALESCE(
                     (SELECT r.rate FROM exchange_rates r
@@ -203,9 +221,10 @@ conv AS (
     CROSS JOIN base
     JOIN currencies c ON c.code = bal.cur
 )
-SELECT conv.d::date AS point,
-       COALESCE(round(SUM(conv.balance * conv.factor)), 0)::bigint AS balance,
-       COALESCE(array_agg(DISTINCT conv.cur::text) FILTER (WHERE conv.factor IS NULL), '{}')::text[] AS missing
-FROM conv
-GROUP BY conv.d
-ORDER BY conv.d;
+SELECT bal.d::date AS point,
+       COALESCE(round(SUM(bal.balance * fx.factor)), 0)::bigint AS balance,
+       COALESCE(array_agg(DISTINCT bal.cur::text) FILTER (WHERE fx.factor IS NULL), '{}')::text[] AS missing
+FROM bal
+JOIN fx ON fx.cur = bal.cur AND fx.d = bal.d
+GROUP BY bal.d
+ORDER BY bal.d;

@@ -92,7 +92,7 @@ func (s *server) CreateAccount(ctx context.Context, req oapi.CreateAccountReques
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
-	acc, err := s.getAccount(ctx, s.q, p, id)
+	acc, err := s.getAccountNow(ctx, p, id)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (s *server) UpdateAccount(ctx context.Context, req oapi.UpdateAccountReques
 	if err := accountErr(err, "update account"); err != nil {
 		return nil, err
 	}
-	acc, err := s.getAccount(ctx, s.q, p, id)
+	acc, err := s.getAccountNow(ctx, p, id)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (s *server) ArchiveAccount(ctx context.Context, req oapi.ArchiveAccountRequ
 	if err := accountErr(err, "archive account"); err != nil {
 		return nil, err
 	}
-	acc, err := s.getAccount(ctx, s.q, p, id)
+	acc, err := s.getAccountNow(ctx, p, id)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func (s *server) UnarchiveAccount(ctx context.Context, req oapi.UnarchiveAccount
 	if err := accountErr(err, "unarchive account"); err != nil {
 		return nil, err
 	}
-	acc, err := s.getAccount(ctx, s.q, p, id)
+	acc, err := s.getAccountNow(ctx, p, id)
 	if err != nil {
 		return nil, err
 	}
@@ -244,6 +244,9 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 		// Пояс проверяется при регистрации, сюда попасть не должны.
 		return nil, fmt.Errorf("load user timezone %q: %w", tz, err)
 	}
+	// «Сегодня» — до транзакции: внутри неё никаких чтений через пул
+	// (см. getAccount). Это и дата корректировки, и дата курса baseBalance.
+	today := dateIn(now, loc)
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -261,7 +264,7 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 	if locked.ArchivedAt != nil {
 		return nil, problem.Conflict(problem.CodeAccountArchived, "Счёт в архиве: сначала верните его из архива.")
 	}
-	acc, err := s.getAccount(ctx, q, p, req.AccountId)
+	acc, err := getAccount(ctx, q, p, req.AccountId, today)
 	if err != nil {
 		return nil, err
 	}
@@ -276,7 +279,7 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 		FamilyID:  p.FamilyID,
 		AccountID: req.AccountId,
 		Amount:    diff,
-		OpDate:    dateIn(now, loc),
+		OpDate:    today,
 		CreatedBy: p.UserID,
 	})
 	if err != nil {
@@ -292,7 +295,7 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 	}
 	// Остаток перечитываем внутри транзакции: так ответ точно совпадает с тем,
 	// что увидит следующий GET /accounts.
-	if resp.Account, err = s.getAccount(ctx, q, p, req.AccountId); err != nil {
+	if resp.Account, err = getAccount(ctx, q, p, req.AccountId, today); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -302,13 +305,22 @@ func (s *server) AdjustAccountBalance(ctx context.Context, req oapi.AdjustAccoun
 	return resp, nil
 }
 
-// getAccount читает один видимый счёт с остатком. q — s.q или запросы
-// внутри транзакции.
-func (s *server) getAccount(ctx context.Context, q *dbgen.Queries, p Principal, id uuid.UUID) (oapi.Account, error) {
+// getAccountNow читает видимый счёт вне транзакции: «сегодня» пользователя
+// (дата курса для baseBalance) считает сам.
+func (s *server) getAccountNow(ctx context.Context, p Principal, id uuid.UUID) (oapi.Account, error) {
 	today, err := s.userToday(ctx, p.UserID)
 	if err != nil {
 		return oapi.Account{}, err
 	}
+	return getAccount(ctx, s.q, p, id, today)
+}
+
+// getAccount читает один видимый счёт с остатком. q — s.q или запросы
+// внутри транзакции; today — «сегодня» пользователя (дата курса для
+// baseBalance). today передаётся готовым, а не читается здесь: внутри
+// транзакции чтение через пул (s.q) ждало бы второе соединение, держа
+// первое, — при занятом пуле одновременные запросы зависли бы навсегда.
+func getAccount(ctx context.Context, q *dbgen.Queries, p Principal, id uuid.UUID, today time.Time) (oapi.Account, error) {
 	rows, err := q.ListAccounts(ctx, dbgen.ListAccountsParams{FamilyID: p.FamilyID, UserID: p.UserID, OnlyID: &id, Today: today})
 	if err != nil {
 		return oapi.Account{}, fmt.Errorf("get account: %w", err)

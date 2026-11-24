@@ -167,36 +167,7 @@
   gap: var(--mantine-spacing-sm);
 }
 
-/* ——— Лента ——— */
-
-.days {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mantine-spacing-lg);
-}
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-
-  & > li + li {
-    border-top: 1px solid var(--mantine-color-default-border);
-  }
-}
-
-.menuButton {
-  flex: none;
-  width: var(--app-touch-target);
-  height: var(--app-touch-target);
-  min-width: var(--app-touch-target);
-  min-height: var(--app-touch-target);
-}
-
-/* Удаление — цвет «проблемы» из темы (контраст AA в обеих темах), а не red Mantine. */
-.danger {
-  color: var(--app-color-negative);
-}
+/* ——— Подгрузка ——— */
 
 .loadMore {
   display: flex;
@@ -204,39 +175,4 @@
   align-items: stretch;
   gap: var(--mantine-spacing-md);
   margin-top: var(--mantine-spacing-md);
-}
-
-/* ——— Правка ——— */
-
-/* «Дублировать», «Удалить», «Отмена» — над формой, в ряд, переносятся. */
-.editActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--mantine-spacing-sm);
-  margin-bottom: var(--mantine-spacing-md);
-}
-
-/* Подсказка «Сохраните или отмените изменения» — на всю ширину ряда, под кнопками;
-   пустая не занимает места. */
-.editHint {
-  flex-basis: 100%;
-
-  &:empty {
-    display: none;
-  }
-}
-
-/* «Отмена» — в конце ряда, отдельно от действий над операцией. */
-.editCancel {
-  margin-inline-start: auto;
-}
-
-.editBody {
-  display: flex;
-  flex-direction: column;
-}
-
-/* Форма на месте строки: отступ от соседних строк. */
-.inlineEdit {
-  margin-block: var(--mantine-spacing-sm);
 }

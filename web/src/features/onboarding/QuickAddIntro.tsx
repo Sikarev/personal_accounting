@@ -12,11 +12,23 @@ import classes from './Onboarding.module.css'
 /**
  * Онбординг, шаг 2: первый счёт создан — показываем, где вносить операции. Пока карточка
  * видна, оболочка выделяет кнопку «+» / «Добавить операцию» (`useOnboarding().introVisible`).
+ * На desktop карточка стоит над главной и указывает на форму «Новая операция» на странице.
  *
  * При появлении фокус переходит на карточку: кнопка «Создать счёт» исчезла вместе с формой,
  * и экранный диктор прочитает заголовок и подсказку — результат действия.
  */
-export function QuickAddIntro({ onDismiss }: { onDismiss: () => void }) {
+export function QuickAddIntro({
+  onDismiss,
+  onAddFirst,
+}: {
+  /** «Понятно»: карточка скрыта — куда перевести фокус. */
+  onDismiss: () => void
+  /**
+   * «Внести первую операцию», когда форма есть прямо на странице (desktop): перевести
+   * в неё фокус. Без него кнопка открывает окно быстрого ввода.
+   */
+  onAddFirst?: () => void
+}) {
   const t = useT()
   const mobile = useMobileLayout()
   const quickAdd = useQuickAdd()
@@ -57,8 +69,8 @@ export function QuickAddIntro({ onDismiss }: { onDismiss: () => void }) {
           <Button
             size="md"
             leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
-            onClick={() => quickAdd.open()}
-            aria-haspopup="dialog"
+            onClick={() => (onAddFirst ? onAddFirst() : quickAdd.open())}
+            aria-haspopup={onAddFirst ? undefined : 'dialog'}
           >
             {t.onboarding.addFirst}
           </Button>

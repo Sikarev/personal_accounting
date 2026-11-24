@@ -1,0 +1,31 @@
+/* Главная сумма — во всю ширину, остальные валюты — строкой под ней, переносятся целиком. */
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--mantine-spacing-lg);
+  row-gap: var(--mantine-spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.main {
+  flex-basis: 100%;
+  min-width: 0;
+  font-size: var(--mantine-font-size-xl);
+  line-height: var(--mantine-line-height-xl);
+  font-weight: 600;
+}
+
+.other {
+  min-width: 0;
+  font-size: var(--mantine-font-size-lg);
+  line-height: var(--mantine-line-height-lg);
+  font-weight: 500;
+}
+
+/* Не шире строки: перенос — только по разрядам (Money wrap), не по символам. */
+.amount {
+  max-width: 100%;
+}

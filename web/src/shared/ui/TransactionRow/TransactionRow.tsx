@@ -18,8 +18,11 @@ import classes from './TransactionRow.module.css'
 
 export type TransactionRowProps = {
   transaction: Transaction
-  /** Названия счетов по id — все, включая архивные: старая операция может быть на архивном. */
-  accountNames: ReadonlyMap<string, string>
+  /**
+   * Названия счетов по id — все, включая архивные: старая операция может быть на архивном.
+   * `null` — счета не загружены: подпись счёта не показывается.
+   */
+  accountNames: ReadonlyMap<string, string> | null
   /** Категории по id — все, включая архивные (у подкатегории нужен родитель). */
   categories: ReadonlyMap<string, Category>
   /** Показать автора — только если в семье больше одного человека (ux.md, «Лента»). */

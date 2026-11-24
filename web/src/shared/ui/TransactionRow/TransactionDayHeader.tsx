@@ -16,6 +16,8 @@ export type TransactionDayHeaderProps = {
   totals: readonly CurrencyTotal[]
   /** Id заголовка — для `aria-labelledby` группы. */
   id?: string
+  /** Уровень заголовка дня: 2 — под заголовком экрана (лента), 3 — внутри блока. */
+  headingOrder?: 2 | 3
 }
 
 /**
@@ -23,12 +25,18 @@ export type TransactionDayHeaderProps = {
  * итог дня — расходы со знаком «−» обычным цветом, доходы «+» зелёным, по каждой валюте.
  * Нулевые суммы не показываются. Итог переносится целыми суммами, если не помещается.
  */
-export function TransactionDayHeader({ date, today, totals, id }: TransactionDayHeaderProps) {
+export function TransactionDayHeader({
+  date,
+  today,
+  totals,
+  id,
+  headingOrder = 2,
+}: TransactionDayHeaderProps) {
   const t = useT()
   const amounts = totalAmounts(totals)
   return (
     <div className={classes.root}>
-      <Title order={2} size="sm" fw={600} id={id} className={classes.date}>
+      <Title order={headingOrder} size="sm" fw={600} id={id} className={classes.date}>
         {formatOpDate(date, today)}
       </Title>
       {amounts.length > 0 && (

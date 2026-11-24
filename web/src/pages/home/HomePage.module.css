@@ -1,0 +1,277 @@
+/* ——— Раскладка ———
+   Mobile: баланс со счетами, под ними последние операции.
+   Desktop (data-with-form): форма быстрого ввода справа колонкой от баланса и счетов, когда
+   хватает ширины; на узком desktop — сверху, над балансом. Ширина — контейнера (контента
+   рядом с боковым меню), а не окна: @container. */
+.layout {
+  container: home / inline-size;
+}
+
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+.accountsArea,
+.recentArea,
+.formArea {
+  min-width: 0;
+}
+
+/* Узкий desktop: форма над балансом. В документе она идёт после баланса — экранный диктор
+   и Tab сначала встречают главный ответ экрана, а на широком экране так и выглядит. */
+.grid[data-with-form] .formArea {
+  order: -1;
+}
+
+@container home (min-width: 48rem) {
+  .grid[data-with-form] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 26rem);
+    /* Последняя строка забирает лишнюю высоту, если форма выше баланса со счетами: иначе
+       между блоками слева появлялись бы пустоты. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'accounts form'
+      'recent form';
+    align-items: start;
+  }
+
+  .grid[data-with-form] .accountsArea {
+    grid-area: accounts;
+  }
+
+  .grid[data-with-form] .recentArea {
+    grid-area: recent;
+  }
+
+  .grid[data-with-form] .formArea {
+    grid-area: form;
+    order: 0;
+  }
+}
+
+/* Шаг 2 онбординга на desktop — над главной. */
+.intro {
+  margin-bottom: var(--mantine-spacing-lg);
+}
+
+/* Кнопки и ссылки-кнопки — зона касания не ниже 44 px (у Mantine md — 42 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}
+
+/* ——— Баланс и счета ——— */
+
+/* Строки доходят до скруглённых краёв карточки — обрезаем по радиусу. Карточка —
+   контейнер: строки перестраиваются по её ширине (крупный шрифт на телефоне). */
+.accountsCard {
+  overflow: hidden;
+  container: home-accounts / inline-size;
+}
+
+.balance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-md);
+}
+
+.noAccounts {
+  padding: 0 var(--mantine-spacing-md) var(--mantine-spacing-md);
+}
+
+.group {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.groupTitle {
+  margin: 0;
+}
+
+/* «Общие · 2 счёта ▾» — заголовок-кнопка во всю ширину карточки. */
+.disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+  min-height: var(--app-touch-target);
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  font: inherit;
+  color: var(--mantine-color-text);
+
+  /* Кольцо фокуса внутрь: снаружи его обрезала бы карточка (overflow: hidden). */
+  &:focus-visible {
+    outline-offset: calc(-1 * var(--mantine-spacing-xs) / 2);
+  }
+
+  &:hover {
+    background-color: var(--mantine-color-default-hover);
+  }
+}
+
+.disclosureText {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--mantine-spacing-sm);
+  min-width: 0;
+}
+
+.chevron {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+
+  &[data-expanded] {
+    transform: rotate(180deg);
+  }
+}
+
+.accountList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Строка счёта как на «Счетах»: метка · название и тип · остаток. */
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  min-height: calc(var(--app-touch-target) + var(--mantine-spacing-md));
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.mark {
+  flex: none;
+  display: inline-flex;
+}
+
+/* Название с типом и остаток в ряд; огромный остаток не сжимает название в пару букв —
+   под название остаётся не меньше 5em, остаток переносится на следующую строку. */
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--mantine-spacing-md);
+}
+
+.rowText {
+  flex: 1 1 5em;
+  min-width: 0;
+}
+
+.amount {
+  flex: none;
+  max-width: 100%;
+  margin-inline-start: auto;
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* Узкая карточка — телефон с крупным системным шрифтом (ux.md, раздел 6: до 200 %).
+   В em: при 200 % порог растёт вместе со шрифтом. Метка скрывается (она декоративна,
+   тип есть текстом), остаток уходит под название. */
+@container home-accounts (max-width: 20em) {
+  .mark {
+    display: none;
+  }
+
+  .accountRow,
+  .disclosure,
+  .balance {
+    padding-inline: var(--mantine-spacing-sm);
+  }
+
+  .rowMain {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+
+  .rowText {
+    flex: none;
+  }
+
+  .amount {
+    margin-inline-start: 0;
+  }
+}
+
+/* ——— Последние операции ——— */
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Заголовок блока и ссылка «Все операции» — в ряд; при нехватке места ссылка переносится. */
+.blockHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: var(--mantine-spacing-md);
+}
+
+/* ——— Форма на странице ——— */
+
+.formCard {
+  /* Фокус ставится программно (форма ещё грузится) — кольцо как у остальных элементов. */
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+.formTitle {
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+/* ——— Ошибка блока ——— */
+
+.blockError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+}
+
+.blockErrorText {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+/* ——— Скелетон ———
+   Как скелетон RouteBoundary: высота заголовка экрана (h1, шрифт xl) — вёрстка не прыгает. */
+.skeletonTitle {
+  width: 40%;
+  height: var(--mantine-font-size-xl);
+  margin-block: var(--mantine-spacing-xs) 0;
+}
+
+.skeletonLabel {
+  width: 8rem;
+  height: var(--mantine-font-size-sm);
+}
+
+.skeletonBalance {
+  width: 12rem;
+  height: var(--mantine-font-size-xl);
+}
+
+.skeletonRow {
+  height: var(--mantine-font-size-md);
+}

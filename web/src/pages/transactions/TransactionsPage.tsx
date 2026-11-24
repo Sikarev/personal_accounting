@@ -28,22 +28,21 @@ import {
 } from '../../shared/lib/transactionFilters'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
-import {
-  EmptyState,
-  PageHeader,
-  ResponsiveSheet,
-  TransactionListSkeleton,
-  transactionTitle,
-} from '../../shared/ui'
+import { usePendingFocus } from '../../shared/lib/usePendingFocus'
+import { EmptyState, PageHeader, TransactionListSkeleton, transactionTitle } from '../../shared/ui'
 import { icons } from '../../theme'
-import { ActiveFilterChips, FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
+import { EditTransaction, INLINE_EDIT } from '../../features/transactions/EditTransaction'
+import { EditTransactionSheet } from '../../features/transactions/EditTransactionSheet'
+import { rowButtonSelector } from '../../features/transactions/focusTargets'
+import { TransactionDays, type RowAction } from '../../features/transactions/TransactionDays'
 import type { TransactionFormState } from '../../features/transactions/TransactionFormView'
-import { EditTransaction, INLINE_EDIT } from './EditTransaction'
-import { FeedList, LoadMore, type RowAction } from './FeedList'
+import { useEditSheet } from '../../features/transactions/useEditSheet'
+import { useTransactionActions } from '../../features/transactions/useTransactionActions'
+import { ActiveFilterChips, FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
 import { FeedSummary } from './FeedSummary'
 import { activeFilterChips } from './filterOptions'
-import { rowButtonSelector, SEARCH_FIELD } from './focusTargets'
-import { useTransactionActions } from './useTransactionActions'
+import { SEARCH_FIELD } from './focusTargets'
+import { LoadMore } from './LoadMore'
 import classes from './TransactionsPage.module.css'
 
 /**
@@ -159,50 +158,38 @@ export function TransactionsPage() {
   // Элемент с фокусом может исчезнуть: удалённая строка (с кнопкой меню), закрытая форма
   // правки на месте строки. Фокус ставим, когда изменение уже на экране, — иначе он ушёл бы
   // вместе с элементом на `body`. `ready` — «изменение отрисовано».
-  const pendingFocus = useRef<{
-    ready: () => boolean
-    targets: string[]
-  } | null>(null)
   const itemsRef = useRef(items)
   useEffect(() => {
     itemsRef.current = items
-    const pending = pendingFocus.current
-    if (!pending || !pending.ready()) return
-    pendingFocus.current = null
-    // Два кадра — запас на закрытие меню Mantine, которое тоже двигает фокус.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        for (const selector of pending.targets) {
-          const el = document.querySelector<HTMLElement>(selector)
-          if (el) return el.focus()
-        }
-      }),
-    )
   })
+  // После эффекта выше: `ready` читает уже обновлённый itemsRef.
+  const focusWhenReady = usePendingFocus()
 
   // ——— Правка ———
   // Desktop — форма на месте строки (одна за раз), mobile — окно. Вид выбирается в момент
   // открытия (как у ResponsiveSheet) и не меняется, пока правка открыта.
   const mobile = useMobileLayout()
-  const [editing, setEditing] = useState<{ id: string; inline: boolean } | null>(null)
-  const [sheetOpened, setSheetOpened] = useState(false)
-  // Окно закрылось действием, которое убрало строку (удаление) — фокус ставит экран.
-  const [sheetReturnFocus, setSheetReturnFocus] = useState(true)
-  const afterSheetClose = useRef<(() => void) | null>(null)
-  const editingTransaction = editing ? items.find((item) => item.id === editing.id) : undefined
+  const [inlineId, setInlineId] = useState<string | null>(null)
+  const sheet = useEditSheet()
+  const inlineTransaction = inlineId ? items.find((item) => item.id === inlineId) : undefined
+  const sheetTransaction = sheet.editingId
+    ? items.find((item) => item.id === sheet.editingId)
+    : undefined
 
-  const focusRow = (id: string) => {
-    pendingFocus.current = {
-      ready: () => document.querySelector(rowButtonSelector(id)) !== null,
-      targets: [rowButtonSelector(id)],
-    }
-  }
+  const focusRow = useCallback(
+    (id: string) =>
+      focusWhenReady(
+        () => document.querySelector(rowButtonSelector(id)) !== null,
+        [rowButtonSelector(id)],
+      ),
+    [focusWhenReady],
+  )
 
   // Обработчики строк — постоянные: иначе мемоизированный список перерисовывался бы
   // на каждую букву поиска. Свежие данные они берут из ref.
-  const latest = useRef({ actions, mobile, quickAdd, editing })
+  const latest = useRef({ actions, mobile, quickAdd, inlineId, sheet })
   useEffect(() => {
-    latest.current = { actions, mobile, quickAdd, editing }
+    latest.current = { actions, mobile, quickAdd, inlineId, sheet }
   })
 
   // Отправляется ли открытая форма и есть ли в ней несохранённые изменения: пока да,
@@ -219,29 +206,35 @@ export function TransactionsPage() {
    * Закрыть форму на месте строки `id` — только если открыта именно она: ответ сервера
    * на сохранение прежней формы не закрывает и не уводит фокус из другой.
    */
-  const closeInline = useCallback((id: string) => {
-    if (latest.current.editing?.id !== id) return
-    setEditing(null)
-    setEditHint(false)
-    formState.current = { submitting: false, dirty: false }
-    focusRow(id)
-  }, [])
+  const closeInline = useCallback(
+    (id: string) => {
+      if (latest.current.inlineId !== id) return
+      setInlineId(null)
+      setEditHint(false)
+      formState.current = { submitting: false, dirty: false }
+      focusRow(id)
+    },
+    [focusRow],
+  )
 
-  const remove = useCallback((transaction: Transaction) => {
-    const list = itemsRef.current
-    const index = list.findIndex((item) => item.id === transaction.id)
-    const neighbors = [list[index + 1], list[index - 1]].filter(Boolean)
-    pendingFocus.current = {
-      ready: () => !itemsRef.current.some((item) => item.id === transaction.id),
-      targets: [...neighbors.map((n) => rowButtonSelector(n.id)), `[${SEARCH_FIELD}]`],
-    }
-    void latest.current.actions.remove(transaction)
-  }, [])
+  const remove = useCallback(
+    (transaction: Transaction) => {
+      const list = itemsRef.current
+      const index = list.findIndex((item) => item.id === transaction.id)
+      const neighbors = [list[index + 1], list[index - 1]].filter(Boolean)
+      focusWhenReady(
+        () => !itemsRef.current.some((item) => item.id === transaction.id),
+        [...neighbors.map((n) => rowButtonSelector(n.id)), `[${SEARCH_FIELD}]`],
+      )
+      void latest.current.actions.remove(transaction)
+    },
+    [focusWhenReady],
+  )
 
   const onAction = useCallback(
     (action: RowAction, transaction: Transaction) => {
       if (action === 'delete') {
-        setEditing((current) => (current?.id === transaction.id ? null : current))
+        setInlineId((current) => (current === transaction.id ? null : current))
         return remove(transaction)
       }
       if (action === 'duplicate') {
@@ -250,20 +243,20 @@ export function TransactionsPage() {
         // на `body`). Цель возврата — строка операции.
         const focusRowButton = () =>
           document.querySelector<HTMLElement>(rowButtonSelector(transaction.id))?.focus()
-        if (latest.current.editing?.id === transaction.id) {
-          setEditing(null)
+        if (latest.current.inlineId === transaction.id) {
+          setInlineId(null)
           setEditHint(false)
         }
         return latest.current.quickAdd.open(transaction, { returnFocus: focusRowButton })
       }
       const inline = !latest.current.mobile
-      const current = latest.current.editing
-      if (inline && current?.inline && current.id !== transaction.id) {
+      const current = latest.current.inlineId
+      if (inline && current !== null && current !== transaction.id) {
         const { submitting, dirty } = formState.current
         if (submitting || dirty) {
           setEditHint(true)
           // В сумму — главное поле формы; рядом с кнопками формы — подсказка.
-          const form = document.querySelector(`[${INLINE_EDIT}="${current.id}"]`)
+          const form = document.querySelector(`[${INLINE_EDIT}="${current}"]`)
           ;(
             form?.querySelector<HTMLElement>('input[inputmode="decimal"]') ??
             form?.querySelector<HTMLElement>('input, button')
@@ -273,53 +266,39 @@ export function TransactionsPage() {
       }
       formState.current = { submitting: false, dirty: false }
       setEditHint(false)
-      setEditing({ id: transaction.id, inline })
-      if (!inline) {
-        setSheetReturnFocus(true)
-        setSheetOpened(true)
+      if (inline) {
+        setInlineId(transaction.id)
+      } else {
+        setInlineId(null)
+        latest.current.sheet.open(transaction.id)
       }
     },
-    [remove, setEditing, setSheetReturnFocus, setSheetOpened, setEditHint],
+    [remove, setInlineId, setEditHint],
   )
-
-  /** Действие из окна правки: окно закрывается, действие — после закрытия. */
-  const onSheetAction = (action: Exclude<RowAction, 'open'>, transaction: Transaction) => {
-    if (action === 'delete') {
-      // Строка уйдёт вместе с кнопкой, открывшей окно, — фокус ставит экран.
-      setSheetReturnFocus(false)
-      setSheetOpened(false)
-      remove(transaction)
-      return
-    }
-    // Быстрый ввод — после того как окно правки закрылось и ушло из истории «Назад».
-    afterSheetClose.current = () => quickAdd.open(transaction)
-    setSheetOpened(false)
-  }
 
   /** Сервер сохранил правку: строка — ответом сервера, тост; форму закрывает вызывающий. */
   const onEdited = (saved: Transaction) => actions.edited(saved)
 
-  const inlineForm =
-    editing?.inline && editingTransaction
-      ? {
-          id: editingTransaction.id,
-          form: (
-            <EditTransaction
-              inline
-              transaction={editingTransaction}
-              title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
-              onSaved={(saved) => {
-                onEdited(saved)
-                closeInline(editingTransaction.id)
-              }}
-              onClose={() => closeInline(editingTransaction.id)}
-              onAction={onAction}
-              onStateChange={onFormState}
-              hint={editHint}
-            />
-          ),
-        }
-      : null
+  const inlineForm = inlineTransaction
+    ? {
+        id: inlineTransaction.id,
+        form: (
+          <EditTransaction
+            inline
+            transaction={inlineTransaction}
+            title={transactionTitle(inlineTransaction, { accountNames, categories }, t)}
+            onSaved={(saved) => {
+              onEdited(saved)
+              closeInline(inlineTransaction.id)
+            }}
+            onClose={() => closeInline(inlineTransaction.id)}
+            onAction={onAction}
+            onStateChange={onFormState}
+            hint={editHint}
+          />
+        ),
+      }
+    : null
 
   const resetFilters = () => setFilters(EMPTY_FILTERS)
 
@@ -387,7 +366,7 @@ export function TransactionsPage() {
   } else {
     content = (
       <>
-        <FeedList
+        <TransactionDays
           groups={groups}
           today={today}
           accountNames={accountNames}
@@ -437,34 +416,17 @@ export function TransactionsPage() {
           {announced.message}
         </VisuallyHidden>
       </div>
-      <ResponsiveSheet
-        opened={sheetOpened}
-        onClose={() => setSheetOpened(false)}
-        title={t.feed.edit.title}
-        fullHeight
-        returnFocus={sheetReturnFocus}
-        onExitTransitionEnd={() => setEditing(null)}
-        // Быстрый ввод (дублирование) — когда запись окна правки ушла из истории «Назад»:
-        // открытое раньше, оно встало бы поверх уходящей записи.
-        onHistoryReleased={() => {
-          const next = afterSheetClose.current
-          afterSheetClose.current = null
-          next?.()
-        }}
-      >
-        {editing && !editing.inline && editingTransaction && (
-          <EditTransaction
-            transaction={editingTransaction}
-            title={transactionTitle(editingTransaction, { accountNames, categories }, t)}
-            onSaved={(saved) => {
-              onEdited(saved)
-              setSheetOpened(false)
-            }}
-            onClose={() => setSheetOpened(false)}
-            onAction={onSheetAction}
-          />
-        )}
-      </ResponsiveSheet>
+      <EditTransactionSheet
+        sheet={sheet}
+        transaction={sheetTransaction}
+        title={
+          sheetTransaction
+            ? transactionTitle(sheetTransaction, { accountNames, categories }, t)
+            : ''
+        }
+        onEdited={onEdited}
+        onDelete={remove}
+      />
     </>
   )
 }

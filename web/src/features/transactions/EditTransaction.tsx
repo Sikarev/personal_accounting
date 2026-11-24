@@ -2,14 +2,14 @@ import { Button, Paper, Text } from '@mantine/core'
 import { IconCopy, IconTrash } from '@tabler/icons-react'
 import type { KeyboardEvent } from 'react'
 
-import { TransactionForm } from '../../features/transactions/TransactionForm'
-import type { TransactionFormState } from '../../features/transactions/TransactionFormView'
 import type { Transaction } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { icons } from '../../theme'
-import type { RowAction } from './FeedList'
+import type { RowAction } from './TransactionDays'
+import { TransactionForm } from './TransactionForm'
+import type { TransactionFormState } from './TransactionFormView'
 import { canDelete, canDuplicate } from './useTransactionActions'
-import classes from './TransactionsPage.module.css'
+import classes from './EditTransaction.module.css'
 
 type EditTransactionProps = {
   transaction: Transaction
@@ -36,7 +36,7 @@ type EditTransactionProps = {
 export const INLINE_EDIT = 'data-inline-edit'
 
 /**
- * Правка операции из ленты (ux.md, «Лента»): общая форма операции (`TransactionForm`)
+ * Правка операции из списка (лента, последние операции на главной; ux.md, «Лента»): общая форма операции (`TransactionForm`)
  * и действия над ней — «Дублировать», «Удалить». Корректировку и перевод со скрытым
  * чужим счётом форма не правит и объясняет почему; удалить корректировку можно и отсюда.
  *

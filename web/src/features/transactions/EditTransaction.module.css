@@ -1,0 +1,42 @@
+/* Кнопки — зона касания не ниже 44 px (у Mantine md — 42 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}
+
+/* Удаление — цвет «проблемы» из темы (контраст AA в обеих темах), а не red Mantine. */
+.danger {
+  color: var(--app-color-negative);
+}
+
+/* «Дублировать», «Удалить», «Отмена» — над формой, в ряд, переносятся. */
+.editActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+  margin-bottom: var(--mantine-spacing-md);
+}
+
+/* Подсказка «Сохраните или отмените изменения» — на всю ширину ряда, под кнопками;
+   пустая не занимает места. */
+.editHint {
+  flex-basis: 100%;
+
+  &:empty {
+    display: none;
+  }
+}
+
+/* «Отмена» — в конце ряда, отдельно от действий над операцией. */
+.editCancel {
+  margin-inline-start: auto;
+}
+
+.editBody {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Форма на месте строки: отступ от соседних строк. */
+.inlineEdit {
+  margin-block: var(--mantine-spacing-sm);
+}

@@ -215,7 +215,8 @@ test.describe('шаг 1: первый счёт', () => {
       return route.fallback()
     })
     await page.goto('/')
-    await expect(page.getByRole('heading', { level: 2, name: t.accounts.loadError })).toBeVisible()
+    // Ошибка — в блоке баланса и счетов, остальная главная работает.
+    await expect(page.getByText(t.home.accountsLoadError)).toBeVisible()
     // Пока ошибка — онбординга нет: неизвестно, есть ли у пользователя счета.
     await expect(page.getByRole('heading', { name: t.onboarding.title })).toHaveCount(0)
     await expectNoAxeViolations(page)
@@ -258,14 +259,19 @@ test.describe('шаг 2: где вносить операции', () => {
     async ({ page }) => {
       await mockAccounts(page)
       await openStep1(page)
-      // Следим за DOM: появись хоть на кадр заглушка главной — флаг останется.
-      await page.evaluate((stubTitle) => {
-        const w = window as Window & { stubSeen?: boolean }
-        w.stubSeen = false
-        new MutationObserver(() => {
-          if (document.body.textContent?.includes(stubTitle)) w.stubSeen = true
-        }).observe(document.body, { childList: true, subtree: true, characterData: true })
-      }, t.pages.home.emptyTitle)
+      // Следим за DOM: появись хоть на кадр обычная главная без карточки шага 2 (на desktop
+      // главная видна под карточкой) — флаг останется.
+      await page.evaluate(
+        ([homeTitle, introTitle]) => {
+          const w = window as Window & { stubSeen?: boolean }
+          w.stubSeen = false
+          new MutationObserver(() => {
+            const text = document.body.textContent ?? ''
+            if (text.includes(homeTitle) && !text.includes(introTitle)) w.stubSeen = true
+          }).observe(document.body, { childList: true, subtree: true, characterData: true })
+        },
+        [t.home.recentTitle, t.onboarding.introTitle],
+      )
       await createFirstAccount(page)
       expect(await page.evaluate(() => (window as Window & { stubSeen?: boolean }).stubSeen)).toBe(
         false,
@@ -314,22 +320,79 @@ test.describe('шаг 2: где вносить операции', () => {
       await expect(page.locator('.mantine-Notification-root')).toHaveCount(0)
 
       const addFirst = intro(page).getByRole('button', { name: t.onboarding.addFirst })
+      // Форма быстрого ввода на странице (desktop): заголовок «Новая операция» и сумма.
+      const pageForm = page.getByRole('region', { name: t.home.formTitle })
+      const pageAmount = pageForm.getByRole('textbox', { name: t.transactions.amount })
       await addFirst.click()
-      const dialog = page.getByRole('dialog', { name: t.quickAdd.title })
-      await expect(dialog).toBeVisible()
-      await page.keyboard.press('Escape')
-      await expect(dialog).toBeHidden()
-      await expect(addFirst).toBeFocused()
+      if (isMobile) {
+        const dialog = page.getByRole('dialog', { name: t.quickAdd.title })
+        await expect(dialog).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(dialog).toBeHidden()
+        await expect(addFirst).toBeFocused()
+      } else {
+        // На desktop карточка указывает на форму на странице: кнопка ведёт в сумму, окна нет.
+        await expect(pageAmount).toBeFocused()
+        await expect(page.getByRole('dialog')).toHaveCount(0)
+      }
 
       await intro(page).getByRole('button', { name: t.onboarding.dismiss }).click()
       await expect(intro(page)).toHaveCount(0)
       await expect(navAddButton(page)).not.toHaveAttribute('data-highlight')
-      // Обычная главная: шаг 1 не возвращается — счёт уже есть. Фокус — на её главном действии.
+      // Обычная главная: шаг 1 не возвращается — счёт уже есть. Фокус — на её главном действии:
+      // mobile — «Добавить операцию» в пустом блоке операций, desktop — сумма в форме.
       await expect(page.getByRole('heading', { level: 1, name: t.nav.home })).toBeVisible()
       await expect(page.getByRole('heading', { name: t.onboarding.title })).toHaveCount(0)
-      await expect(
-        page.getByRole('main').getByRole('button', { name: t.nav.addTransaction }),
-      ).toBeFocused()
+      if (isMobile) {
+        await expect(
+          page.getByRole('main').getByRole('button', { name: t.nav.addTransaction }),
+        ).toBeFocused()
+      } else {
+        await expect(pageAmount).toBeFocused()
+      }
+    },
+  )
+
+  test(
+    'mobile: «Понятно», когда операции уже есть, — фокус на «Все операции»',
+    { tag: '@a11y' },
+    async ({ page, isMobile }) => {
+      test.skip(!isMobile, 'Шаг 2 одной карточкой — только на mobile')
+      await mockAccounts(page)
+      // Операции есть (например, внесены с другого устройства) — пустого блока нет.
+      await page.route(
+        (url) => url.pathname === `${API}/transactions`,
+        (route) =>
+          route.fulfill({
+            json: {
+              items: [
+                {
+                  id: '01a1faf8-0000-7000-9000-000000000001',
+                  kind: 'expense',
+                  date: '2026-11-23',
+                  accountId: existingAccount.id,
+                  amount: 10_000,
+                  currency: 'RUB',
+                  toAccountId: null,
+                  toAmount: null,
+                  toCurrency: null,
+                  categoryId: null,
+                  comment: 'Кофе',
+                  author: null,
+                  counterparty: null,
+                  editable: true,
+                  createdAt: '2026-11-23T10:00:00Z',
+                  updatedAt: '2026-11-23T10:00:00Z',
+                },
+              ],
+              days: [],
+            },
+          }),
+      )
+      await openStep1(page)
+      await createFirstAccount(page)
+      await intro(page).getByRole('button', { name: t.onboarding.dismiss }).click()
+      await expect(page.getByRole('link', { name: t.home.allTransactions })).toBeFocused()
     },
   )
 

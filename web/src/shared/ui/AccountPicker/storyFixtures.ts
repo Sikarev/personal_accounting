@@ -20,6 +20,8 @@ export function storyAccount(overrides: Partial<Account> = {}): Account {
     sortOrder: seq,
     archivedAt: null,
     hasTransactions: true,
+    // Фикстуры в рублях (базовой валюте): эквивалент равен остатку.
+    baseBalance: overrides.balance ?? 0,
     ...overrides,
   }
 }

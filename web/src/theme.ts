@@ -152,16 +152,20 @@ export const chartColors = {
   other: 'var(--app-chart-other)',
 } as const
 
-// Оттенки палитры графиков по темам: [цвет, оттенок светлой, оттенок тёмной].
+// Оттенки палитры графиков по темам: [цвет, оттенок светлой, оттенок тёмной]. Каждый —
+// не меньше 3:1 к фону карточки (WCAG 1.4.11): к белому 3,7–6,1, к dark-7 5,2–9,0.
+// Жёлтого нет: даже yellow-9 к белому — 3,0:1. Соседние сегменты различаются тоном
+// (тёплый ↔ холодный), а не только яркостью. «Прочее»: gray-6 — 3,3:1, dark-2 — 4,0:1.
+// Пересчёт — скриптом по палитре Mantine (default-colors), формула WCAG.
 const chartPalette = [
   ['indigo', 6, 4],
-  ['orange', 7, 5],
-  ['teal', 7, 5],
-  ['pink', 6, 4],
-  ['cyan', 7, 5],
-  ['yellow', 7, 5],
-  ['grape', 6, 4],
-  ['lime', 8, 5],
+  ['orange', 9, 5],
+  ['teal', 9, 5],
+  ['pink', 7, 4],
+  ['blue', 9, 4],
+  ['lime', 9, 5],
+  ['grape', 7, 4],
+  ['cyan', 9, 5],
 ] as const
 
 const chartVariables = (scheme: 'light' | 'dark') =>
@@ -203,7 +207,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     [`--mantine-color-${t.primaryColor}-light-hover`]: `color-mix(in srgb, var(--mantine-color-${t.primaryColor}-1), var(--mantine-color-${t.primaryColor}-2))`,
     '--mantine-primary-color-light-hover': `var(--mantine-color-${t.primaryColor}-light-hover)`,
     ...chartVariables('light'),
-    '--app-chart-other': 'var(--mantine-color-gray-5)',
+    '--app-chart-other': 'var(--mantine-color-gray-6)',
   },
   dark: {
     '--mantine-color-dimmed': '#a3a3a3', // 6.5:1 на dark-7, 5.4:1 на dark-6

@@ -9,8 +9,8 @@ import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { PeriodField, ResponsiveSheet } from '../../shared/ui'
 import { icons } from '../../theme'
 import {
-  DEFAULT_REPORT_PRESET,
   REPORT_PRESETS,
+  type ReportDefaultPreset,
   type ReportFilters,
   type ReportFiltersPatch,
 } from './reportFilters'
@@ -27,6 +27,8 @@ type Props = {
   /** В семье больше одного человека — есть фильтр «Чьи операции». */
   withAuthors: boolean
   meId: string | undefined
+  /** Период вкладки по умолчанию: к нему возвращает крестик чипа периода. */
+  defaultPreset: ReportDefaultPreset
 }
 
 /**
@@ -48,7 +50,7 @@ export function ReportFilterBar(props: Props) {
       onChange={onChange}
       today={today}
       presets={REPORT_PRESETS}
-      defaultPreset={DEFAULT_REPORT_PRESET}
+      defaultPreset={props.defaultPreset}
       required
     />
   )

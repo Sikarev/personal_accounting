@@ -1,4 +1,3 @@
-import { IconCalendarStats, IconChartLine } from '@tabler/icons-react'
 import { useCallback, useMemo } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 
@@ -6,14 +5,19 @@ import { paths } from '../../app/navigation'
 import { useToday } from '../../features/auth/session'
 import { useGetMe, useListAccounts } from '../../shared/api'
 import { useT } from '../../shared/i18n'
-import { ActiveFilterChips, EmptyState, PageHeader } from '../../shared/ui'
+import { ActiveFilterChips, PageHeader } from '../../shared/ui'
+import { BalanceReportTab } from './BalanceReportTab'
 import { CategoryReportTab } from './CategoryReportTab'
+import { MonthlyReportTab } from './MonthlyReportTab'
 import { REPORT_FILTERS, ReportFilterBar } from './ReportFilterBar'
 import {
   applyPatch,
+  DEFAULT_REPORT_PRESET,
+  DEFAULT_TREND_PRESET,
   parseReportFilters,
   reportFilterChips,
   reportFiltersToSearchParams,
+  type ReportDefaultPreset,
   type ReportFilters,
   type ReportFiltersPatch,
 } from './reportFilters'
@@ -27,24 +31,39 @@ const TABS: { tab: ReportTab; to: string }[] = [
   { tab: 'balance', to: paths.reportsBalance },
 ]
 
+/** Период по умолчанию: по категориям — текущий месяц, тренды — 12 месяцев. */
+const DEFAULT_PRESETS: Record<ReportTab, ReportDefaultPreset> = {
+  categories: DEFAULT_REPORT_PRESET,
+  monthly: DEFAULT_TREND_PRESET,
+  balance: DEFAULT_TREND_PRESET,
+}
+
 /**
  * Фильтры — в адресе страницы, как у ленты. Меняются с `replace`: фильтр — вид отчёта,
- * а не переход, и «Назад» уводит с экрана, а не перебирает периоды.
+ * а не переход, и «Назад» уводит с экрана, а не перебирает периоды. Период вкладки
+ * по умолчанию в адрес не пишется — у каждой вкладки он свой.
  */
-function useReportFilters(today: string): [ReportFilters, (patch: ReportFiltersPatch) => void] {
+function useReportFilters(
+  today: string,
+  defaultPreset: ReportDefaultPreset,
+): [ReportFilters, (patch: ReportFiltersPatch) => void] {
   const [searchParams, setSearchParams] = useSearchParams()
-  const filters = useMemo(() => parseReportFilters(searchParams, today), [searchParams, today])
+  const filters = useMemo(
+    () => parseReportFilters(searchParams, today, defaultPreset),
+    [searchParams, today, defaultPreset],
+  )
   const setFilters = useCallback(
     (patch: ReportFiltersPatch) =>
       setSearchParams(
         (prev) =>
           reportFiltersToSearchParams(
-            applyPatch(parseReportFilters(prev, today), patch, today),
+            applyPatch(parseReportFilters(prev, today, defaultPreset), patch, today, defaultPreset),
             today,
+            defaultPreset,
           ),
         { replace: true },
       ),
-    [setSearchParams, today],
+    [setSearchParams, today, defaultPreset],
   )
   return [filters, setFilters]
 }
@@ -60,11 +79,13 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
   const { search } = useLocation()
   const me = useGetMe()
   const accountsQuery = useListAccounts()
-  const [urlFilters, setFilters] = useReportFilters(today)
+  const defaultPreset = DEFAULT_PRESETS[tab]
+  const [urlFilters, setFilters] = useReportFilters(today, defaultPreset)
 
   // Фильтр «участник» — только в семье из нескольких человек. Без поля фильтр из адреса
-  // не применяется: отчёт молча показывал бы не всё.
-  const withAuthors = (me.data?.family.memberCount ?? 1) > 1
+  // не применяется: отчёт молча показывал бы не всё. У баланса участника нет вовсе:
+  // у остатка нет автора (API его не принимает); в адресе он остаётся для других вкладок.
+  const withAuthors = (me.data?.family.memberCount ?? 1) > 1 && tab !== 'balance'
   const filters = useMemo(
     () => (withAuthors ? urlFilters : { ...urlFilters, authorId: [] }),
     [urlFilters, withAuthors],
@@ -72,8 +93,11 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
   const meId = me.data?.user.id
   const accounts = useMemo(() => accountsQuery.data?.items ?? [], [accountsQuery.data])
   const accountNames = useMemo(() => new Map(accounts.map((a) => [a.id, a.name])), [accounts])
-  const chips = reportFilterChips(filters, { accountNames, today, meId }, t)
+  const chips = reportFilterChips(filters, { accountNames, today, meId, defaultPreset }, t)
   const resetFilters = () => setFilters({ from: null, to: null, accountId: [], authorId: [] })
+  // Пустой отчёт объясняется счетами и участником; период и так виден в фильтрах.
+  const filtered = filters.accountId.length > 0 || filters.authorId.length > 0
+  const resetExtraFilters = () => setFilters({ accountId: [], authorId: [] })
 
   return (
     <>
@@ -94,39 +118,45 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
           ))}
         </nav>
 
-        {tab === 'categories' ? (
-          <>
-            <ReportFilterBar
-              filters={filters}
-              onChange={setFilters}
-              accounts={accounts}
-              today={today}
-              withAuthors={withAuthors}
-              meId={meId}
-            />
-            <ActiveFilterChips
-              chips={chips}
-              onRemove={setFilters}
-              onReset={resetFilters}
-              fallbackFocus={`[${REPORT_FILTERS}] select`}
-            />
-            <CategoryReportTab
-              filters={filters}
-              onChange={setFilters}
-              today={today}
-              // Пустой отчёт объясняется счетами и участником; период и так виден в выводе.
-              filtered={filters.accountId.length > 0 || filters.authorId.length > 0}
-              onResetFilters={() => setFilters({ accountId: [], authorId: [] })}
-            />
-          </>
-        ) : (
-          <div className={classes.card}>
-            <EmptyState
-              icon={tab === 'monthly' ? IconCalendarStats : IconChartLine}
-              title={t.reports.soon.title}
-              description={t.reports.soon[tab]}
-            />
-          </div>
+        <ReportFilterBar
+          filters={filters}
+          onChange={setFilters}
+          accounts={accounts}
+          today={today}
+          withAuthors={withAuthors}
+          meId={meId}
+          defaultPreset={defaultPreset}
+        />
+        <ActiveFilterChips
+          chips={chips}
+          onRemove={setFilters}
+          onReset={resetFilters}
+          fallbackFocus={`[${REPORT_FILTERS}] select`}
+        />
+        {tab === 'categories' && (
+          <CategoryReportTab
+            filters={filters}
+            onChange={setFilters}
+            today={today}
+            filtered={filtered}
+            onResetFilters={resetExtraFilters}
+          />
+        )}
+        {tab === 'monthly' && (
+          <MonthlyReportTab
+            filters={filters}
+            today={today}
+            filtered={filtered}
+            onResetFilters={resetExtraFilters}
+          />
+        )}
+        {tab === 'balance' && (
+          <BalanceReportTab
+            filters={filters}
+            today={today}
+            accounts={accounts}
+            accountsPending={accountsQuery.isPending}
+          />
         )}
       </div>
     </>

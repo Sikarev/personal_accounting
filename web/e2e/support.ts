@@ -573,28 +573,64 @@ export type CategoryReportBody = {
   missingRates: string[]
 }
 
+/** Ответ `GET /reports/monthly` (схема `MonthlyReport` контракта). */
+export type MonthlyReportBody = {
+  currency: string
+  items: { month: string; expense: number; income: number }[]
+  missingRates: string[]
+}
+
+/** Ответ `GET /reports/balance` (схема `BalanceReport` контракта). */
+export type BalanceReportBody = {
+  currency: string
+  step: 'day' | 'week' | 'month'
+  items: { date: string; balance: number }[]
+  missingRates: string[]
+}
+
 export type ReportsMock = {
   /** Параметры запросов `GET /reports/categories` в порядке прихода. */
   requests: URLSearchParams[]
-  /** Ответить на следующие запросы своими обработчиками (ошибка, задержка). */
+  /** То же для `GET /reports/monthly` и `GET /reports/balance`. */
+  monthlyRequests: URLSearchParams[]
+  balanceRequests: URLSearchParams[]
+  /** Ответить на следующие запросы отчётов своими обработчиками (ошибка, задержка). */
   failNext: ((route: Route) => Promise<void>)[]
 }
 
 /**
- * Подменить `GET /reports/categories`: ответ выбирает `respond` по параметрам запроса
- * (вид, период, счета) — так отдельно задаются текущий и предыдущий (для сравнения) периоды.
- * Справочники (`/accounts`, `/categories`) — свои, если переданы. Регистрировать после
- * `mockSignedIn`: свои моки перекрывают умолчания.
+ * Подменить отчёты: `GET /reports/categories` (ответ выбирает `respond` по параметрам
+ * запроса — вид, период, счета; так отдельно задаются текущий и предыдущий для сравнения
+ * периоды), `GET /reports/monthly` (`monthly`) и `GET /reports/balance` (`balance`).
+ * Отчёт без обработчика — пустой. Справочники (`/accounts`, `/categories`) — свои, если
+ * переданы. Регистрировать после `mockSignedIn`: свои моки перекрывают умолчания.
  */
 export async function mockReportsApi(
   page: Page,
   data: {
-    respond: (params: URLSearchParams) => CategoryReportBody
+    respond?: (params: URLSearchParams) => CategoryReportBody
+    monthly?: (params: URLSearchParams) => MonthlyReportBody
+    balance?: (params: URLSearchParams) => BalanceReportBody
     accounts?: Record<string, unknown>[]
     categories?: Category[]
   },
 ): Promise<ReportsMock> {
-  const api: ReportsMock = { requests: [], failNext: [] }
+  const api: ReportsMock = { requests: [], monthlyRequests: [], balanceRequests: [], failNext: [] }
+  const report = <T>(
+    path: string,
+    requests: URLSearchParams[],
+    respond: (params: URLSearchParams) => T,
+  ) =>
+    page.route(
+      (url) => url.pathname === `${API}/reports/${path}`,
+      (route) => {
+        const params = new URL(route.request().url()).searchParams
+        requests.push(params)
+        const fail = api.failNext.shift()
+        if (fail) return fail(route)
+        return route.fulfill({ json: respond(params) })
+      },
+    )
   if (data.accounts) {
     const items = data.accounts
     await page.route(`**${API}/accounts`, (route) =>
@@ -607,17 +643,46 @@ export async function mockReportsApi(
       route.request().method() === 'GET' ? route.fulfill({ json: { items } }) : route.fallback(),
     )
   }
-  await page.route(
-    (url) => url.pathname === `${API}/reports/categories`,
-    (route) => {
-      const params = new URL(route.request().url()).searchParams
-      api.requests.push(params)
-      const fail = api.failNext.shift()
-      if (fail) return fail(route)
-      return route.fulfill({ json: data.respond(params) })
-    },
-  )
+  await report('categories', api.requests, data.respond ?? (() => emptyCategoryReport))
+  await report('monthly', api.monthlyRequests, data.monthly ?? emptyMonthlyReport)
+  await report('balance', api.balanceRequests, data.balance ?? emptyBalanceReport)
   return api
+}
+
+/** Месяцы периода `from`–`to` (первые числа) — как строки отчёта по месяцам. */
+export function monthsOf(params: URLSearchParams): string[] {
+  const from = params.get('from')!
+  const to = params.get('to')!
+  const months: string[] = []
+  let [year, month] = from.split('-').map(Number)
+  while (`${year}-${String(month).padStart(2, '0')}` <= to.slice(0, 7)) {
+    months.push(`${year}-${String(month).padStart(2, '0')}-01`)
+    month++
+    if (month > 12) {
+      month = 1
+      year++
+    }
+  }
+  return months
+}
+
+/** Отчёт по месяцам без операций: все месяцы периода с нулями (как отдаёт API). */
+export function emptyMonthlyReport(params: URLSearchParams): MonthlyReportBody {
+  return {
+    currency: 'RUB',
+    items: monthsOf(params).map((month) => ({ month, expense: 0, income: 0 })),
+    missingRates: [],
+  }
+}
+
+/** Баланс без счетов: одна точка — конец периода, ноль. */
+export function emptyBalanceReport(params: URLSearchParams): BalanceReportBody {
+  return {
+    currency: 'RUB',
+    step: 'month',
+    items: [{ date: params.get('to')!, balance: 0 }],
+    missingRates: [],
+  }
 }
 
 /** Отчёт без операций. */

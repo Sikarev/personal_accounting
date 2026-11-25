@@ -1,20 +1,13 @@
-import { Button, Text, Title } from '@mantine/core'
-import { IconAlertCircle, IconChartPie, IconInfoCircle, IconPlus } from '@tabler/icons-react'
+import { Text, Title } from '@mantine/core'
+import { IconChartPie } from '@tabler/icons-react'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useId, useMemo, useState, type ReactNode } from 'react'
 
 import kindClasses from '../../features/transactions/KindSwitch.module.css'
-import { useQuickAdd } from '../../features/quick-add/quickAddContext'
-import {
-  apiErrorText,
-  useGetCategoryReport,
-  useListCategories,
-  type CategoryReport,
-} from '../../shared/api'
+import { useGetCategoryReport, useListCategories, type CategoryReport } from '../../shared/api'
 import { useT } from '../../shared/i18n'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
-import { EmptyState, Money } from '../../shared/ui'
-import { icons } from '../../theme'
+import { Money } from '../../shared/ui'
 import { CategoryDonut } from './CategoryDonut'
 import { CategoryTable } from './CategoryTable'
 import { buildCategoryRows, donutSegments } from './categoryReport'
@@ -32,6 +25,14 @@ import {
   periodLabel,
   periodLead,
 } from './reportPeriod'
+import {
+  MissingRatesNotice,
+  NoOperationsState,
+  ReportError,
+  ReportFrame,
+  TooLongState,
+} from './reportParts'
+import { failedQueries, useShownFilters } from './reportQuery'
 import { ReportSkeleton } from './ReportSkeleton'
 import classes from './ReportsPage.module.css'
 
@@ -57,7 +58,6 @@ export function CategoryReportTab({
   onResetFilters: () => void
 }) {
   const t = useT()
-  const quickAdd = useQuickAdd()
   const tooLong = isPeriodTooLong(filters)
   const params = toCategoryReportParams(filters)
   const previous = comparisonPeriod(filters, today)
@@ -74,17 +74,10 @@ export function CategoryReportTab({
   )
   const categoriesQuery = useListCategories()
 
-  // Пока грузится отчёт с новыми фильтрами, на экране — прежний (placeholder). Рисовать его
-  // нужно с теми фильтрами, по которым он получен: иначе заголовок врал бы («получено»
-  // при суммах расходов, «в октябре» при суммах за ноябрь), а ссылки строк вели бы с новым
-  // видом и старой категорией в пустую ленту. Запоминаем фильтры последнего настоящего ответа.
-  const key = JSON.stringify(params)
-  const [loaded, setLoaded] = useState<{ key: string; filters: ReportFilters } | null>(null)
-  if (report.data && !report.isPlaceholderData && loaded?.key !== key) {
-    setLoaded({ key, filters })
-  }
-  const stale = report.isPlaceholderData
-  const shownFilters = stale && loaded ? loaded.filters : filters
+  // Пока грузится отчёт с новыми фильтрами, на экране — прежний, с фильтрами, по которым
+  // он получен: «получено» при суммах расходов и ссылки строк с новым видом и старой
+  // категорией вели бы в пустую ленту.
+  const { stale, shownFilters } = useShownFilters(report, JSON.stringify(params), filters)
 
   // Сравнение — только когда и отчёт, и сравнительный ответ получены для текущих фильтров.
   // Пока ждём — строка сравнения занимает своё место (иначе кольцо и таблица сдвигались бы).
@@ -100,46 +93,13 @@ export function CategoryReportTab({
 
   const isPending = !tooLong && (report.isPending || categoriesQuery.isPending)
   const showSkeleton = useDelayedLoading(isPending)
-  // Ошибка — только когда показать нечего: при фоновой ошибке остаются прежние данные.
-  // Отчёт с новыми фильтрами не загрузился — прежний (placeholder) на экране не оставляем:
-  // он выдавал бы себя за отчёт по новым фильтрам. Счётчик ошибок держит блок ошибки
-  // на месте во время «Повторить» (как на главной).
-  const failed = [report, categoriesQuery].filter(
-    (q) => (!q.data || q.isPlaceholderData) && (q.isError || q.errorUpdateCount > 0),
-  )
+  const failed = failedQueries([report, categoriesQuery])
 
   let content
   if (tooLong) {
-    content = (
-      <div className={classes.card}>
-        <EmptyState
-          icon={IconInfoCircle}
-          title={t.reports.tooLong.title}
-          description={t.reports.tooLong.description}
-        />
-      </div>
-    )
+    content = <TooLongState />
   } else if (failed.length > 0) {
-    content = (
-      <div className={classes.card}>
-        <EmptyState
-          icon={IconAlertCircle}
-          title={t.reports.loadError}
-          description={apiErrorText(failed[0].error ?? null, t)}
-          action={
-            <Button
-              variant="default"
-              size="md"
-              className={classes.touchButton}
-              loading={failed.some((q) => q.isFetching)}
-              onClick={() => failed.forEach((q) => void q.refetch())}
-            >
-              {t.errors.retry}
-            </Button>
-          }
-        />
-      </div>
-    )
+    content = <ReportError failed={failed} />
   } else if (isPending || !report.data) {
     content = showSkeleton ? <ReportSkeleton /> : null
   } else {
@@ -152,31 +112,12 @@ export function CategoryReportTab({
         today={today}
         categories={categoriesQuery.data?.items ?? []}
         empty={
-          <div className={classes.card}>
-            <EmptyState
-              icon={IconChartPie}
-              title={t.reports.empty[shownFilters.kind]}
-              description={
-                filtered ? t.reports.empty.filteredDescription : t.reports.empty.description
-              }
-              action={
-                filtered ? (
-                  <Button variant="default" size="md" onClick={onResetFilters}>
-                    {t.reports.empty.resetFilters}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="light"
-                    size="md"
-                    leftSection={<IconPlus size={icons.size.md} stroke={icons.stroke} />}
-                    onClick={() => quickAdd.open()}
-                  >
-                    {t.nav.addTransaction}
-                  </Button>
-                )
-              }
-            />
-          </div>
+          <NoOperationsState
+            icon={IconChartPie}
+            title={t.reports.empty[shownFilters.kind]}
+            filtered={filtered}
+            onResetFilters={onResetFilters}
+          />
         }
       />
     )
@@ -254,31 +195,19 @@ function ReportBody({
   // Подсвеченная категория: наведение на сегмент подсвечивает строку таблицы.
   const [active, setActive] = useState<string | null>(null)
 
-  const notice = report.missingRates.length > 0 && (
-    <div className={classes.notice}>
-      <IconInfoCircle
-        size={icons.size.md}
-        stroke={icons.stroke}
-        aria-hidden
-        className={classes.noticeIcon}
-      />
-      <Text size="sm">{t.reports.missingRates(report.missingRates)}</Text>
-    </div>
-  )
+  const notice = <MissingRatesNotice codes={report.missingRates} />
 
   if (rows.length === 0) {
     return (
-      <div className={classes.stack} data-stale={stale || undefined} inert={stale}>
+      <ReportFrame stale={stale}>
         {notice}
         {empty}
-      </div>
+      </ReportFrame>
     )
   }
 
   return (
-    // Устаревший отчёт приглушён и инертен: ссылки и кольцо не ведут по прежним данным,
-    // пока на экране не появится отчёт по выбранным фильтрам.
-    <div className={classes.stack} data-stale={stale || undefined} inert={stale}>
+    <ReportFrame stale={stale}>
       {notice}
       <section aria-labelledby={headingId} className={classes.report}>
         <div className={classes.headline}>
@@ -318,6 +247,6 @@ function ReportBody({
           />
         </div>
       </section>
-    </div>
+    </ReportFrame>
   )
 }

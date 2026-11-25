@@ -251,7 +251,9 @@ export const ru = {
     includesStart: 'Включая',
     includesEnd: 'по курсу ЦБ',
     and: 'и',
-    withoutRate: (codes: string) => `Без учёта счетов в ${codes} — нет курса ЦБ`,
+    // «Не входит в итог: 1 200 € — нет курса ЦБ».
+    withoutRateStart: (count: number) => (count > 1 ? 'Не входят в итог:' : 'Не входит в итог:'),
+    withoutRateEnd: '— нет курса ЦБ',
   },
   // Онбординг на главной: первый счёт, затем — где вносить операции.
   onboarding: {

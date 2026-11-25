@@ -312,12 +312,9 @@ test.describe('общий баланс: у валюты нет курса', () =
     // 42 230,50 (рубли) + 46 175 (500 $) = 88 405,50 → 88 406 ₽; евро — отдельно.
     expect(plain(await balanceTotal(page).textContent())).toBe('≈ примерно 88 406 ₽')
     await expect(balance(page).getByText(/^Включая/)).toHaveText(/^Включая 500\s\$ по курсу ЦБ$/)
-    await expect(balance(page).getByText(t.balance.withoutRate('EUR'))).toBeVisible()
-    await expect(
-      balance(page)
-        .getByRole('listitem')
-        .filter({ hasText: /^1\s200\s€$/ }),
-    ).toBeVisible()
+    await expect(balance(page).getByText(/^Не входит/)).toHaveText(
+      /^Не входит в итог: 1\s200\s€ — нет курса ЦБ$/,
+    )
     // У счёта без курса эквивалента нет — ни прочерка, ни ошибки.
     const row = balance(page)
       .getByRole('listitem')
@@ -334,6 +331,49 @@ test.describe('общий баланс: у валюты нет курса', () =
     await openHome(page)
     expect(plain(await balanceTotal(page).textContent())).toBe('42 231 ₽')
     await expect(balance(page).getByText(/по курсу ЦБ|нет курса ЦБ/)).toHaveCount(0)
+  })
+})
+
+test.describe('общий баланс: суммы в пояснениях при шрифте 200 %', () => {
+  // 2 500 $ и 1 200 € в «Включая …», 300 ¥ без курса: на 375 px при 200 % браузер рвал
+  // сумму в первом <wbr> («1 | 200 €»), хотя целиком она помещалась на следующей строке.
+  const wide = [
+    card,
+    acc(4, {
+      name: 'Доллары',
+      currency: 'USD',
+      visibility: 'private',
+      balance: 250_000,
+      baseBalance: 23_087_500,
+    }),
+    { ...vacation, baseBalance: 12_060_000 },
+    acc(8, { name: 'Юани', currency: 'CNY', balance: 30_000, baseBalance: null }),
+  ]
+
+  test('скриншот блока баланса', { tag: '@visual' }, async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Крупный шрифт важен на узком экране')
+    await setup(page, { accounts: wide })
+    await openHome(page)
+    await enlargeFont(page)
+    await expect(balance(page)).toHaveScreenshot('home-note-wrap-font-200.png')
+  })
+
+  test('суммы в пояснениях не рвутся по разрядам', { tag: '@a11y' }, async ({ page }) => {
+    await setup(page, { accounts: wide })
+    await openHome(page)
+    await enlargeFont(page)
+    expect(await horizontalOverflow(page)).toBe(0)
+    // Каждая сумма в строках «Включая …» и «Не входит в итог …» — в одну строку.
+    const sums = balance(page).locator('p:not([data-balance-total]) [data-wrap]')
+    expect(await sums.count()).toBe(3)
+    for (const sum of await sums.all()) {
+      const lines = await sum.evaluate((el) => {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size
+      })
+      expect(lines, plain(await sum.textContent())).toBe(1)
+    }
   })
 })
 

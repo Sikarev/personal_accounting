@@ -337,8 +337,9 @@ test.describe('список', () => {
       const total = page.getByRole('region', { name: t.accounts.total })
       // Доллары в рубли не пересчитать: итог — только рубли, точный (без «≈»).
       expect(plain(await total.locator('[data-balance-total]').textContent())).toBe('22 220,50 ₽')
-      await expect(total.getByRole('listitem')).toHaveText([/^50\s\$$/])
-      await expect(total.getByText(t.balance.withoutRate('USD'))).toBeVisible()
+      await expect(total.getByText(/^Не входит/)).toHaveText(
+        /^Не входит в итог: 50\s\$ — нет курса ЦБ$/,
+      )
       await expect(total.getByText(/по курсу ЦБ/)).toHaveCount(0)
       // У счёта без курса эквивалента нет.
       const usdRow = page.getByRole('button', { name: /^Доллары/ })
@@ -348,6 +349,13 @@ test.describe('список', () => {
       expect(await horizontalOverflow(page)).toBe(0)
     },
   )
+
+  test('окно корректировки валютного счёта: скриншот', { tag: '@visual' }, async ({ page }) => {
+    await mockAccountsApi(page)
+    await openAccounts(page)
+    await openAdjust(page, 'Доллары')
+    await expect(page).toHaveScreenshot('accounts-adjust-foreign.png')
+  })
 
   test(
     'окно корректировки валютного счёта — с эквивалентом',

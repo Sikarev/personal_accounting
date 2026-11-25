@@ -43,7 +43,9 @@ export function AccountBalance({ account, fw, wrap = false, className }: Account
         <Text component="span" display="block" size="xs" c="dimmed">
           {/* Неразрывный пробел: «≈» не остаётся один на строке. */}
           <span aria-hidden>≈{' '}</span>
-          <VisuallyHidden component="span">{t.balance.approximately} </VisuallyHidden>
+          <VisuallyHidden component="span" className={classes.srOnly}>
+            {t.balance.approximately}{' '}
+          </VisuallyHidden>
           <Money amount={equivalent} currency={BASE_CURRENCY} roundToMajor wrap={wrap} />
         </Text>
       )}

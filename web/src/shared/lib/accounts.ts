@@ -37,7 +37,7 @@ export function archivedAccounts(accounts: readonly Account[]): Account[] {
 export const BASE_CURRENCY = 'RUB'
 
 /** Итог по одной валюте в её минимальных единицах. `bigint`: сумма может быть больше 2^53. */
-export type CurrencyTotal = { currency: string; amount: bigint }
+export type CurrencyAmount = { currency: string; amount: bigint }
 
 export type BalanceSummary = {
   /**
@@ -49,12 +49,12 @@ export type BalanceSummary = {
    * Валюты (кроме базовой), вошедшие в `total` по курсу ЦБ, — итоги в исходной валюте.
    * Непусто — `total` приблизительный. Валюта с нулевым итогом не показывается.
    */
-  converted: CurrencyTotal[]
+  converted: CurrencyAmount[]
   /**
    * Валюты без единого курса (`baseBalance: null`): в `total` не вошли, итоги — в исходной
    * валюте, чтобы деньги не «пропадали». Валюта с нулевым итогом не показывается.
    */
-  withoutRate: CurrencyTotal[]
+  withoutRate: CurrencyAmount[]
 }
 
 /**
@@ -81,7 +81,7 @@ export function balanceSummary(accounts: readonly Account[]): BalanceSummary {
   return { total, converted: nonZeroByCode(converted), withoutRate: nonZeroByCode(withoutRate) }
 }
 
-function nonZeroByCode(sums: Map<string, bigint>): CurrencyTotal[] {
+function nonZeroByCode(sums: Map<string, bigint>): CurrencyAmount[] {
   return [...sums]
     .filter(([, amount]) => amount !== 0n)
     .map(([currency, amount]) => ({ currency, amount }))

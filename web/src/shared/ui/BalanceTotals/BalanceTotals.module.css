@@ -14,26 +14,7 @@
   font-weight: 600;
 }
 
-/* Валюты без курса: каждая — пункт, переносится целиком. */
-.other {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: var(--mantine-spacing-lg);
-  row-gap: var(--mantine-spacing-xs);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--mantine-font-size-lg);
-  line-height: var(--mantine-line-height-lg);
-  font-weight: 500;
-}
-
-.other > li {
-  min-width: 0;
-}
-
-/* Пояснение переносится по словам, огромная сумма в нём — по разрядам (Money wrap). */
+/* Пояснения переносятся по словам. */
 .note {
   min-width: 0;
 }
@@ -41,4 +22,15 @@
 /* Не шире строки: перенос — только по разрядам (Money wrap), не по символам. */
 .amount {
   max-width: 100%;
+}
+
+/* Сумма в пояснении переносится целиком; по разрядам — только если одна не влезает в строку. */
+.inlineAmount {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* «примерно» для диктора не попадает в копируемый текст. */
+.srOnly {
+  user-select: none;
 }

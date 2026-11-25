@@ -2,7 +2,7 @@ import { Text, VisuallyHidden } from '@mantine/core'
 import { Fragment } from 'react'
 
 import { useT } from '../../i18n'
-import { BASE_CURRENCY, type BalanceSummary, type CurrencyTotal } from '../../lib/accounts'
+import { BASE_CURRENCY, type BalanceSummary, type CurrencyAmount } from '../../lib/accounts'
 import { Money } from '../Money/Money'
 import classes from './BalanceTotals.module.css'
 
@@ -22,9 +22,9 @@ export type BalanceTotalsProps = {
  *
  * - Есть валютные счета — сумма приблизительная: перед ней «≈», под ней мелко и
  *   приглушённо «Включая 500 $ по курсу ЦБ» — откуда взялась часть суммы.
- * - У валюты нет курса — её счета в сумму не входят: их итоги в исходной валюте показаны
- *   отдельно (деньги не «пропадают») и спокойное пояснение, без красного — это не ошибка
- *   пользователя.
+ * - У валюты нет курса — её счета в сумму не входят: под суммой такая же приглушённая
+ *   строка «Не входит в итог: 1 200 € — нет курса ЦБ». Деньги не «пропадают», но и не
+ *   спорят с главной суммой; без красного — это не ошибка пользователя.
  * - Только рубли — одна сумма, без лишних строк.
  *
  * Отрицательный итог — красным, как проблема (`variant="balance"`), знак есть всегда.
@@ -41,7 +41,9 @@ export function BalanceTotals({ summary, roundToMajor = true }: BalanceTotalsPro
           <>
             {/* Неразрывный пробел: «≈» не остаётся один на строке. */}
             <span aria-hidden>≈{' '}</span>
-            <VisuallyHidden component="span">{t.balance.approximately} </VisuallyHidden>
+            <VisuallyHidden component="span" className={classes.srOnly}>
+              {t.balance.approximately}{' '}
+            </VisuallyHidden>
           </>
         )}
         <Money
@@ -61,54 +63,41 @@ export function BalanceTotals({ summary, roundToMajor = true }: BalanceTotalsPro
         </Text>
       )}
       {withoutRate.length > 0 && (
-        <>
-          <ul className={classes.other}>
-            {withoutRate.map((item) => (
-              <li key={item.currency}>
-                <Money
-                  amount={item.amount}
-                  currency={item.currency}
-                  variant="balance"
-                  roundToMajor={roundToMajor}
-                  wrap
-                  className={classes.amount}
-                />
-              </li>
-            ))}
-          </ul>
-          <Text size="sm" c="dimmed" className={classes.note}>
-            {t.balance.withoutRate(
-              joinWords(
-                withoutRate.map((x) => x.currency),
-                t.balance.and,
-              ),
-            )}
-          </Text>
-        </>
+        <Text size="sm" c="dimmed" className={classes.note}>
+          {t.balance.withoutRateStart(withoutRate.length)}{' '}
+          <AmountList totals={withoutRate} roundToMajor={roundToMajor} and={t.balance.and} />{' '}
+          {t.balance.withoutRateEnd}
+        </Text>
       )}
     </div>
   )
 }
 
-/** «500 $», «500 $ и 1 200 €», «500 $, 1 200 € и 30 ¥». */
+/**
+ * «500 $», «500 $ и 1 200 €», «500 $, 1 200 € и 30 ¥». Каждая сумма — inline-block:
+ * иначе браузер рвал бы её в первой точке переноса (`<wbr>`) посреди предложения
+ * («1 | 200 €»), даже если целиком она помещается на следующей строке. По разрядам
+ * сумма переносится, только если одна не влезает в строку.
+ */
 function AmountList({
   totals,
   roundToMajor,
   and,
 }: {
-  totals: readonly CurrencyTotal[]
+  totals: readonly CurrencyAmount[]
   roundToMajor: boolean
   and: string
 }) {
   return totals.map((item, i) => (
     <Fragment key={item.currency}>
       {i > 0 && (i === totals.length - 1 ? ` ${and} ` : ', ')}
-      <Money amount={item.amount} currency={item.currency} roundToMajor={roundToMajor} wrap />
+      <Money
+        amount={item.amount}
+        currency={item.currency}
+        roundToMajor={roundToMajor}
+        wrap
+        className={classes.inlineAmount}
+      />
     </Fragment>
   ))
-}
-
-function joinWords(words: readonly string[], and: string): string {
-  if (words.length < 2) return words.join('')
-  return `${words.slice(0, -1).join(', ')} ${and} ${words[words.length - 1]}`
 }

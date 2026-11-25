@@ -5,3 +5,8 @@
   max-width: 100%;
   text-align: end;
 }
+
+/* «примерно» для диктора не попадает в копируемый текст. */
+.srOnly {
+  user-select: none;
+}

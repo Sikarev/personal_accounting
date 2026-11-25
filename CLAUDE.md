@@ -32,6 +32,8 @@ go generate ./...             # openapi.yaml → internal/oapi, queries/*.sql �
 go test ./...                 # реальный Postgres: временная БД на пакет (TEST_DATABASE_URL)
 go run ./cmd/migrate up
 go run ./cmd/rates sync       # разовая догрузка курсов ЦБ РФ в exchange_rates (API делает это и сам, в фоне)
+go run ./cmd/devseed -api http://localhost:8093   # тестовый пользователь с данными через запущенный API, печатает логин и cookie; -ops N, -seed
+go run ./cmd/devseed -cleanup # удалить всех devseed-%@example.com и их семьи
 go run ./cmd/api              # http://localhost:8080, APP_ENV=production — JSON-логи и Secure-cookie
                               # COOKIE_SECURE, TRUSTED_PROXIES, CSRF_TRUSTED_ORIGINS — см. README
 

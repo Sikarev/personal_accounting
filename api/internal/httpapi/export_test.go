@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/csv"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 
 	"personal-accounting/api/internal/ratelimit"
 )
@@ -550,17 +554,187 @@ func TestExportAllRateLimit(t *testing.T) {
 	e.exportAll(t, u)
 }
 
-// TestExportHeadRequest — HEAD (его middleware.GetHead обслуживает как GET)
-// отдаёт заголовки без тела.
+// TestExportHeadRequest — HEAD (middleware.GetHead обслуживает его как GET)
+// отвечает заголовками без выгрузки: не трогает БД и не тратит лимит.
 func TestExportHeadRequest(t *testing.T) {
-	e := newAuthEnv(t, Options{})
+	e := newAuthEnv(t, Options{Limits: Limits{ExportAllPerUser: ratelimit.Rule{Limit: 1, Window: time.Hour}}})
 	u := e.newUser(t)
-	req := httptest.NewRequest(http.MethodHead, "/api/v1/export/transactions", nil)
+	for _, c := range []struct{ path, ct string }{
+		{"/api/v1/export/transactions", "text/csv; charset=utf-8"},
+		{"/api/v1/export/all", "application/zip"},
+		{"/api/v1/export/all", "application/zip"},
+	} {
+		req := httptest.NewRequest(http.MethodHead, c.path, nil)
+		req.AddCookie(u.cookie)
+		rec := httptest.NewRecorder()
+		e.h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != c.ct ||
+			rec.Header().Get("Content-Disposition") != "" || rec.Body.Len() != 0 {
+			t.Fatalf("HEAD %s: %d %v %q", c.path, rec.Code, rec.Header(), rec.Body)
+		}
+	}
+	// Без входа HEAD — тоже 401.
+	if rec := e.send(http.MethodHead, "/api/v1/export/all", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("HEAD без входа: %d", rec.Code)
+	}
+	// Два HEAD лимит (1 в час) не потратили.
+	e.exportAll(t, u)
+}
+
+func TestExportGate(t *testing.T) {
+	g := newExportGate(2)
+	u1, u2, u3 := uuid.New(), uuid.New(), uuid.New()
+	free1, ok := g.acquire(u1)
+	if !ok {
+		t.Fatal("первый слот")
+	}
+	if _, ok := g.acquire(u1); ok {
+		t.Fatal("вторая выгрузка того же пользователя")
+	}
+	free2, ok := g.acquire(u2)
+	if !ok {
+		t.Fatal("второй пользователь")
+	}
+	if _, ok := g.acquire(u3); ok {
+		t.Fatal("третий слот при двух")
+	}
+	free1()
+	free1() // повторный вызов ничего не освобождает
+	free3, ok := g.acquire(u3)
+	if !ok {
+		t.Fatal("слот после освобождения")
+	}
+	if _, ok := g.acquire(u1); ok {
+		t.Fatal("повторный free1 освободил лишний слот")
+	}
+	free2()
+	free3()
+	if len(g.slots) != 0 || len(g.users) != 0 {
+		t.Fatalf("после освобождения: %d слотов, %v", len(g.slots), g.users)
+	}
+}
+
+// insertManyTx вставляет n расходов одним запросом (через API шло бы долго).
+func (e authEnv) insertManyTx(t *testing.T, u accUser, account string, n int) {
+	t.Helper()
+	if _, err := e.pool.Exec(context.Background(), `
+		INSERT INTO transactions (family_id, kind, account_id, amount, category_id, op_date, comment, created_by)
+		SELECT $1, 'expense', $2, -g, (SELECT id FROM categories WHERE family_id = $1 AND kind = 'expense' LIMIT 1),
+		       date '2024-01-01' + (g % 700), 'длинный комментарий операции номер ' || g, $3
+		FROM generate_series(1, $4::int) g`, u.familyID, account, u.id, n); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// stuckDownload отправляет GET и не читает ответ: клиент «завис».
+func stuckDownload(t *testing.T, srv *httptest.Server, u accUser, path string) net.Conn {
+	t.Helper()
+	conn, err := net.Dial("tcp", srv.Listener.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	req := "GET " + path + " HTTP/1.1\r\nHost: test\r\nCookie: " + u.cookie.Name + "=" + u.cookie.Value + "\r\n\r\n"
+	if _, err := io.WriteString(conn, req); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
+func waitFor(t *testing.T, what string, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("не дождались за %v: %s", timeout, what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestExportStuckClient — клиент, который не читает тело, держит слот
+// выгрузки (остальным — 429) только до дедлайна записи: потом выгрузка
+// обрывается, транзакция закрывается, соединение возвращается в пул.
+func TestExportStuckClient(t *testing.T) {
+	e := newAuthEnv(t, Options{ExportConcurrency: 1, ExportWriteTimeout: 500 * time.Millisecond})
+	u := e.newUser(t)
+	other := e.newUser(t)
+	acc := e.createAccount(t, u, accountBody("Счёт", "shared", 0))["id"].(string)
+	// ~12 МБ CSV — больше буферов сокета, иначе сервер записал бы всё сразу.
+	e.insertManyTx(t, u, acc, 60000)
+	srv := httptest.NewServer(e.h)
+	defer srv.Close()
+
+	stuck := stuckDownload(t, srv, u, "/api/v1/export/transactions")
+	waitFor(t, "выгрузка заняла соединение пула", 5*time.Second, func() bool { return e.pool.Stat().AcquiredConns() > 0 })
+
+	// Слот один и занят: и тот же пользователь, и другой получают 429.
+	for _, who := range []accUser{u, other} {
+		rec := e.as(who, http.MethodGet, "/export/transactions", "")
+		decodeProblem(t, rec, http.StatusTooManyRequests, "too_many_requests")
+		if rec.Header().Get("Retry-After") != "5" {
+			t.Errorf("Retry-After = %q", rec.Header().Get("Retry-After"))
+		}
+	}
+	// Обычные запросы пул не ждут.
+	if rec := e.as(other, http.MethodGet, "/accounts", ""); rec.Code != http.StatusOK {
+		t.Fatalf("GET /accounts во время выгрузки: %d", rec.Code)
+	}
+
+	// Клиент так и не читает, но после дедлайна записи соединение БД
+	// вернулось в пул, а слот освободился.
+	waitFor(t, "соединение вернулось в пул", 10*time.Second, func() bool { return e.pool.Stat().AcquiredConns() == 0 })
+	waitFor(t, "слот освободился", 5*time.Second, func() bool {
+		return e.as(other, http.MethodGet, "/export/transactions", "").Code == http.StatusOK
+	})
+	// Сервер оборвал зависшую загрузку: дочитав буферы, клиент упирается в
+	// конец соединения без завершающего chunk.
+	_ = stuck.SetReadDeadline(time.Now().Add(10 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(stuck), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(io.Discard, resp.Body); err == nil {
+		t.Error("зависшая загрузка дочитана целиком, ожидался обрыв")
+	}
+}
+
+// TestExportSlowClient — медленный, но живой клиент дочитывает файл целиком:
+// дедлайн продлевается на каждой записи.
+func TestExportSlowClient(t *testing.T) {
+	e := newAuthEnv(t, Options{ExportWriteTimeout: 300 * time.Millisecond})
+	u := e.newUser(t)
+	acc := e.createAccount(t, u, accountBody("Счёт", "shared", 0))["id"].(string)
+	e.insertManyTx(t, u, acc, 20000)
+	srv := httptest.NewServer(e.h)
+	defer srv.Close()
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/export/transactions", nil)
 	req.AddCookie(u.cookie)
-	rec := httptest.NewRecorder()
-	e.h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/csv; charset=utf-8" {
-		t.Fatalf("HEAD: %d %v", rec.Code, rec.Header())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	// Всего дольше дедлайна, но каждый кусок забирается быстрее него.
+	start := time.Now()
+	var body bytes.Buffer
+	buf := make([]byte, 64<<10)
+	for {
+		n, err := resp.Body.Read(buf)
+		body.Write(buf[:n])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("медленное чтение оборвано через %v: %v", time.Since(start), err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if rows := parseExportCSV(t, body.Bytes()); len(rows) != 20001 {
+		t.Fatalf("строк %d", len(rows))
+	}
+	if el := time.Since(start); el < time.Second {
+		t.Logf("чтение заняло %v — меньше секунды, медленный клиент проверен слабо", el)
 	}
 }
 

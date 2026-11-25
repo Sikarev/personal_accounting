@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"strings"
+	"syscall"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -121,8 +124,8 @@ func responseErrorHandler(logger *slog.Logger) func(http.ResponseWriter, *http.R
 		var aborted *errStreamAborted
 		if errors.As(err, &aborted) {
 			level := slog.LevelError
-			if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
-				level = slog.LevelInfo // клиент сам прервал загрузку
+			if clientGone(r, err) {
+				level = slog.LevelInfo // клиент прервал загрузку или перестал читать
 			}
 			logger.LogAttrs(r.Context(), level, "stream aborted",
 				slog.String("err", err.Error()),
@@ -152,4 +155,19 @@ func responseErrorHandler(logger *slog.Logger) func(http.ResponseWriter, *http.R
 		logger.LogAttrs(r.Context(), slog.LevelError, "request failed", attrs...)
 		problem.Write(w, problem.Internal())
 	}
+}
+
+// clientGone — выгрузка оборвалась по вине клиента, а не сервера: он закрыл
+// соединение или перестал читать (истёк дедлайн записи, см. deadlineWriter).
+// Первой при этом обычно приходит ошибка записи в сокет, а не отмена
+// контекста: net/http отменяет контекст запроса уже после неё. Ошибка записи
+// — *net.OpError с Op "write" (EPIPE, ECONNRESET; на Windows — WSAECONNRESET,
+// которую errors.Is с syscall.ECONNRESET не узнаёт, поэтому по Op).
+func clientGone(r *http.Request, err error) bool {
+	if r.Context().Err() != nil || errors.Is(err, os.ErrDeadlineExceeded) ||
+		errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	var opErr *net.OpError
+	return errors.As(err, &opErr) && opErr.Op == "write"
 }

@@ -4,9 +4,11 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,6 +97,8 @@ const (
 // реализует интерфейсы ответов обеих операций (метод Visit…Response).
 type streamResponse struct {
 	contentType string
+	// writeTimeout — дедлайн на каждую запись в соединение (см. deadlineWriter).
+	writeTimeout time.Duration
 	// open готовит выгрузку до отправки заголовков: открывает транзакцию,
 	// читает справочники и первую пачку. Ошибка здесь — обычный Problem JSON.
 	// Возвращает имя файла, функцию записи тела и функцию освобождения ресурсов.
@@ -126,15 +130,132 @@ func (r streamResponse) visit(w http.ResponseWriter) error {
 	h.Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 
+	dw := &deadlineWriter{w: w, rc: http.NewResponseController(w), timeout: r.writeTimeout}
 	// Буфер побольше, чтобы не отправлять ответ мелкими кусками.
-	bw := bufio.NewWriterSize(w, 32<<10)
+	bw := bufio.NewWriterSize(dw, 32<<10)
 	if err := write(bw); err != nil {
 		return &errStreamAborted{err}
 	}
 	if err := bw.Flush(); err != nil {
 		return &errStreamAborted{err}
 	}
+	// Снимаем дедлайн: соединение keep-alive обслужит следующий запрос, а у
+	// http.Server нет WriteTimeout, который сбросил бы его сам.
+	dw.clear()
 	return nil
+}
+
+// deadlineWriter продлевает дедлайн записи в соединение перед каждой записью.
+// Выгрузка держит транзакцию и соединение пула, пока пишет файл, а у
+// http.Server нет WriteTimeout: клиент, который перестал читать, держал бы их
+// вечно. С дедлайном запись, не продвинувшаяся за timeout, падает, выгрузка
+// обрывается и всё освобождается. Медленный, но живой клиент не страдает:
+// дедлайн отсчитывается заново на каждом куске (до 32 КБ), то есть нужно
+// принимать хотя бы 32 КБ за timeout.
+type deadlineWriter struct {
+	w       io.Writer
+	rc      *http.ResponseController
+	timeout time.Duration
+	// unsupported — ResponseWriter не умеет дедлайны (httptest.ResponseRecorder
+	// в тестах); тогда пишем без них.
+	unsupported bool
+}
+
+func (d *deadlineWriter) Write(p []byte) (int, error) {
+	if d.timeout > 0 && !d.unsupported {
+		// time.Now, а не s.now: дедлайн сокета — по настоящим часам.
+		if err := d.rc.SetWriteDeadline(time.Now().Add(d.timeout)); err != nil {
+			if !errors.Is(err, http.ErrNotSupported) {
+				return 0, err
+			}
+			d.unsupported = true
+		}
+	}
+	return d.w.Write(p)
+}
+
+func (d *deadlineWriter) clear() {
+	if d.timeout > 0 && !d.unsupported {
+		_ = d.rc.SetWriteDeadline(time.Time{})
+	}
+}
+
+// exportBusyRetryAfter — Retry-After, когда все слоты выгрузки заняты или у
+// пользователя уже идёт выгрузка: выгрузка длится секунды.
+const exportBusyRetryAfter = 5 * time.Second
+
+// exportGate ограничивает одновременные выгрузки: всего — slots (заметно
+// меньше пула соединений БД, чтобы выгрузки не заняли его целиком и
+// остальные запросы не ждали), и не больше одной на пользователя. Не ждёт:
+// занято — сразу отказ (429), иначе медленные клиенты копили бы очередь.
+type exportGate struct {
+	slots chan struct{} // буферизованный канал как семафор: занятое место — слот
+	mu    sync.Mutex
+	users map[uuid.UUID]struct{}
+}
+
+func newExportGate(slots int) *exportGate {
+	return &exportGate{slots: make(chan struct{}, max(slots, 1)), users: map[uuid.UUID]struct{}{}}
+}
+
+// acquire занимает слот для пользователя; free освобождает его (один раз).
+func (g *exportGate) acquire(user uuid.UUID) (free func(), ok bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if _, busy := g.users[user]; busy {
+		return nil, false
+	}
+	select {
+	case g.slots <- struct{}{}: // место есть
+	default:
+		return nil, false
+	}
+	g.users[user] = struct{}{}
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			g.mu.Lock()
+			delete(g.users, user)
+			g.mu.Unlock()
+			<-g.slots
+		})
+	}, true
+}
+
+// headExport — ответ экспорта на HEAD. middleware.GetHead обслуживает HEAD
+// обработчиком GET, и без этого HEAD выполнял бы всю выгрузку (тело потом
+// выбрасывается), занимал слот и тратил лимит полного экспорта. Отвечаем
+// заголовками без работы: типом файла, без имени (для него нужна БД).
+type headExport struct{ contentType string }
+
+func (h headExport) visit(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", h.contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	return nil
+}
+
+func (h headExport) VisitExportTransactionsResponse(w http.ResponseWriter) error { return h.visit(w) }
+func (h headExport) VisitExportAllResponse(w http.ResponseWriter) error          { return h.visit(w) }
+
+// exportHeadMiddleware — strict-middleware: на HEAD к экспорту отвечает
+// headExport, не вызывая обработчик. Метод запроса есть только здесь —
+// обработчик strict-сервера получает лишь разобранные параметры.
+// operationID здесь — имя метода Go (ExportAll), а не operationId контракта.
+func exportHeadMiddleware(f oapi.StrictHandlerFunc, operationID string) oapi.StrictHandlerFunc {
+	contentType, ok := map[string]string{
+		"ExportTransactions": "text/csv; charset=utf-8",
+		"ExportAll":          "application/zip",
+	}[operationID]
+	if !ok {
+		return f
+	}
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, req any) (any, error) {
+		if r.Method == http.MethodHead {
+			return headExport{contentType: contentType}, nil
+		}
+		return f(ctx, w, r, req)
+	}
 }
 
 func (r streamResponse) VisitExportTransactionsResponse(w http.ResponseWriter) error {
@@ -447,47 +568,68 @@ func (e *exporter) writeCategories(w io.Writer) error {
 // Обработчики
 // ---------------------------------------------------------------------------
 
+// startExport занимает слот выгрузки, открывает транзакцию и читает первую
+// пачку операций — всё, что может сломаться до отправки заголовков. release
+// закрывает транзакцию и освобождает слот; при ошибке всё освобождено.
+func (s *server) startExport(ctx context.Context, p Principal, f txFilters) (e *exporter, b *txBatches, first []dbgen.ListTransactionsRow, release func(), err error) {
+	free, ok := s.exportGate.acquire(p.UserID)
+	if !ok {
+		return nil, nil, nil, nil, problem.TooManyRequests(exportBusyRetryAfter)
+	}
+	e, err = s.openExporter(ctx, p)
+	if err != nil {
+		free()
+		return nil, nil, nil, nil, err
+	}
+	release = func() {
+		e.close(ctx)
+		free()
+	}
+	b = &txBatches{e: e, f: f}
+	if first, err = b.next(ctx); err != nil {
+		release()
+		return nil, nil, nil, nil, err
+	}
+	return e, b, first, release, nil
+}
+
 func (s *server) ExportTransactions(ctx context.Context, req oapi.ExportTransactionsRequestObject) (oapi.ExportTransactionsResponseObject, error) {
 	p := currentUser(ctx)
 	prm := req.Params
 	f := newTxFilters(prm.From, prm.To, prm.Kind, prm.AccountId, prm.CategoryId, prm.AuthorId, prm.Q)
 	return streamResponse{
-		contentType: "text/csv; charset=utf-8",
+		contentType:  "text/csv; charset=utf-8",
+		writeTimeout: s.exportWriteTimeout,
 		open: func() (string, func(io.Writer) error, func(), error) {
-			e, err := s.openExporter(ctx, p)
+			e, b, first, release, err := s.startExport(ctx, p, f)
 			if err != nil {
-				return "", nil, nil, err
-			}
-			b := &txBatches{e: e, f: f}
-			first, err := b.next(ctx)
-			if err != nil {
-				e.close(ctx)
 				return "", nil, nil, err
 			}
 			write := func(w io.Writer) error { return e.writeTransactions(ctx, w, b, first) }
-			return "operations-" + e.today.Format(time.DateOnly) + ".csv", write, func() { e.close(ctx) }, nil
+			return "operations-" + e.today.Format(time.DateOnly) + ".csv", write, release, nil
 		},
 	}, nil
 }
 
 func (s *server) ExportAll(ctx context.Context, _ oapi.ExportAllRequestObject) (oapi.ExportAllResponseObject, error) {
 	p := currentUser(ctx)
-	if retry, ok := s.exportAllPerUser.Allow(p.UserID.String()); !ok {
+	key := p.UserID.String()
+	// Здесь только проверка: попытка списывается после успешного открытия
+	// выгрузки — сбой БД или занятый слот лимит не тратят. Check и Add не
+	// атомарны вместе, но две выгрузки одного пользователя одновременно не
+	// идут (exportGate), так что лимит не проскочить параллельными запросами.
+	if retry, ok := s.exportAllPerUser.Check(key); !ok {
 		return nil, problem.TooManyRequests(retry)
 	}
 	return streamResponse{
-		contentType: "application/zip",
+		contentType:  "application/zip",
+		writeTimeout: s.exportWriteTimeout,
 		open: func() (string, func(io.Writer) error, func(), error) {
-			e, err := s.openExporter(ctx, p)
+			e, b, first, release, err := s.startExport(ctx, p, txFilters{})
 			if err != nil {
 				return "", nil, nil, err
 			}
-			b := &txBatches{e: e}
-			first, err := b.next(ctx)
-			if err != nil {
-				e.close(ctx)
-				return "", nil, nil, err
-			}
+			s.exportAllPerUser.Add(key)
 			now := s.now()
 			write := func(w io.Writer) error {
 				zw := zip.NewWriter(w)
@@ -510,7 +652,7 @@ func (s *server) ExportAll(ctx context.Context, _ oapi.ExportAllRequestObject) (
 				}
 				return zw.Close()
 			}
-			return "export-" + e.today.Format(time.DateOnly) + ".zip", write, func() { e.close(ctx) }, nil
+			return "export-" + e.today.Format(time.DateOnly) + ".zip", write, release, nil
 		},
 	}, nil
 }
@@ -519,4 +661,6 @@ func (s *server) ExportAll(ctx context.Context, _ oapi.ExportAllRequestObject) (
 var (
 	_ oapi.ExportTransactionsResponseObject = streamResponse{}
 	_ oapi.ExportAllResponseObject          = streamResponse{}
+	_ oapi.ExportTransactionsResponseObject = headExport{}
+	_ oapi.ExportAllResponseObject          = headExport{}
 )

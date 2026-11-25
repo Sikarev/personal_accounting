@@ -47,7 +47,16 @@ type Options struct {
 	// AppBaseURL — адрес фронтенда без «/» в конце, из него собираются ссылки
 	// в письмах. Пусто — http://localhost:5173 (dev-сервер Vite).
 	AppBaseURL string
+	// ExportConcurrency — сколько выгрузок (экспорт CSV) может идти
+	// одновременно; 0 — половина MaxConns пула БД, но не меньше 1.
+	ExportConcurrency int
+	// ExportWriteTimeout — дедлайн на запись очередного куска выгрузки в
+	// соединение; 0 — exportWriteTimeout (30 с).
+	ExportWriteTimeout time.Duration
 }
+
+// exportWriteTimeout — умолчание Options.ExportWriteTimeout.
+const exportWriteTimeout = 30 * time.Second
 
 // Limits — ограничения частоты запросов (в памяти процесса).
 type Limits struct {
@@ -105,6 +114,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.Mail == nil {
 		o.Mail = mail.NewBackground(mail.Discard{}, slog.New(slog.DiscardHandler), time.Second)
+	}
+	if o.ExportWriteTimeout == 0 {
+		o.ExportWriteTimeout = exportWriteTimeout
 	}
 	if o.AppBaseURL == "" {
 		o.AppBaseURL = "http://localhost:5173"
@@ -192,7 +204,7 @@ func NewRouter(logger *slog.Logger, db *pgxpool.Pool, opts Options) (http.Handle
 		api.Route("/v1", func(v1 chi.Router) {
 			// Strict-сервер сам разбирает запрос и вызывает наш метод с готовой
 			// структурой; мы возвращаем типизированный ответ или ошибку.
-			strict := oapi.NewStrictHandlerWithOptions(srv, nil, oapi.StrictHTTPServerOptions{
+			strict := oapi.NewStrictHandlerWithOptions(srv, []oapi.StrictMiddlewareFunc{exportHeadMiddleware}, oapi.StrictHTTPServerOptions{
 				RequestErrorHandlerFunc:  requestErrorHandler,
 				ResponseErrorHandlerFunc: responseErrorHandler(logger),
 			})

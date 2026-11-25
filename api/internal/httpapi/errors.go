@@ -113,6 +113,25 @@ func requestErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 // а подробности пишутся в лог вместе с request id.
 func responseErrorHandler(logger *slog.Logger) func(http.ResponseWriter, *http.Request, error) {
 	return func(w http.ResponseWriter, r *http.Request, err error) {
+		// Ответ-файл оборвался на середине (export.go): заголовки и часть тела
+		// уже отправлены, дописывать Problem JSON некуда. Пишем в лог и рвём
+		// соединение (http.ErrAbortHandler — штатный способ, net/http не
+		// отправит завершающий chunk), чтобы клиент не принял обрезанный файл
+		// за целый.
+		var aborted *errStreamAborted
+		if errors.As(err, &aborted) {
+			level := slog.LevelError
+			if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+				level = slog.LevelInfo // клиент сам прервал загрузку
+			}
+			logger.LogAttrs(r.Context(), level, "stream aborted",
+				slog.String("err", err.Error()),
+				slog.String("method", r.Method),
+				slog.String("path", r.URL.Path),
+				slog.String("request_id", middleware.GetReqID(r.Context())),
+			)
+			panic(http.ErrAbortHandler)
+		}
 		var p *problem.Problem
 		if errors.As(err, &p) && p.Status < http.StatusInternalServerError {
 			problem.Write(w, p)

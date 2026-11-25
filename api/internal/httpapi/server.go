@@ -36,6 +36,8 @@ type server struct {
 	// на одного пользователя.
 	resendPerMinute *ratelimit.Limiter
 	resendPerHour   *ratelimit.Limiter
+	// exportAllPerUser — полные выгрузки (GET /export/all) одного пользователя.
+	exportAllPerUser *ratelimit.Limiter
 	// dummyHash — хеш для проверки пароля, когда пользователя нет (см. checkPassword).
 	// Считается сразу при создании сервера: если считать лениво, первый вход
 	// с несуществующим e-mail был бы дольше остальных и выдавал бы это по времени.
@@ -48,17 +50,18 @@ var _ oapi.StrictServerInterface = (*server)(nil)
 
 func newServer(pool *pgxpool.Pool, opts Options) *server {
 	return &server{
-		pool:            pool,
-		q:               dbgen.New(pool),
-		now:             opts.Now,
-		cookieSecure:    opts.CookieSecure,
-		mail:            opts.Mail,
-		appBaseURL:      opts.AppBaseURL,
-		loginAttempts:   ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
-		loginFailures:   ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
-		resetPerEmail:   ratelimit.New(opts.Limits.PasswordResetPerEmail, opts.Now),
-		resendPerMinute: ratelimit.New(opts.Limits.ResendPerMinute, opts.Now),
-		resendPerHour:   ratelimit.New(opts.Limits.ResendPerHour, opts.Now),
-		dummyHash:       auth.HashPassword("dummy password for timing equalization"),
+		pool:             pool,
+		q:                dbgen.New(pool),
+		now:              opts.Now,
+		cookieSecure:     opts.CookieSecure,
+		mail:             opts.Mail,
+		appBaseURL:       opts.AppBaseURL,
+		loginAttempts:    ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
+		loginFailures:    ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
+		resetPerEmail:    ratelimit.New(opts.Limits.PasswordResetPerEmail, opts.Now),
+		resendPerMinute:  ratelimit.New(opts.Limits.ResendPerMinute, opts.Now),
+		resendPerHour:    ratelimit.New(opts.Limits.ResendPerHour, opts.Now),
+		exportAllPerUser: ratelimit.New(opts.Limits.ExportAllPerUser, opts.Now),
+		dummyHash:        auth.HashPassword("dummy password for timing equalization"),
 	}
 }

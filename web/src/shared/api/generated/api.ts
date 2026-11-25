@@ -45,6 +45,7 @@ import type {
   CreateAccountRequest,
   CreateCategoryRequest,
   CurrencyList,
+  ExportTransactionsParams,
   GetBalanceReportParams,
   GetCategoryReportParams,
   GetMonthlyReportParams,
@@ -4310,6 +4311,329 @@ export function useGetBalanceReport<
   queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
   const queryOptions = getGetBalanceReportQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getExportTransactionsUrl = (params?: ExportTransactionsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['kind', 'accountId', 'categoryId', 'authorId']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v))
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/v1/export/transactions?${stringifiedParams}`
+    : `/api/v1/export/transactions`
+}
+
+/**
+ * Видимые неудалённые операции под теми же фильтрами, что у ленты (без
+ * курсора и лимита), в том же порядке. CSV для Excel по-русски: UTF-8
+ * с BOM, разделитель `;`, строки через CRLF, десятичная запятая, даты
+ * `ДД.ММ.ГГГГ`. Файл отдаётся потоком: ошибка посреди выгрузки обрывает
+ * соединение (файл не скачается целиком), а не дописывает JSON.
+ * @summary Операции в CSV
+ */
+export const exportTransactions = async (
+  params?: ExportTransactionsParams,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<Blob> => {
+  return apiFetch<Blob>(getExportTransactionsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getExportTransactionsQueryKey = (params?: ExportTransactionsParams) => {
+  return [`/api/v1/export/transactions`, ...(params ? [params] : [])] as const
+}
+
+export const getExportTransactionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ExportTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getExportTransactionsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportTransactions>>> = ({ signal }) =>
+    exportTransactions(params, { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportTransactions>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportTransactionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof exportTransactions>>
+>
+export type ExportTransactionsQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Видимые неудалённые операции под теми же фильтрами, что у ленты (без
+ * курсора и лимита), в том же порядке. CSV для Excel по-русски: UTF-8
+ * с BOM, разделитель `;`, строки через CRLF, десятичная запятая, даты
+ * `ДД.ММ.ГГГГ`. Файл отдаётся потоком: ошибка посреди выгрузки обрывает
+ * соединение (файл не скачается целиком), а не дописывает JSON.
+ * @summary Операции в CSV
+ */
+export function useExportTransactions<
+  TData = Awaited<ReturnType<typeof exportTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params: undefined | ExportTransactionsParams,
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportTransactions>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof exportTransactions>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции под теми же фильтрами, что у ленты (без
+ * курсора и лимита), в том же порядке. CSV для Excel по-русски: UTF-8
+ * с BOM, разделитель `;`, строки через CRLF, десятичная запятая, даты
+ * `ДД.ММ.ГГГГ`. Файл отдаётся потоком: ошибка посреди выгрузки обрывает
+ * соединение (файл не скачается целиком), а не дописывает JSON.
+ * @summary Операции в CSV
+ */
+export function useExportTransactions<
+  TData = Awaited<ReturnType<typeof exportTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ExportTransactionsParams,
+  options?: {
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof exportTransactions>>, TError, TData>
+    > &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportTransactions>>,
+          TError,
+          Awaited<ReturnType<typeof exportTransactions>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции под теми же фильтрами, что у ленты (без
+ * курсора и лимита), в том же порядке. CSV для Excel по-русски: UTF-8
+ * с BOM, разделитель `;`, строки через CRLF, десятичная запятая, даты
+ * `ДД.ММ.ГГГГ`. Файл отдаётся потоком: ошибка посреди выгрузки обрывает
+ * соединение (файл не скачается целиком), а не дописывает JSON.
+ * @summary Операции в CSV
+ */
+export function useExportTransactions<
+  TData = Awaited<ReturnType<typeof exportTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ExportTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Видимые неудалённые операции под теми же фильтрами, что у ленты (без
+ * курсора и лимита), в том же порядке. CSV для Excel по-русски: UTF-8
+ * с BOM, разделитель `;`, строки через CRLF, десятичная запятая, даты
+ * `ДД.ММ.ГГГГ`. Файл отдаётся потоком: ошибка посреди выгрузки обрывает
+ * соединение (файл не скачается целиком), а не дописывает JSON.
+ * @summary Операции в CSV
+ */
+export function useExportTransactions<
+  TData = Awaited<ReturnType<typeof exportTransactions>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  params?: ExportTransactionsParams,
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportTransactions>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getExportTransactionsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getExportAllUrl = () => {
+  return `/api/v1/export/all`
+}
+
+/**
+ * Zip-архив `export-<дата>.zip` с файлами `accounts.csv` (видимые счета,
+ * включая архивные), `categories.csv` (оба дерева, включая архивные)
+ * и `transactions.csv` (все видимые неудалённые операции, формат —
+ * как у `/export/transactions`). Лимит частоты на пользователя —
+ * 429 `too_many_requests` с `Retry-After`.
+ * @summary Все видимые данные (zip)
+ */
+export const exportAll = async (options?: Parameters<typeof apiFetch>[1]): Promise<Blob> => {
+  return apiFetch<Blob>(getExportAllUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getExportAllQueryKey = () => {
+  return [`/api/v1/export/all`] as const
+}
+
+export const getExportAllQueryOptions = <
+  TData = Awaited<ReturnType<typeof exportAll>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAll>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getExportAllQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAll>>> = ({ signal }) =>
+    exportAll({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof exportAll>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportAllQueryResult = NonNullable<Awaited<ReturnType<typeof exportAll>>>
+export type ExportAllQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Zip-архив `export-<дата>.zip` с файлами `accounts.csv` (видимые счета,
+ * включая архивные), `categories.csv` (оба дерева, включая архивные)
+ * и `transactions.csv` (все видимые неудалённые операции, формат —
+ * как у `/export/transactions`). Лимит частоты на пользователя —
+ * 429 `too_many_requests` с `Retry-After`.
+ * @summary Все видимые данные (zip)
+ */
+export function useExportAll<
+  TData = Awaited<ReturnType<typeof exportAll>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAll>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportAll>>,
+          TError,
+          Awaited<ReturnType<typeof exportAll>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Zip-архив `export-<дата>.zip` с файлами `accounts.csv` (видимые счета,
+ * включая архивные), `categories.csv` (оба дерева, включая архивные)
+ * и `transactions.csv` (все видимые неудалённые операции, формат —
+ * как у `/export/transactions`). Лимит частоты на пользователя —
+ * 429 `too_many_requests` с `Retry-After`.
+ * @summary Все видимые данные (zip)
+ */
+export function useExportAll<
+  TData = Awaited<ReturnType<typeof exportAll>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAll>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportAll>>,
+          TError,
+          Awaited<ReturnType<typeof exportAll>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Zip-архив `export-<дата>.zip` с файлами `accounts.csv` (видимые счета,
+ * включая архивные), `categories.csv` (оба дерева, включая архивные)
+ * и `transactions.csv` (все видимые неудалённые операции, формат —
+ * как у `/export/transactions`). Лимит частоты на пользователя —
+ * 429 `too_many_requests` с `Retry-After`.
+ * @summary Все видимые данные (zip)
+ */
+export function useExportAll<
+  TData = Awaited<ReturnType<typeof exportAll>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAll>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Zip-архив `export-<дата>.zip` с файлами `accounts.csv` (видимые счета,
+ * включая архивные), `categories.csv` (оба дерева, включая архивные)
+ * и `transactions.csv` (все видимые неудалённые операции, формат —
+ * как у `/export/transactions`). Лимит частоты на пользователя —
+ * 429 `too_many_requests` с `Retry-After`.
+ * @summary Все видимые данные (zip)
+ */
+export function useExportAll<
+  TData = Awaited<ReturnType<typeof exportAll>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAll>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getExportAllQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
     queryKey: DataTag<QueryKey, TData, TError>

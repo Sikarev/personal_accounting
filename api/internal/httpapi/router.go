@@ -71,6 +71,9 @@ type Limits struct {
 	// одним пользователем.
 	ResendPerMinute ratelimit.Rule
 	ResendPerHour   ratelimit.Rule
+	// ExportAllPerUser — полные выгрузки одного пользователя: каждая читает
+	// все данные семьи, а нужна она редко (резервная копия, переезд).
+	ExportAllPerUser ratelimit.Rule
 }
 
 // defaultLimits — лимиты по умолчанию (docs/api.md, «Ограничение частоты»).
@@ -83,6 +86,7 @@ var defaultLimits = Limits{
 	EmailTokenPerIP:       ratelimit.Rule{Limit: 20, Window: time.Minute},
 	ResendPerMinute:       ratelimit.Rule{Limit: 1, Window: time.Minute},
 	ResendPerHour:         ratelimit.Rule{Limit: 5, Window: time.Hour},
+	ExportAllPerUser:      ratelimit.Rule{Limit: 10, Window: time.Hour},
 }
 
 // Операции (operationId), к которым применяются лимиты по IP.
@@ -115,6 +119,7 @@ func (o Options) withDefaults() Options {
 		{&o.Limits.EmailTokenPerIP, &defaultLimits.EmailTokenPerIP},
 		{&o.Limits.ResendPerMinute, &defaultLimits.ResendPerMinute},
 		{&o.Limits.ResendPerHour, &defaultLimits.ResendPerHour},
+		{&o.Limits.ExportAllPerUser, &defaultLimits.ExportAllPerUser},
 	} {
 		if r.rule.Limit == 0 {
 			*r.rule = *r.def

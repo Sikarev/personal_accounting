@@ -34,7 +34,8 @@ export interface Problem {
    * `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
    * `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
    * `account_has_transactions`, `account_archived`, `transaction_readonly`,
-   * `adjustment_readonly`.
+   * `adjustment_readonly`,
+   * `not_owner`, `last_owner`, `cannot_remove_self`, `sole_member`.
    */
   code: string
   /** Ошибки по полям; только при `code = validation_failed`. */

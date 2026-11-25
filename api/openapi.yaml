@@ -33,6 +33,8 @@ tags:
     description: Операции (расходы, доходы, переводы, корректировки)
   - name: reports
     description: Отчёты в базовой валюте семьи
+  - name: family
+    description: Участники семьи и роли
 
 paths:
   /currencies:
@@ -888,6 +890,96 @@ paths:
           $ref: "#/components/responses/Problem"
   # --- /Отчёты ---------------------------------------------------------------
 
+  # ---------------------------------------------------------------------
+  # Семья. Участник другой семьи и несуществующий пользователь — 404.
+  # Менять роли и исключать может только owner (иначе 403 `not_owner`);
+  # в семье всегда остаётся хотя бы один владелец (иначе 409 `last_owner`).
+  # ---------------------------------------------------------------------
+  /family/members:
+    get:
+      operationId: listFamilyMembers
+      summary: Участники семьи
+      description: |
+        Все участники семьи текущего пользователя, включая его самого. Имя и
+        e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+        по дате вступления.
+      tags: [family]
+      responses:
+        "200":
+          description: Участники.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyMemberList"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /family/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    delete:
+      operationId: removeFamilyMember
+      summary: Исключить участника
+      description: |
+        Только для owner (иначе 403 `not_owner`). Исключить можно и другого
+        владельца. Себя исключить нельзя — 409 `cannot_remove_self` (для этого
+        есть `POST /family/leave`). Исключённому создаётся новая семья; его личные
+        счета остаются в этой семье в архиве и не видны никому.
+      tags: [family]
+      responses:
+        "204":
+          description: Участник исключён.
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /family/members/{userId}/role:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    put:
+      operationId: setFamilyMemberRole
+      summary: Сменить роль участника
+      description: |
+        Только для owner (иначе 403 `not_owner`). Понизить себя можно, если в семье
+        есть другой владелец, иначе 409 `last_owner`. Та же роль — 200 без изменений.
+      tags: [family]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFamilyRoleRequest"
+      responses:
+        "200":
+          description: Участник с новой ролью.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FamilyMember"
+        default:
+          $ref: "#/components/responses/Problem"
+
+  /family/leave:
+    post:
+      operationId: leaveFamily
+      summary: Покинуть семью
+      description: |
+        Пользователь выходит из семьи, ему создаётся новая семья «Семья» (он в ней
+        owner, категории по умолчанию). Личные счета остаются в прежней семье
+        в архиве и не видны никому. Сессия не меняется.
+        Единственный участник — 409 `sole_member`; единственный владелец при других
+        участниках — 409 `last_owner` (сначала назначьте другого владельца).
+      tags: [family]
+      responses:
+        "200":
+          description: Пользователь и его новая семья.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        default:
+          $ref: "#/components/responses/Problem"
+  # --- /Семья ----------------------------------------------------------------
+
 components:
   securitySchemes:
     cookieAuth:
@@ -931,6 +1023,14 @@ components:
 
     TransactionId:
       name: transactionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    UserId:
+      name: userId
       in: path
       required: true
       schema:
@@ -1089,7 +1189,8 @@ components:
             `bad_request`, `validation_failed`, `unauthorized`, `invalid_credentials`,
             `forbidden_origin`, `not_found`, `method_not_allowed`, `too_many_requests`, `internal`,
             `account_has_transactions`, `account_archived`, `transaction_readonly`,
-            `adjustment_readonly`.
+            `adjustment_readonly`,
+            `not_owner`, `last_owner`, `cannot_remove_self`, `sole_member`.
           example: not_found
         errors:
           type: array
@@ -2002,3 +2103,44 @@ components:
         missingRates:
           $ref: "#/components/schemas/MissingRates"
     # --- /Отчёты ---------------------------------------------------------------
+
+    # -------------------------------------------------------------------
+    # Семья
+    # -------------------------------------------------------------------
+    FamilyMember:
+      type: object
+      required: [userId, name, email, role, joinedAt]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: Иван
+        email:
+          type: string
+          example: ivan@example.com
+        role:
+          $ref: "#/components/schemas/FamilyRole"
+        joinedAt:
+          type: string
+          format: date-time
+          description: Когда пользователь вступил в семью (для создателя — регистрация).
+
+    FamilyMemberList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FamilyMember"
+
+    SetFamilyRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/FamilyRole"
+    # --- /Семья ----------------------------------------------------------------

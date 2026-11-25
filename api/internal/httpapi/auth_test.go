@@ -587,6 +587,9 @@ func TestContractSecurity(t *testing.T) {
 		"deleteTransaction": false, "restoreTransaction": false,
 		// Отчёты — только для вошедших.
 		"getCategoryReport": false, "getMonthlyReport": false, "getBalanceReport": false,
+		// Семья — только для вошедших.
+		"listFamilyMembers": false, "setFamilyMemberRole": false, "removeFamilyMember": false,
+		"leaveFamily": false,
 	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)

@@ -51,6 +51,8 @@ async function mockAccounts(page: Page): Promise<MockApi> {
       ...body,
       id: '01a1faf8-0000-7000-8000-0000000000b1',
       balance: body.initialBalance,
+      // Валюта нового счёта — рубли: эквивалент равен остатку.
+      baseBalance: body.initialBalance,
     }
     api.accounts.push(account)
     return route.fulfill({ status: 201, json: account })

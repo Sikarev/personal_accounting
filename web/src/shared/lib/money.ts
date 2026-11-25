@@ -63,15 +63,16 @@ export function getMinorUnits(currency: string): number {
  * Используется компонентом `Money`; для простого текста есть `formatMoney`.
  */
 export function formatMoneyParts(
-  amount: number,
+  amount: number | bigint,
   currency: string,
   { minorUnits, roundToMajor = false, signDisplay = 'auto' }: FormatMoneyOptions = {},
 ): MoneyParts {
   // Дробное число — ошибка вызывающего кода (суммы — целые минимальные единицы).
   // А целое больше 2^53 бывает в честных данных: итог «за всё время» по огромным суммам
   // приходит из JSON уже с потерей точности. Экран из-за него падать не должен —
-  // считаем в BigInt и показываем значение как есть.
-  if (!Number.isInteger(amount)) {
+  // считаем в BigInt и показываем значение как есть. Сумму, сложенную в BigInt
+  // (общий баланс), можно передать как есть — без потери точности на `Number`.
+  if (typeof amount === 'number' && !Number.isInteger(amount)) {
     throw new RangeError(
       `formatMoney: сумма должна быть целым числом минимальных единиц, получено ${amount}`,
     )
@@ -79,7 +80,8 @@ export function formatMoneyParts(
 
   const digits = minorUnits ?? getMinorUnits(currency)
   const factor = 10n ** BigInt(digits)
-  const abs = BigInt(Math.abs(amount))
+  const signed = BigInt(amount)
+  const abs = signed < 0n ? -signed : signed
   let major = abs / factor
   let minor = abs % factor
 
@@ -96,7 +98,7 @@ export function formatMoneyParts(
   const body = getFormatter(currency, fractionDigits).format(decimal as `${number}`)
 
   if (major === 0n && minor === 0n) return { text: body, sign: 0 }
-  if (amount < 0) return { text: MINUS + body, sign: -1 }
+  if (signed < 0n) return { text: MINUS + body, sign: -1 }
   return { text: signDisplay === 'always' ? '+' + body : body, sign: 1 }
 }
 
@@ -124,7 +126,7 @@ export function moneyTone(
  * Для отображения в интерфейсе используйте компонент `Money`, а не эту функцию напрямую.
  */
 export function formatMoney(
-  amount: number,
+  amount: number | bigint,
   currency: string,
   options?: FormatMoneyOptions,
 ): string {

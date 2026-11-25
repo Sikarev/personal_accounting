@@ -23,23 +23,38 @@ import {
 
 const NOW = new Date('2026-11-23T12:00:00+03:00')
 
-const acc = (n: number, extra: Record<string, unknown>) => ({
-  ...existingAccount,
-  id: `01a1faf8-0000-7000-8000-0000000000b${n}`,
-  sortOrder: n,
-  hasTransactions: true,
-  ...extra,
-})
+/**
+ * Счёт для моков. `baseBalance` (остаток в рублях) у рублёвого счёта — равен остатку,
+ * у валютного задаётся явно (курс ЦБ считает сервер), без курса — `null`.
+ */
+const acc = (n: number, extra: Record<string, unknown>) => {
+  const account = {
+    ...existingAccount,
+    id: `01a1faf8-0000-7000-8000-0000000000b${n}`,
+    sortOrder: n,
+    hasTransactions: true,
+    ...extra,
+  }
+  return 'baseBalance' in extra ? account : { ...account, baseBalance: account.balance as number }
+}
 const card = acc(1, { name: 'Карта', balance: 4_523_050, color: 'blue' })
 const cash = acc(2, { name: 'Наличные', type: 'cash', balance: 1_200_000 })
 const credit = acc(3, { name: 'Кредитка', type: 'credit_card', balance: -1_500_000 })
-const usd = acc(4, { name: 'Доллары', currency: 'USD', visibility: 'private', balance: 50_000 })
+// Курсы ЦБ в моках: 1 $ = 92,35 ₽, 1 € = 100,50 ₽.
+const usd = acc(4, {
+  name: 'Доллары',
+  currency: 'USD',
+  visibility: 'private',
+  balance: 50_000,
+  baseBalance: 4_617_500,
+})
 const vacation = acc(5, {
   name: 'Накопления на отпуск в Европе следующим летом — не трогать',
   type: 'deposit',
   currency: 'EUR',
   visibility: 'private',
   balance: 120_000,
+  baseBalance: 12_060_000,
   color: 'teal',
 })
 const piggy = acc(6, {
@@ -163,6 +178,8 @@ const rowButton = (page: Page, text: string) =>
     .locator('[data-transaction-open]')
 const menuOf = (page: Page, title: string) =>
   page.getByRole('button', { name: t.feed.row.actions(title) })
+/** Главная сумма общего баланса. */
+const balanceTotal = (page: Page) => balance(page).locator('[data-balance-total]')
 const editSheet = (page: Page) => page.getByRole('dialog', { name: t.feed.edit.title })
 const toast = (page: Page, text: string | RegExp) =>
   page.locator('.mantine-Notification-root').filter({ hasText: text })
@@ -208,10 +225,24 @@ test.describe('главная с данными', () => {
     await expectNoAxeViolations(page)
     expect(await horizontalOverflow(page)).toBe(0)
 
-    // Баланс по валютам: активные счета «в балансе», рубли первыми, округлено до рублей.
-    // Рубли: 45 230,50 + 12 000 − 15 000 = 42 230,50 → 42 231 ₽ (копилка не в балансе).
-    const amounts = balance(page).getByRole('list').first().getByRole('listitem')
-    expect((await amounts.allTextContents()).map(plain)).toEqual(['42 231 ₽', '1 200 €', '500 $'])
+    // Общий баланс одной суммой в рублях: активные счета «в балансе», валюты — по курсу,
+    // округлено до рублей. 45 230,50 + 12 000 − 15 000 (рубли) + 46 175 (500 $)
+    // + 120 600 (1 200 €) = 209 005,50 → 209 006 ₽ (копилка не в балансе).
+    // «≈» скрыт от диктора, вместо него он читает «примерно».
+    expect(plain(await balanceTotal(page).textContent())).toBe('≈ примерно 209 006 ₽')
+    await expect(balance(page).getByText(/^Включая/)).toHaveText(
+      /^Включая 1\s200\s€ и 500\s\$ по курсу ЦБ$/,
+    )
+    await expect(balance(page).getByText(/нет курса ЦБ/)).toHaveCount(0)
+    // У валютного счёта под суммой — эквивалент в рублях, у рублёвого — нет.
+    const usdRow = balance(page)
+      .getByRole('listitem')
+      .filter({ hasText: usd.name as string })
+    expect(plain(await usdRow.textContent())).toContain('500 $≈ примерно 46 175 ₽')
+    const cardRow = balance(page)
+      .getByRole('listitem')
+      .filter({ hasText: /^Карта/ })
+    expect(plain(await cardRow.textContent())).not.toContain('≈')
 
     // Группы: общие и личные; архивный счёт не показан.
     await expect(groupToggle(page, t.accounts.shared)).toHaveAttribute('aria-expanded', 'true')
@@ -255,6 +286,55 @@ test.describe('главная с данными', () => {
       expect(await page.evaluate(() => document.activeElement?.tagName)).toBe('BODY')
     },
   )
+})
+
+test.describe('общий баланс: у валюты нет курса', () => {
+  // У евро нет ни одного курса ЦБ: счёт «Накопления» в сумму не входит.
+  const noRate = accounts.map((a) => (a === vacation ? { ...a, baseBalance: null } : a))
+
+  test('скриншот блока баланса', { tag: '@visual' }, async ({ page }) => {
+    await setup(page, { accounts: noRate })
+    await openHome(page)
+    await expect(balance(page)).toHaveScreenshot('home-no-rate.png')
+  })
+
+  test('скриншот при шрифте 200 %', { tag: '@visual' }, async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Крупный шрифт важен на узком экране')
+    await setup(page, { accounts: noRate })
+    await openHome(page)
+    await enlargeFont(page)
+    await expect(balance(page)).toHaveScreenshot('home-no-rate-font-200.png')
+  })
+
+  test('итог без валюты без курса, её сумма и пояснение', { tag: '@a11y' }, async ({ page }) => {
+    await setup(page, { accounts: noRate })
+    await openHome(page)
+    // 42 230,50 (рубли) + 46 175 (500 $) = 88 405,50 → 88 406 ₽; евро — отдельно.
+    expect(plain(await balanceTotal(page).textContent())).toBe('≈ примерно 88 406 ₽')
+    await expect(balance(page).getByText(/^Включая/)).toHaveText(/^Включая 500\s\$ по курсу ЦБ$/)
+    await expect(balance(page).getByText(t.balance.withoutRate('EUR'))).toBeVisible()
+    await expect(
+      balance(page)
+        .getByRole('listitem')
+        .filter({ hasText: /^1\s200\s€$/ }),
+    ).toBeVisible()
+    // У счёта без курса эквивалента нет — ни прочерка, ни ошибки.
+    const row = balance(page)
+      .getByRole('listitem')
+      .filter({ hasText: vacation.name as string })
+    expect(plain(await row.textContent())).not.toContain('≈')
+    await expectNoAxeViolations(page)
+    expect(await horizontalOverflow(page)).toBe(0)
+    await enlargeFont(page)
+    expect(await horizontalOverflow(page)).toBe(0)
+  })
+
+  test('только рубли — одна сумма, без пояснений', { tag: '@a11y' }, async ({ page }) => {
+    await setup(page, { accounts: [card, cash, credit] })
+    await openHome(page)
+    expect(plain(await balanceTotal(page).textContent())).toBe('42 231 ₽')
+    await expect(balance(page).getByText(/по курсу ЦБ|нет курса ЦБ/)).toHaveCount(0)
+  })
 })
 
 test.describe('свёрнутые группы', () => {
@@ -509,14 +589,27 @@ test.describe('состояния', () => {
           name: 'Основная зарплатная карта с кешбэком на всё и сразу',
           balance: 9_999_999_999_999,
         }),
-        acc(2, { name: 'Наличные', currency: 'USD', balance: -9_999_999_999_999 }),
+        acc(2, {
+          name: 'Наличные',
+          currency: 'USD',
+          balance: -9_999_999_999_999,
+          baseBalance: -923_499_999_999_908,
+        }),
         acc(3, {
           name: 'Евро',
           currency: 'EUR',
           balance: 9_999_999_999_999,
+          baseBalance: 1_004_999_999_999_900,
           visibility: 'private',
         }),
-        acc(4, { name: 'Юани', currency: 'CNY', balance: 123_456, visibility: 'private' }),
+        // Без курса ЦБ: итог юаней — отдельно, с пояснением.
+        acc(4, {
+          name: 'Юани',
+          currency: 'CNY',
+          balance: 123_456,
+          baseBalance: null,
+          visibility: 'private',
+        }),
       ]
       await setup(page, {
         accounts: huge,
@@ -547,14 +640,14 @@ test.describe('состояния', () => {
       await openHome(page)
       await enlargeFont(page)
       expect(await horizontalOverflow(page)).toBe(0)
-      // Главная сумма «42 231 ₽» переносится только по разрядам: каждая строка — целая группа
-      // цифр (со знаком валюты в конце), а не обрывок.
-      const lines = await balance(page)
-        .getByRole('listitem')
-        .first()
-        .evaluate((li) => {
+      // Главная сумма «≈ 209 006 ₽» переносится только по разрядам: каждая строка — целая
+      // группа цифр (со знаком валюты в конце), а не обрывок. Меряется сама сумма (Money):
+      // скрытое «примерно» для диктора позиционировано отдельно.
+      const lines = await balanceTotal(page)
+        .locator('[data-wrap]')
+        .evaluate((money) => {
           const range = document.createRange()
-          range.selectNodeContents(li)
+          range.selectNodeContents(money)
           const rects = [...range.getClientRects()]
           return new Set(rects.map((r) => Math.round(r.top))).size
         })

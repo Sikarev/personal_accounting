@@ -203,8 +203,10 @@
     flex: none;
   }
 
-  .amount {
+  /* Остаток с эквивалентом — под названием, по левому краю (как и название). */
+  .rowMain .amount {
     margin-inline-start: 0;
+    text-align: start;
   }
 }
 

@@ -1,5 +1,21 @@
-/* Главная сумма — во всю ширину, остальные валюты — строкой под ней, переносятся целиком. */
-.list {
+/* Главная сумма, под ней — пояснения мелким шрифтом и валюты без курса. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  min-width: 0;
+}
+
+.main {
+  margin: 0;
+  min-width: 0;
+  font-size: var(--mantine-font-size-xl);
+  line-height: var(--mantine-line-height-xl);
+  font-weight: 600;
+}
+
+/* Валюты без курса: каждая — пункт, переносится целиком. */
+.other {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -8,21 +24,18 @@
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.main {
-  flex-basis: 100%;
-  min-width: 0;
-  font-size: var(--mantine-font-size-xl);
-  line-height: var(--mantine-line-height-xl);
-  font-weight: 600;
-}
-
-.other {
-  min-width: 0;
   font-size: var(--mantine-font-size-lg);
   line-height: var(--mantine-line-height-lg);
   font-weight: 500;
+}
+
+.other > li {
+  min-width: 0;
+}
+
+/* Пояснение переносится по словам, огромная сумма в нём — по разрядам (Money wrap). */
+.note {
+  min-width: 0;
 }
 
 /* Не шире строки: перенос — только по разрядам (Money wrap), не по символам. */

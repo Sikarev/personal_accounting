@@ -1,0 +1,7 @@
+/* Сумма и эквивалент — друг под другом, по правому краю. */
+.root {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  text-align: end;
+}

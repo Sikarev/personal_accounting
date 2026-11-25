@@ -3,6 +3,7 @@ export {
   AccountColorPicker,
   type AccountColorPickerProps,
 } from './AccountColorPicker/AccountColorPicker'
+export { AccountBalance, type AccountBalanceProps } from './AccountBalance/AccountBalance'
 export { AccountMark, type AccountMarkProps } from './AccountMark/AccountMark'
 export { accountTypeIcons } from './AccountMark/accountTypeIcons'
 export { AmountInput, type AmountInputProps } from './AmountInput/AmountInput'

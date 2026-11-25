@@ -10,21 +10,6 @@
   gap: var(--mantine-spacing-sm);
 }
 
-/* Итог по валютам: каждая валюта — пункт списка, пункты переносятся целиком. */
-.totals {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: var(--mantine-spacing-lg);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* Запас на случай, если и одного разряда не помещается (Money wrap переносит по разрядам). */
-.wrapAmount {
-  overflow-wrap: anywhere;
-}
-
 /* Строки списка доходят до скруглённых краёв карточки — обрезаем по радиусу.
    Карточка — контейнер для @container: строки перестраиваются по её ширине. */
 .listCard {
@@ -102,8 +87,10 @@
     flex: none;
   }
 
-  .amount {
+  /* Остаток с эквивалентом — под названием, по левому краю (как и название). */
+  .rowMain .amount {
     margin-inline-start: 0;
+    text-align: start;
     /* Запас: Money wrap переносит по разрядам, этого хватает почти всегда. */
     overflow-wrap: anywhere;
   }

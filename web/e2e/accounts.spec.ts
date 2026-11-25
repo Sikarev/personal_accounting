@@ -29,12 +29,20 @@ type Account = {
   sortOrder: number
   archivedAt: string | null
   hasTransactions: boolean
+  /** Остаток в рублях по курсу ЦБ; `null` — у валюты нет курса. */
+  baseBalance: number | null
 }
 
 let seq = 0
+/**
+ * Счёт для моков. `baseBalance` рублёвого счёта по умолчанию равен остатку; у валютного
+ * задаётся явно (курс считает сервер), иначе — `null`, «нет курса».
+ */
 function account(overrides: Partial<Account> & Pick<Account, 'name'>): Account {
   seq += 1
+  const currency = overrides.currency ?? 'RUB'
   return {
+    baseBalance: currency === 'RUB' ? (overrides.balance ?? 0) : null,
     id: `01a1faf8-0000-7000-8000-${String(seq).padStart(12, '0')}`,
     type: 'card',
     currency: 'RUB',
@@ -61,7 +69,14 @@ function fixture(): Account[] {
       balance: 99_999_999_999_999,
       includeInTotal: false,
     }),
-    account({ name: 'Доллары', currency: 'USD', visibility: 'private', balance: 5_000 }),
+    // 50 $ × 92,35 ₽ = 4 617,50 ₽.
+    account({
+      name: 'Доллары',
+      currency: 'USD',
+      visibility: 'private',
+      balance: 5_000,
+      baseBalance: 461_750,
+    }),
     account({
       name: 'Заначка',
       type: 'other',
@@ -71,6 +86,11 @@ function fixture(): Account[] {
     }),
     account({ name: 'Старая карта', archivedAt: '2026-11-01T10:00:00Z', balance: 0 }),
   ]
+}
+
+/** Как `fixture()`, но у доллара нет ни одного курса ЦБ. */
+function noRateFixture(): Account[] {
+  return fixture().map((a) => (a.currency === 'USD' ? { ...a, baseBalance: null } : a))
 }
 
 const currencies = {
@@ -149,6 +169,7 @@ async function mockAccountsApi(page: Page, accounts: Account[] = fixture()): Pro
       case 'POST /accounts/:id/adjust-balance': {
         const target = find(id)
         target.balance = request.postDataJSON().balance
+        if (target.currency === 'RUB') target.baseBalance = target.balance
         return route.fulfill({ json: { account: target, transactionId: 'tx-1' } })
       }
     }
@@ -209,6 +230,9 @@ const focusedRow = (page: Page) =>
     return el?.dataset.accountRow ?? el?.tagName ?? null
   })
 
+/** Неразрывные пробелы Intl → обычные: так ожидания в тестах читаемы. */
+const plain = (text: string | null) => (text ?? '').replace(/[  ]/g, ' ')
+
 const idOf = (accounts: Account[], name: string) => accounts.find((a) => a.name === name)!.id
 
 /** Тост — по тексту: у Mantine нет роли у уведомления. */
@@ -227,17 +251,22 @@ test.describe('список', () => {
     await expect(page).toHaveScreenshot('accounts.png', { fullPage: true })
   })
 
-  test('доступность, итог по валютам, архив', { tag: '@a11y' }, async ({ page }) => {
+  test('доступность, итог в рублях, архив', { tag: '@a11y' }, async ({ page }) => {
     await mockAccountsApi(page)
     await openAccounts(page)
-    // Итог — по каждой валюте отдельно, без счёта «не в общем балансе».
-    // Каждая валюта — отдельный пункт списка.
-    const totals = await page
-      .getByRole('region', { name: t.accounts.total })
-      .getByRole('listitem')
-      .allTextContents()
-    expect(totals.map((x) => x.replace(/\s/g, ' '))).toEqual(['22 220,50 ₽', '50 $'])
+    // Итог — одной суммой в рублях, с копейками, без счёта «не в общем балансе»:
+    // 22 220,50 (рубли) + 4 617,50 (50 $ по курсу) = 26 838 ₽. Доллары — в пояснении.
     // <wbr> не попадает в текст: копируется та же сумма.
+    const total = page.getByRole('region', { name: t.accounts.total })
+    expect(plain(await total.locator('[data-balance-total]').textContent())).toBe(
+      '≈ примерно 26 838 ₽',
+    )
+    await expect(total.getByText(/^Включая/)).toHaveText(/^Включая 50\s\$ по курсу ЦБ$/)
+    // У валютного счёта — эквивалент до рублей, у рублёвого его нет.
+    const usdRow = page.getByRole('button', { name: /^Доллары/ })
+    expect(plain(await usdRow.textContent())).toContain('50 $≈ примерно 4 618 ₽')
+    const cardRow = page.getByRole('button', { name: /^Карта Сбер/ })
+    expect(plain(await cardRow.textContent())).not.toContain('≈')
     // Пустых групп нет, у личных — пояснение.
     await expect(page.getByText(t.accounts.privateHint)).toBeVisible()
     // Архив свёрнут, раскрывается кнопкой.
@@ -284,6 +313,53 @@ test.describe('список', () => {
     await enlargeFont(page)
     expect(await horizontalOverflow(page)).toBe(0)
   })
+
+  test('нет курса: скриншот', { tag: '@visual' }, async ({ page }) => {
+    await mockAccountsApi(page, noRateFixture())
+    await openAccounts(page)
+    await expect(page).toHaveScreenshot('accounts-no-rate.png', { fullPage: true })
+  })
+
+  test('нет курса: шрифт 200 %, скриншот', { tag: '@visual' }, async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'Проверяем на узком экране — там теснее всего')
+    await mockAccountsApi(page, noRateFixture())
+    await openAccounts(page)
+    await enlargeFont(page)
+    await expect(page).toHaveScreenshot('accounts-no-rate-font-200.png', { fullPage: true })
+  })
+
+  test(
+    'нет курса: итог без этой валюты, её сумма и пояснение',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockAccountsApi(page, noRateFixture())
+      await openAccounts(page)
+      const total = page.getByRole('region', { name: t.accounts.total })
+      // Доллары в рубли не пересчитать: итог — только рубли, точный (без «≈»).
+      expect(plain(await total.locator('[data-balance-total]').textContent())).toBe('22 220,50 ₽')
+      await expect(total.getByRole('listitem')).toHaveText([/^50\s\$$/])
+      await expect(total.getByText(t.balance.withoutRate('USD'))).toBeVisible()
+      await expect(total.getByText(/по курсу ЦБ/)).toHaveCount(0)
+      // У счёта без курса эквивалента нет.
+      const usdRow = page.getByRole('button', { name: /^Доллары/ })
+      expect(plain(await usdRow.textContent())).not.toContain('≈')
+      await expectNoAxeViolations(page)
+      await enlargeFont(page)
+      expect(await horizontalOverflow(page)).toBe(0)
+    },
+  )
+
+  test(
+    'окно корректировки валютного счёта — с эквивалентом',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await mockAccountsApi(page)
+      await openAccounts(page)
+      const dialog = await openAdjust(page, 'Доллары')
+      expect(plain(await dialog.textContent())).toContain('50 $≈ примерно 4 618 ₽')
+      await expectNoAxeViolations(page)
+    },
+  )
 
   test('зоны касания строк и ручек не меньше 44 px', { tag: '@a11y' }, async ({ page }) => {
     await mockAccountsApi(page)
@@ -452,7 +528,9 @@ test.describe('корректировка остатка', () => {
       if (route.request().method() !== 'DELETE') return problem(route, 404, 'not_found')
       deleted.push(new URL(route.request().url()).pathname)
       // Сервер удалил корректировку — остаток прежний.
-      api.accounts.find((a) => a.name === 'Карта Сбер')!.balance = 4_523_050
+      const card = api.accounts.find((a) => a.name === 'Карта Сбер')!
+      card.balance = 4_523_050
+      card.baseBalance = 4_523_050
       return route.fulfill({ status: 204 })
     })
     await openAccounts(page)

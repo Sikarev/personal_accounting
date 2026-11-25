@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { Account } from '../api'
 import {
   archivedAccounts,
+  balanceSummary,
+  baseEquivalent,
   groupActiveAccounts,
   isNegativeBalanceProblem,
-  totalsByCurrency,
 } from './accounts'
 
 let seq = 0
@@ -59,33 +60,95 @@ describe('archivedAccounts', () => {
   })
 })
 
-describe('totalsByCurrency', () => {
-  it('суммирует по валютам, рубли первыми', () => {
-    const totals = totalsByCurrency([
-      account({ currency: 'USD', balance: 5000 }),
-      account({ balance: 100000 }),
-      account({ balance: -30000, type: 'credit_card' }),
-      account({ currency: 'EUR', balance: 100 }),
-    ])
-    expect(totals).toEqual([
-      { currency: 'RUB', amount: 70000 },
-      { currency: 'EUR', amount: 100 },
-      { currency: 'USD', amount: 5000 },
-    ])
+// Курс в фикстурах: 1 $ = 92,35 ₽, 1 € = 100,50 ₽ (как отдаёт сервер — уже округлено).
+const usd = (balance: number) =>
+  account({ currency: 'USD', balance, baseBalance: Math.round(balance * 92.35) })
+const eur = (balance: number) =>
+  account({ currency: 'EUR', balance, baseBalance: Math.round(balance * 100.5) })
+
+describe('balanceSummary', () => {
+  it('только рубли: сумма остатков, без разбивки по валютам', () => {
+    expect(balanceSummary([account({ balance: 100_000 }), account({ balance: 2_050 })])).toEqual({
+      total: 102_050n,
+      converted: [],
+      withoutRate: [],
+    })
+  })
+
+  it('рубли и доллары: итог в рублях, доллары — в разбивке в исходной валюте', () => {
+    expect(
+      balanceSummary([account({ balance: 100_000 }), usd(50_000), usd(10_000), eur(1_000)]),
+    ).toEqual({
+      total: 100_000n + 4_617_500n + 923_500n + 100_500n,
+      converted: [
+        { currency: 'EUR', amount: 1_000n },
+        { currency: 'USD', amount: 60_000n },
+      ],
+      withoutRate: [],
+    })
+  })
+
+  it('доллары без курса: в итог не входят, итог долларов — отдельно', () => {
+    expect(
+      balanceSummary([
+        account({ balance: 100_000 }),
+        account({ currency: 'USD', balance: 50_000, baseBalance: null }),
+        account({ currency: 'USD', balance: 1_000, baseBalance: null }),
+        eur(1_000),
+      ]),
+    ).toEqual({
+      total: 200_500n,
+      converted: [{ currency: 'EUR', amount: 1_000n }],
+      withoutRate: [{ currency: 'USD', amount: 51_000n }],
+    })
   })
 
   it('не учитывает архивные и исключённые из общего баланса', () => {
     expect(
-      totalsByCurrency([
+      balanceSummary([
         account({ balance: 100 }),
-        account({ balance: 1000, includeInTotal: false }),
-        account({ balance: 10000, archivedAt: '2026-11-20T10:00:00Z' }),
+        account({ balance: 1_000, includeInTotal: false }),
+        account({ balance: 10_000, archivedAt: '2026-11-20T10:00:00Z' }),
+        { ...usd(5_000), includeInTotal: false },
+        { ...usd(5_000), archivedAt: '2026-11-20T10:00:00Z' },
+        account({ currency: 'EUR', balance: 7, baseBalance: null, includeInTotal: false }),
       ]),
-    ).toEqual([{ currency: 'RUB', amount: 100 }])
+    ).toEqual({ total: 100n, converted: [], withoutRate: [] })
   })
 
-  it('нет счетов — пустой список', () => {
-    expect(totalsByCurrency([])).toEqual([])
+  it('отрицательные остатки — со знаком; нулевой итог валюты не показывается', () => {
+    expect(
+      balanceSummary([
+        account({ balance: -3_000_000, type: 'credit_card' }),
+        usd(-1_000),
+        usd(500),
+        eur(200),
+        eur(-200),
+      ]),
+    ).toEqual({
+      total: -3_000_000n - 92_350n + 46_175n + 20_100n - 20_100n,
+      converted: [{ currency: 'USD', amount: -500n }],
+      withoutRate: [],
+    })
+  })
+
+  it('сумма больше 2^53 не теряет точность', () => {
+    const big = Number.MAX_SAFE_INTEGER // 2^53 − 1
+    expect(balanceSummary([account({ balance: big }), account({ balance: 2 })]).total).toBe(
+      BigInt(big) + 2n,
+    )
+  })
+
+  it('нет счетов — ноль', () => {
+    expect(balanceSummary([])).toEqual({ total: 0n, converted: [], withoutRate: [] })
+  })
+})
+
+describe('baseEquivalent', () => {
+  it('у валютного счёта — baseBalance, у рублёвого и без курса — нет', () => {
+    expect(baseEquivalent({ currency: 'USD', baseBalance: -4_617_500 })).toBe(-4_617_500)
+    expect(baseEquivalent({ currency: 'USD', baseBalance: null })).toBeNull()
+    expect(baseEquivalent({ currency: 'RUB', baseBalance: 100 })).toBeNull()
   })
 })
 

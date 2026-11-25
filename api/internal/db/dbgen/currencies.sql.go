@@ -48,3 +48,35 @@ func (q *Queries) ListActiveCurrencies(ctx context.Context) ([]ListActiveCurrenc
 	}
 	return items, nil
 }
+
+const listCurrencyMinorUnits = `-- name: ListCurrencyMinorUnits :many
+SELECT code, minor_units
+FROM currencies
+`
+
+type ListCurrencyMinorUnitsRow struct {
+	Code       string
+	MinorUnits int16
+}
+
+// Знаки после запятой всех валют справочника, включая неактивные: у старого
+// счёта может быть валюта, которую уже нельзя выбрать для нового (экспорт).
+func (q *Queries) ListCurrencyMinorUnits(ctx context.Context) ([]ListCurrencyMinorUnitsRow, error) {
+	rows, err := q.db.Query(ctx, listCurrencyMinorUnits)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCurrencyMinorUnitsRow
+	for rows.Next() {
+		var i ListCurrencyMinorUnitsRow
+		if err := rows.Scan(&i.Code, &i.MinorUnits); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

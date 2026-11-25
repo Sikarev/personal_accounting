@@ -36,6 +36,11 @@ type server struct {
 	// на одного пользователя.
 	resendPerMinute *ratelimit.Limiter
 	resendPerHour   *ratelimit.Limiter
+	// exportAllPerUser — полные выгрузки (GET /export/all) одного пользователя.
+	exportAllPerUser *ratelimit.Limiter
+	// exportGate — одновременные выгрузки (всего и по пользователю), см. export.go.
+	exportGate         *exportGate
+	exportWriteTimeout time.Duration
 	// dummyHash — хеш для проверки пароля, когда пользователя нет (см. checkPassword).
 	// Считается сразу при создании сервера: если считать лениво, первый вход
 	// с несуществующим e-mail был бы дольше остальных и выдавал бы это по времени.
@@ -47,18 +52,27 @@ type server struct {
 var _ oapi.StrictServerInterface = (*server)(nil)
 
 func newServer(pool *pgxpool.Pool, opts Options) *server {
+	exportSlots := opts.ExportConcurrency
+	if exportSlots == 0 {
+		// Половина пула: остальные запросы не ждут соединения, даже когда
+		// все слоты выгрузки заняты медленными клиентами.
+		exportSlots = int(pool.Config().MaxConns) / 2
+	}
 	return &server{
-		pool:            pool,
-		q:               dbgen.New(pool),
-		now:             opts.Now,
-		cookieSecure:    opts.CookieSecure,
-		mail:            opts.Mail,
-		appBaseURL:      opts.AppBaseURL,
-		loginAttempts:   ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
-		loginFailures:   ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
-		resetPerEmail:   ratelimit.New(opts.Limits.PasswordResetPerEmail, opts.Now),
-		resendPerMinute: ratelimit.New(opts.Limits.ResendPerMinute, opts.Now),
-		resendPerHour:   ratelimit.New(opts.Limits.ResendPerHour, opts.Now),
-		dummyHash:       auth.HashPassword("dummy password for timing equalization"),
+		pool:               pool,
+		q:                  dbgen.New(pool),
+		now:                opts.Now,
+		cookieSecure:       opts.CookieSecure,
+		mail:               opts.Mail,
+		appBaseURL:         opts.AppBaseURL,
+		loginAttempts:      ratelimit.New(opts.Limits.LoginPerEmailIP, opts.Now),
+		loginFailures:      ratelimit.New(opts.Limits.LoginFailuresPerEmail, opts.Now),
+		resetPerEmail:      ratelimit.New(opts.Limits.PasswordResetPerEmail, opts.Now),
+		resendPerMinute:    ratelimit.New(opts.Limits.ResendPerMinute, opts.Now),
+		resendPerHour:      ratelimit.New(opts.Limits.ResendPerHour, opts.Now),
+		exportAllPerUser:   ratelimit.New(opts.Limits.ExportAllPerUser, opts.Now),
+		exportGate:         newExportGate(exportSlots),
+		exportWriteTimeout: opts.ExportWriteTimeout,
+		dummyHash:          auth.HashPassword("dummy password for timing equalization"),
 	}
 }

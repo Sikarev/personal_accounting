@@ -590,6 +590,8 @@ func TestContractSecurity(t *testing.T) {
 		// Семья — только для вошедших.
 		"listFamilyMembers": false, "setFamilyMemberRole": false, "removeFamilyMember": false,
 		"leaveFamily": false,
+		// Экспорт — только для вошедших.
+		"exportTransactions": false, "exportAll": false,
 	}
 	if !reflect.DeepEqual(public, want) {
 		t.Fatalf("публичные операции: %v, ожидалось %v", public, want)

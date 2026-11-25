@@ -17,6 +17,10 @@ export const paths = {
   home: '/',
   transactions: '/transactions',
   reports: '/reports',
+  // Вкладки отчётов; `/reports` перенаправляет на первую.
+  reportsCategories: '/reports/categories',
+  reportsMonthly: '/reports/monthly',
+  reportsBalance: '/reports/balance',
   accounts: '/accounts',
   settings: '/settings',
   settingsCategories: '/settings/categories',

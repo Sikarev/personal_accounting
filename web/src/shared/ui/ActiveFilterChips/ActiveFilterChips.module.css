@@ -1,0 +1,35 @@
+/* Чипы активных фильтров: перенос по строкам, «Сбросить всё» — в конце ряда. */
+.activeChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+}
+
+.chipList {
+  display: contents;
+  list-style: none;
+}
+
+.chipItem {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.activeChip {
+  max-width: 100%;
+  min-height: var(--app-touch-target);
+}
+
+/* Длинное название счёта или категории в чипе — с многоточием. */
+.activeChipText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Зона касания не ниже 44 px (у Mantine sm — 36 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}

@@ -43,18 +43,6 @@
   gap: var(--mantine-spacing-md);
 }
 
-.period {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mantine-spacing-sm);
-}
-
-.dates {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
-  gap: var(--mantine-spacing-sm);
-}
-
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -67,37 +55,6 @@
   min-height: var(--app-touch-target);
   display: inline-flex;
   align-items: center;
-}
-
-/* Чипы активных фильтров: перенос по строкам, «Сбросить всё» — в конце ряда. */
-.activeChips {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--mantine-spacing-sm);
-}
-
-.chipList {
-  display: contents;
-  list-style: none;
-}
-
-.chipItem {
-  max-width: 100%;
-  min-width: 0;
-}
-
-.activeChip {
-  max-width: 100%;
-  min-height: var(--app-touch-target);
-}
-
-/* Длинное название счёта или категории в чипе — с многоточием. */
-.activeChipText {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ——— Итоги ——— */

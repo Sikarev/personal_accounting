@@ -14,6 +14,7 @@ import {
 const A = '01a1faf8-0000-7000-8000-0000000000a1'
 const B = '01a1faf8-0000-7000-8000-0000000000a2'
 const C = '01a1faf8-0000-7000-8000-0000000000c1'
+const U = '01a1faf8-0000-7000-8000-000000000001'
 
 const parse = (query: string) => parseFilters(new URLSearchParams(query))
 
@@ -25,7 +26,7 @@ describe('parseFilters', () => {
   it('все фильтры, массивы — повторением параметра', () => {
     expect(
       parse(
-        `from=2026-11-01&to=2026-11-30&kind=expense&kind=income&accountId=${A}&accountId=${B}&categoryId=${C}&q=кофе`,
+        `from=2026-11-01&to=2026-11-30&kind=expense&kind=income&accountId=${A}&accountId=${B}&categoryId=${C}&authorId=${U}&q=кофе`,
       ),
     ).toEqual({
       from: '2026-11-01',
@@ -33,6 +34,7 @@ describe('parseFilters', () => {
       kind: ['expense', 'income'],
       accountId: [A, B],
       categoryId: [C],
+      authorId: [U],
       q: 'кофе',
     })
   })
@@ -58,6 +60,7 @@ describe('filtersToSearchParams', () => {
       kind: ['transfer', 'adjustment'],
       accountId: [B, A],
       categoryId: [C],
+      authorId: [U],
       q: ' молоко ',
     }
     const params = filtersToSearchParams(filters)
@@ -78,6 +81,10 @@ describe('toListParams', () => {
     })
   })
 
+  it('автор — в параметрах запроса', () => {
+    expect(toListParams({ ...EMPTY_FILTERS, authorId: [U] })).toEqual({ authorId: [U] })
+  })
+
   it('поиск из пробелов — без фильтра', () => {
     expect(toListParams({ ...EMPTY_FILTERS, q: '   ' })).toEqual({})
     expect(hasActiveFilters({ ...EMPTY_FILTERS, q: '   ' })).toBe(false)
@@ -91,6 +98,7 @@ describe('hasActiveFilters', () => {
     ['kind', { kind: ['expense'] }],
     ['accountId', { accountId: [A] }],
     ['categoryId', { categoryId: [C] }],
+    ['authorId', { authorId: [U] }],
     ['q', { q: 'кофе' }],
   ])('%s', (_, patch) => {
     expect(hasActiveFilters({ ...EMPTY_FILTERS, ...patch })).toBe(true)

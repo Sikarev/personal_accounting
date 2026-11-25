@@ -29,7 +29,13 @@ import {
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
 import { usePendingFocus } from '../../shared/lib/usePendingFocus'
-import { EmptyState, PageHeader, TransactionListSkeleton, transactionTitle } from '../../shared/ui'
+import {
+  ActiveFilterChips,
+  EmptyState,
+  PageHeader,
+  TransactionListSkeleton,
+  transactionTitle,
+} from '../../shared/ui'
 import { icons } from '../../theme'
 import { EditTransaction, INLINE_EDIT } from '../../features/transactions/EditTransaction'
 import { EditTransactionSheet } from '../../features/transactions/EditTransactionSheet'
@@ -38,7 +44,7 @@ import { TransactionDays, type RowAction } from '../../features/transactions/Tra
 import type { TransactionFormState } from '../../features/transactions/TransactionFormView'
 import { useEditSheet } from '../../features/transactions/useEditSheet'
 import { useTransactionActions } from '../../features/transactions/useTransactionActions'
-import { ActiveFilterChips, FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
+import { FeedFilterBar, type SearchState, type SetFilters } from './FeedFilters'
 import { FeedSummary } from './FeedSummary'
 import { activeFilterChips } from './filterOptions'
 import { SEARCH_FIELD } from './focusTargets'
@@ -135,7 +141,11 @@ export function TransactionsPage() {
   const items = useMemo(() => pages?.flatMap((p) => p.items) ?? [], [pages])
   const groups = useMemo(() => groupByDay(items, mergeDays(pages ?? [])), [items, pages])
 
-  const chips = activeFilterChips(filters, { accountNames, categories, today }, t)
+  const chips = activeFilterChips(
+    filters,
+    { accountNames, categories, today, meId: me.data?.user.id },
+    t,
+  )
 
   // ——— Объявления для экранного диктора ———
   // Лента меняется без перехода: после смены фильтра — «Лента обновлена», после подгрузки —
@@ -406,7 +416,12 @@ export function TransactionsPage() {
             onSearch={onSearch}
           />
         )}
-        <ActiveFilterChips chips={chips} onChange={setFilters} onReset={resetFilters} />
+        <ActiveFilterChips
+          chips={chips}
+          onRemove={setFilters}
+          onReset={resetFilters}
+          fallbackFocus={`[${SEARCH_FIELD}]`}
+        />
         {/* Итоги — над лентой; «Ничего не найдено» итогами не дублируем. */}
         {failed.length === 0 && !isPending && items.length > 0 && (
           <FeedSummary query={summary} filtered={filtered} />

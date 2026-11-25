@@ -562,3 +562,68 @@ export async function collectWindowErrors(page: Page): Promise<() => Promise<str
   })
   return () => page.evaluate(() => (window as Window & { __errors?: string[] }).__errors ?? [])
 }
+
+// ——— Отчёты ———
+
+/** Ответ `GET /reports/categories` (схема `CategoryReport` контракта). */
+export type CategoryReportBody = {
+  currency: string
+  total: number
+  items: { categoryId: string; amount: number }[]
+  missingRates: string[]
+}
+
+export type ReportsMock = {
+  /** Параметры запросов `GET /reports/categories` в порядке прихода. */
+  requests: URLSearchParams[]
+  /** Ответить на следующие запросы своими обработчиками (ошибка, задержка). */
+  failNext: ((route: Route) => Promise<void>)[]
+}
+
+/**
+ * Подменить `GET /reports/categories`: ответ выбирает `respond` по параметрам запроса
+ * (вид, период, счета) — так отдельно задаются текущий и предыдущий (для сравнения) периоды.
+ * Справочники (`/accounts`, `/categories`) — свои, если переданы. Регистрировать после
+ * `mockSignedIn`: свои моки перекрывают умолчания.
+ */
+export async function mockReportsApi(
+  page: Page,
+  data: {
+    respond: (params: URLSearchParams) => CategoryReportBody
+    accounts?: Record<string, unknown>[]
+    categories?: Category[]
+  },
+): Promise<ReportsMock> {
+  const api: ReportsMock = { requests: [], failNext: [] }
+  if (data.accounts) {
+    const items = data.accounts
+    await page.route(`**${API}/accounts`, (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ json: { items } }) : route.fallback(),
+    )
+  }
+  if (data.categories) {
+    const items = data.categories
+    await page.route(`**${API}/categories`, (route) =>
+      route.request().method() === 'GET' ? route.fulfill({ json: { items } }) : route.fallback(),
+    )
+  }
+  await page.route(
+    (url) => url.pathname === `${API}/reports/categories`,
+    (route) => {
+      const params = new URL(route.request().url()).searchParams
+      api.requests.push(params)
+      const fail = api.failNext.shift()
+      if (fail) return fail(route)
+      return route.fulfill({ json: data.respond(params) })
+    },
+  )
+  return api
+}
+
+/** Отчёт без операций. */
+export const emptyCategoryReport: CategoryReportBody = {
+  currency: 'RUB',
+  total: 0,
+  items: [],
+  missingRates: [],
+}

@@ -1,34 +1,16 @@
-import {
-  Button,
-  Chip,
-  MultiSelect,
-  NativeSelect,
-  Paper,
-  Text,
-  TextInput,
-  type ComboboxItem,
-  type OptionsFilter,
-} from '@mantine/core'
+import { Button, Chip, MultiSelect, Paper, Text, TextInput } from '@mantine/core'
 import { useDebouncedCallback } from '@mantine/hooks'
-import { IconAdjustmentsHorizontal, IconSearch, IconX } from '@tabler/icons-react'
-import { useEffect, useId, useRef, useState } from 'react'
+import { IconAdjustmentsHorizontal, IconSearch } from '@tabler/icons-react'
+import { useId, useState } from 'react'
 
 import type { Account, Category, TransactionKind } from '../../shared/api'
 import { useT } from '../../shared/i18n'
-import { isCalendarDate } from '../../shared/lib/date'
-import { matchesSearch } from '../../shared/lib/search'
-import {
-  detectPreset,
-  FILTER_KINDS,
-  PERIOD_PRESETS,
-  presetPeriod,
-  type FeedFilters,
-  type PeriodPreset,
-} from '../../shared/lib/transactionFilters'
+import { accountOptions, filterBySearch } from '../../shared/lib/selectOptions'
+import { FILTER_KINDS, PERIOD_PRESETS, type FeedFilters } from '../../shared/lib/transactionFilters'
 import { useMobileLayout } from '../../shared/lib/useMobileLayout'
-import { ResponsiveSheet } from '../../shared/ui'
+import { PeriodField, ResponsiveSheet } from '../../shared/ui'
 import { icons } from '../../theme'
-import { accountOptions, categoryFilterOptions, type FilterChip } from './filterOptions'
+import { categoryFilterOptions } from './filterOptions'
 import { SEARCH_FIELD } from './focusTargets'
 import classes from './TransactionsPage.module.css'
 
@@ -145,18 +127,6 @@ function SearchField({ initial, onChange }: { initial: string; onChange: SetFilt
   )
 }
 
-/** Поиск по подписи без учёта регистра и «ё/е», как в выборе категории. */
-const filterBySearch: OptionsFilter = ({ options, search }) =>
-  options
-    .map((o) =>
-      'group' in o
-        ? { ...o, items: o.items.filter((item) => matchesSearch(item.label, search)) }
-        : o,
-    )
-    .filter((o) =>
-      'group' in o ? o.items.length > 0 : matchesSearch((o as ComboboxItem).label, search),
-    )
-
 function FilterFields({ filters, onChange, accounts, categories, today, inSheet }: FieldsProps) {
   const t = useT()
   const kindLabelId = useId()
@@ -164,7 +134,13 @@ function FilterFields({ filters, onChange, accounts, categories, today, inSheet 
 
   return (
     <>
-      <PeriodField filters={filters} onChange={onChange} today={today} />
+      <PeriodField
+        value={filters}
+        onChange={onChange}
+        today={today}
+        presets={PERIOD_PRESETS}
+        defaultPreset="all"
+      />
       <MultiSelect
         size="md"
         label={t.feed.filters.accounts}
@@ -211,206 +187,5 @@ function FilterFields({ filters, onChange, accounts, categories, today, inSheet 
         </Chip.Group>
       </div>
     </>
-  )
-}
-
-/**
- * Период: готовые варианты и «Свой период» — два нативных поля даты (на телефоне —
- * системный календарь, без своей библиотеки дат). Границы считаются от «сегодня»
- * пользователя (`useToday()`), не от часов браузера.
- */
-function PeriodField({
-  filters,
-  onChange,
-  today,
-}: Pick<FieldsProps, 'filters' | 'onChange' | 'today'>) {
-  const t = useT()
-  const detected = detectPreset(filters, today)
-  // «Свой период» выбран, а даты ещё пустые (или совпали с готовым вариантом): поля дат
-  // остаются на экране, пока пользователь не выберет другой вариант.
-  const [customChosen, setCustomChosen] = useState(detected === 'custom')
-  // Период сбросили снаружи (крестик на чипе, «Сбросить всё») — поля дат прячутся.
-  const [lastDetected, setLastDetected] = useState(detected)
-  if (detected !== lastDetected) {
-    setLastDetected(detected)
-    if (detected === 'all' && filters.from === null && filters.to === null) setCustomChosen(false)
-  }
-  const value: PeriodPreset = customChosen ? 'custom' : detected
-
-  const choose = (preset: PeriodPreset) => {
-    setCustomChosen(preset === 'custom')
-    // «Свой период» начинается с текущих границ: из «Этого месяца» удобно поправить день.
-    if (preset !== 'custom') onChange(presetPeriod(preset, today))
-  }
-
-  // Начало позже конца — меняем местами: иначе лента молча опустела бы. Сюда приходят
-  // только законченные даты (DateField), поэтому перестановка не ломает набор.
-  const setFrom = (from: string | null) =>
-    from && filters.to && from > filters.to
-      ? onChange({ from: filters.to, to: from })
-      : onChange({ from })
-  const setTo = (to: string | null) =>
-    to && filters.from && to < filters.from
-      ? onChange({ from: to, to: filters.from })
-      : onChange({ to })
-
-  return (
-    <div className={classes.period}>
-      <NativeSelect
-        size="md"
-        label={t.feed.filters.period}
-        value={value}
-        onChange={(e) => choose(e.currentTarget.value as PeriodPreset)}
-        data={PERIOD_PRESETS.map((preset) => ({
-          value: preset,
-          label: t.feed.filters.periods[preset],
-        }))}
-      />
-      {value === 'custom' && (
-        <div role="group" aria-label={t.feed.filters.customLabel} className={classes.dates}>
-          <DateField label={t.feed.filters.from} value={filters.from} onCommit={setFrom} />
-          <DateField label={t.feed.filters.to} value={filters.to} onCommit={setTo} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-/** Год, с которого дата считается законченной: при наборе Chrome отдаёт `0002-…`. */
-const MIN_YEAR = 1900
-
-const isFinishedDate = (value: string) =>
-  isCalendarDate(value) && Number(value.slice(0, 4)) >= MIN_YEAR
-
-/**
- * Поле даты границы периода. Значение — своё состояние, в адрес уходит в два момента:
- * - выбор в календаре (или колесе на телефоне) — сразу: дата приходит законченной;
- * - набор с клавиатуры — по Enter или уходу из поля. Пока набирается, браузер отдаёт
- *   промежуточные даты: `0002-12-12`, а в уже заполненном поле — вполне правдоподобную
- *   `2026-01-22` на полпути к `2026-11-22`. Запись каждой в адрес запускала бы запрос
- *   и перестановку «начало позже конца» — набранное терялось бы.
- * При применении пустое поле снимает границу, недонабранное — возвращает прежнее значение.
- */
-function DateField({
-  label,
-  value,
-  onCommit,
-}: {
-  label: string
-  value: string | null
-  onCommit: (value: string | null) => void
-}) {
-  const [draft, setDraft] = useState(value ?? '')
-  // Значение в адресе поменялось снаружи (перестановка, готовый период, чип) — показываем его.
-  const [lastValue, setLastValue] = useState(value)
-  if (value !== lastValue) {
-    setLastValue(value)
-    setDraft(value ?? '')
-  }
-  // Идёт набор с клавиатуры: изменения ждут Enter или ухода из поля.
-  const typing = useRef(false)
-
-  const apply = (next: string) => {
-    typing.current = false
-    if (next === '') {
-      if (value !== null) onCommit(null)
-    } else if (!isFinishedDate(next)) {
-      setDraft(value ?? '')
-    } else if (next !== value) {
-      onCommit(next)
-    }
-  }
-
-  return (
-    <TextInput
-      type="date"
-      size="md"
-      label={label}
-      value={draft}
-      onChange={(e) => {
-        const next = e.currentTarget.value
-        setDraft(next)
-        if (!typing.current && isFinishedDate(next)) apply(next)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') apply(e.currentTarget.value)
-        else if (e.key !== 'Tab' && e.key !== 'Escape') typing.current = true
-      }}
-      onBlur={(e) => {
-        if (typing.current || e.currentTarget.value === '') apply(e.currentTarget.value)
-      }}
-    />
-  )
-}
-
-const CHIP = 'data-filter-chip'
-
-/**
- * Активные фильтры чипами над лентой: каждый снимается крестиком, «Сбросить всё».
- * Снятый чип исчезает вместе с фокусом — фокус переходит на соседний чип, а если чипов
- * не осталось, на поле поиска (иначе он упал бы на `body`).
- */
-export function ActiveFilterChips({
-  chips,
-  onChange,
-  onReset,
-}: {
-  chips: FilterChip[]
-  onChange: SetFilters
-  onReset: () => void
-}) {
-  const t = useT()
-  // Снятый чип (`null` ключ — «Сбросить всё») и его позиция. Фокус ставится, когда чипа
-  // уже нет на экране: адрес обновляется не мгновенно, и перерисовка до этого момента
-  // нашла бы на прежнем месте тот же чип.
-  const pendingFocus = useRef<{ key: string | null; index: number } | null>(null)
-  useEffect(() => {
-    const pending = pendingFocus.current
-    if (!pending) return
-    const gone =
-      pending.key === null ? chips.length === 0 : !chips.some((c) => c.key === pending.key)
-    if (!gone) return
-    pendingFocus.current = null
-    const rest = document.querySelectorAll<HTMLElement>(`[${CHIP}]`)
-    const target = rest[Math.min(pending.index, rest.length - 1)]
-    ;(target ?? document.querySelector<HTMLElement>(`[${SEARCH_FIELD}]`))?.focus()
-  })
-
-  if (chips.length === 0) return null
-  return (
-    <div className={classes.activeChips}>
-      <ul aria-label={t.feed.filters.activeLabel} className={classes.chipList}>
-        {chips.map((chip, index) => (
-          <li key={chip.key} className={classes.chipItem}>
-            <Button
-              variant="light"
-              size="sm"
-              radius="xl"
-              className={classes.activeChip}
-              rightSection={<IconX size={icons.size.md} stroke={icons.stroke} aria-hidden />}
-              aria-label={t.feed.filters.remove(chip.label)}
-              onClick={() => {
-                pendingFocus.current = { key: chip.key, index }
-                onChange(chip.without)
-              }}
-              {...{ [CHIP]: true }}
-            >
-              <span className={classes.activeChipText}>{chip.label}</span>
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <Button
-        variant="subtle"
-        size="sm"
-        className={classes.touchButton}
-        onClick={() => {
-          pendingFocus.current = { key: null, index: 0 }
-          onReset()
-        }}
-      >
-        {t.feed.resetAll}
-      </Button>
-    </div>
   )
 }

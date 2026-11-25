@@ -1,0 +1,388 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+/* Кнопки — зона касания не ниже 44 px (у Mantine md — 42 px). */
+.touchButton {
+  min-height: var(--app-touch-target);
+}
+
+/* Блок-карточка: пустые состояния, ошибка, заглушки вкладок. */
+.card {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+  background-color: var(--mantine-color-body);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ——— Вкладки ———
+   Как переключатель «Вход / Регистрация»: ссылки с aria-current. Поровну в строке, но не уже
+   подписи: не помещаются (крупный шрифт) — вкладка переносится целиком, слово не рвётся.
+   Шрифт sm — чтобы три вкладки помещались в строку на 375 px. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid var(--mantine-color-default-border);
+  background-color: var(--app-color-surface);
+}
+
+.tab {
+  flex: 1 1 0;
+  min-width: max-content;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--app-touch-target);
+  padding-inline: var(--mantine-spacing-sm);
+  border: 1px solid transparent;
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  text-align: center;
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mantine-color-text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+  }
+
+  /* Активная вкладка — как активный пункт бокового меню, с рамкой акцентного цвета
+     (≥ 3:1 к подложке в обеих темах, WCAG 1.4.11). */
+  &[data-active] {
+    font-weight: 600;
+    color: var(--app-color-accent-text);
+    background-color: var(--mantine-primary-color-light);
+    border-color: var(--app-color-accent-text);
+  }
+}
+
+/* ——— Фильтры ——— */
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  gap: var(--mantine-spacing-md);
+  align-items: start;
+}
+
+/* Mobile: период и кнопка «Фильтры» в ряд, кнопка — по нижнему краю поля. При крупном
+   шрифте кнопка переносится под период. */
+.mobileBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mantine-spacing-sm);
+}
+
+.mobilePeriod {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
+.sheetFields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+/* ——— Отчёт ——— */
+
+/* Прежний отчёт, пока грузится отчёт по новым фильтрам: явно приглушён (и инертен —
+   атрибут inert в разметке), чтобы его не приняли за ответ на новые фильтры. */
+.stack[data-stale] {
+  opacity: 0.45;
+}
+
+/* Предупреждение о валютах без курса — спокойное: приглушённая подложка, без красного. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-radius: var(--mantine-radius-md);
+  background-color: var(--app-color-surface);
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+.noticeIcon {
+  flex: none;
+  margin-top: var(--mantine-spacing-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+/* Отчёт — контейнер: кольцо рядом с таблицей, когда хватает ширины самого блока. */
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  container: report / inline-size;
+}
+
+.headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
+.headlineText {
+  overflow-wrap: anywhere;
+}
+
+.reportBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+@container report (min-width: 44rem) {
+  .reportBody {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: var(--mantine-spacing-xl);
+  }
+}
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+}
+
+/* Подпись выбранного сегмента: высота занята всегда (три строки), вёрстка не прыгает. */
+.chartCaption {
+  width: var(--app-chart-size);
+  max-width: 100%;
+  min-height: calc(var(--mantine-font-size-sm) * 1.45 * 2 + var(--mantine-font-size-xs) * 1.4);
+  text-align: center;
+}
+
+.chartCaptionName {
+  overflow-wrap: anywhere;
+}
+
+/* ——— Таблица ——— */
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.row {
+  border-bottom: 1px solid var(--mantine-color-default-border);
+
+  /* Сегмент этой категории под указателем в кольце. */
+  &[data-highlight] {
+    background-color: var(--app-color-surface);
+  }
+}
+
+/* Колонка названий — 60 %: иначе таблица отдавала бы длинным названиям место сумм, и суммы
+   переносились бы по разрядам уже при обычном шрифте. Суммам не хватает 40 % — сжимается она. */
+.nameCell {
+  width: 60%;
+  padding: var(--mantine-spacing-xs) 0;
+  text-align: start;
+  font-weight: inherit;
+  vertical-align: middle;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+
+  .row[data-level='1'] & {
+    padding-inline-start: var(--mantine-spacing-lg);
+  }
+}
+
+/* Кнопка раскрытия — зона касания 44 px; стрелка поворачивается вниз, когда открыто. */
+.expand {
+  flex: none;
+  width: var(--app-touch-target);
+  height: var(--app-touch-target);
+
+  & svg {
+    transition: transform 150ms ease;
+  }
+
+  &[data-open] svg {
+    transform: rotate(90deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expand svg {
+    transition: none;
+  }
+}
+
+.expandSpacer {
+  flex: none;
+  width: var(--app-touch-target);
+}
+
+/* Метка цвета категории — та же, что у её сегмента в кольце. */
+.swatch {
+  flex: none;
+  width: var(--mantine-spacing-sm);
+  height: var(--mantine-spacing-md);
+  border-radius: var(--mantine-radius-xs);
+}
+
+/* Название — ссылка в ленту во всю доступную ширину, зона касания 44 px. */
+.nameLink,
+.nameText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+  color: var(--mantine-color-text);
+}
+
+/* Длинное название — не больше двух строк с многоточием (рядом сумма, ux.md раздел 4).
+   Обрезка — на внутреннем элементе: отступы у обрезаемого блока показали бы третью строку. */
+.nameClamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.nameLink {
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--mantine-radius-xs);
+  }
+}
+
+.amountCell {
+  padding: var(--mantine-spacing-xs) 0 var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  text-align: end;
+  vertical-align: middle;
+}
+
+.totalRow {
+  & .nameCell,
+  & .amountCell {
+    padding-top: var(--mantine-spacing-sm);
+  }
+}
+
+/* Узкий блок относительно шрифта (телефон при шрифте 200 %): строка в две — название
+   во всю ширину, под ним сумма и доля. В колонку рядом с суммой название влезало бы
+   по две буквы. Порог в rem растёт со шрифтом: при обычном шрифте на 375 px — в строку.
+   Роли ARIA в разметке сохраняют смысл таблицы при смене display. */
+@container report (max-width: 20rem) {
+  .table,
+  .table tbody,
+  .table tfoot {
+    display: block;
+  }
+
+  .row,
+  .totalRow {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nameCell {
+    display: block;
+    width: 100%;
+  }
+
+  /* Отступ под стрелку (44 px, при шрифте 200 % — 88) съедал бы четверть ширины у каждой
+     строки: стрелка уходит в конец строки названия, отступы-заглушки убираются. */
+  .expandSpacer {
+    display: none;
+  }
+
+  .expand {
+    order: 1;
+  }
+
+  .amountCell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    column-gap: var(--mantine-spacing-sm);
+    padding-top: 0;
+  }
+}
+
+/* ——— Скелетон ——— */
+
+.skeletonHeadline {
+  width: min(100%, 22rem);
+  height: var(--mantine-font-size-xl);
+}
+
+.skeletonComparison {
+  width: min(70%, 16rem);
+  height: var(--mantine-font-size-md);
+}
+
+.skeletonDonut {
+  width: var(--app-chart-size);
+  height: var(--app-chart-size);
+  max-width: 100%;
+}
+
+.skeletonRows {
+  display: flex;
+  flex-direction: column;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  min-height: var(--app-touch-target);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.skeletonName {
+  height: var(--mantine-font-size-md);
+}
+
+.skeletonAmount {
+  width: 5rem;
+  height: var(--mantine-font-size-md);
+}

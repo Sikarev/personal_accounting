@@ -1,23 +1,11 @@
 import type { ComboboxItem, ComboboxItemGroup } from '@mantine/core'
 
-import type { Account, Category, CategoryKind } from '../../shared/api'
+import type { Category, CategoryKind } from '../../shared/api'
 import type { Messages } from '../../shared/i18n'
 import { categoryLabel, siblingsOf } from '../../shared/lib/categoryTree'
 import { formatPeriod } from '../../shared/lib/date'
 import { detectPreset, type FeedFilters } from '../../shared/lib/transactionFilters'
-
-/**
- * Счета для фильтра: сначала активные, потом архивные с пометкой — по старым операциям
- * тоже бывает нужно отфильтровать.
- */
-export function accountOptions(accounts: readonly Account[], t: Messages): ComboboxItem[] {
-  const active = accounts.filter((a) => a.archivedAt === null)
-  const archived = accounts.filter((a) => a.archivedAt !== null)
-  return [
-    ...active.map((a) => ({ value: a.id, label: a.name })),
-    ...archived.map((a) => ({ value: a.id, label: t.feed.filters.archived(a.name) })),
-  ]
-}
+import type { FilterChip as GenericFilterChip } from '../../shared/ui'
 
 /**
  * Категории для фильтра — обоих видов (группами «Расходы» / «Доходы»), в порядке дерева,
@@ -45,12 +33,8 @@ export function categoryFilterOptions(
   return [group('expense'), group('income')].filter((g) => g.items.length > 0)
 }
 
-export type FilterChip = {
-  key: string
-  label: string
-  /** Какие поля фильтра сбросить, чтобы убрать этот чип. */
-  without: Partial<FeedFilters>
-}
+/** Чип активного фильтра ленты: `without` — какие поля сбросить, чтобы его убрать. */
+export type FilterChip = GenericFilterChip<Partial<FeedFilters>>
 
 /** Активные фильтры — чипами над лентой (ux.md, «Лента»): каждый снимается отдельно. */
 export function activeFilterChips(
@@ -59,6 +43,8 @@ export function activeFilterChips(
     accountNames: ReadonlyMap<string, string>
     categories: ReadonlyMap<string, Category>
     today: string
+    /** Текущий пользователь: фильтр по автору — «Мои операции». */
+    meId?: string
   },
   t: Messages,
 ): FilterChip[] {
@@ -96,6 +82,13 @@ export function activeFilterChips(
       key: `category:${id}`,
       label: category ? categoryLabel(category, parent) : t.feed.filters.unknownCategory,
       without: { categoryId: filters.categoryId.filter((c) => c !== id) },
+    })
+  }
+  for (const id of filters.authorId) {
+    chips.push({
+      key: `author:${id}`,
+      label: id === lookups.meId ? t.feed.filters.mine : t.feed.filters.otherAuthor,
+      without: { authorId: filters.authorId.filter((a) => a !== id) },
     })
   }
   const q = filters.q.trim()

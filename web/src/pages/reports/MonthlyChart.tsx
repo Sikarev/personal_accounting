@@ -2,6 +2,8 @@
 import '@mantine/charts/styles.layer.css'
 
 import { CompositeChart } from '@mantine/charts'
+import { useElementSize } from '@mantine/hooks'
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 
 import type { MonthlyReportItem } from '../../shared/api'
@@ -11,16 +13,12 @@ import { Money } from '../../shared/ui'
 import { chartColors, layout } from '../../theme'
 import { ChartReadout } from './ChartReadout'
 import { monthFeedLink, type ReportFilters, type ReportKind } from './reportFilters'
-import { axisMin, monthLabel, monthTick } from './trendReport'
+import { useAxisTicks } from './useAxisTicks'
+import { axisMin, monthLabel } from './trendReport'
 import { useChartSelection } from './useChartSelection'
 import classes from './ReportsPage.module.css'
 
 type Row = { month: string; income: number; expense: number; difference: number }
-
-/** Ширина оси сумм, px: «−1,25 млн ₽» шрифтом 12 px. */
-const Y_AXIS_WIDTH = 76
-/** Высота оси месяцев, px: месяц и под ним год. */
-const X_AXIS_HEIGHT = 40
 
 /**
  * Доходы и расходы по месяцам (requirements 5.10): сгруппированные столбцы и линия
@@ -47,7 +45,10 @@ export function MonthlyChart({
 }) {
   const t = useT()
   const navigate = useNavigate()
-  const selection = useChartSelection()
+  const selection = useChartSelection(items)
+  const months = useMemo(() => items.map((item) => item.month), [items])
+  const { ref, width } = useElementSize()
+  const axis = useAxisTicks(months, 'month', width)
 
   const data: Row[] = items.map((item) => ({
     month: item.month,
@@ -70,7 +71,7 @@ export function MonthlyChart({
   const shown = data[selection.active ?? data.length - 1]
 
   return (
-    <div className={classes.trendChart} aria-hidden {...selection.wrapperProps}>
+    <div className={classes.trendChart} aria-hidden ref={ref} {...selection.wrapperProps}>
       <CompositeChart
         h={layout.trendChartHeight}
         data={data}
@@ -105,20 +106,14 @@ export function MonthlyChart({
         // Без слоя доступности recharts: он делает график фокусируемым, а график скрыт
         // от диктора — фокус внутри скрытого блока запрещён.
         accessibilityLayer={false}
-        xAxisProps={{
-          height: X_AXIS_HEIGHT,
-          tick: (props: TickProps) => <MonthTick {...props} />,
-          // По этой строке recharts меряет подписи и решает, какие пропустить: без неё он
-          // мерил бы «2025-12-01» и на широком экране выбрасывал каждый второй месяц.
-          tickFormatter: (value: string) => monthTick(value, 1, t).label,
-        }}
-        yAxisProps={{ width: Y_AXIS_WIDTH, domain: [minValue, 'auto'] }}
+        xAxisProps={axis.xAxisProps}
+        yAxisProps={{ ...axis.yAxisProps, domain: [minValue, 'auto'] }}
         referenceLines={minValue < 0 ? [{ y: 0, color: chartColors.zero }] : undefined}
         barProps={(series) => ({
           cursor: 'pointer',
           onClick: onBar(series.name as ReportKind),
         })}
-        composedChartProps={selection.chartHandlers}
+        composedChartProps={{ ...selection.chartHandlers, margin: axis.margin }}
       />
       {shown && (
         <ChartReadout
@@ -152,30 +147,5 @@ export function MonthlyChart({
         />
       )}
     </div>
-  )
-}
-
-type TickProps = {
-  x?: number | string
-  y?: number | string
-  payload?: { value: string; index: number }
-}
-
-/** Подпись месяца на оси: «ноя», под ней год — у первого месяца и у января. */
-function MonthTick({ x, y, payload }: TickProps) {
-  const t = useT()
-  if (!payload) return null
-  const { label, year } = monthTick(payload.value, payload.index, t)
-  return (
-    <text x={x} y={y} textAnchor="middle" fontSize={12} fill="currentColor">
-      <tspan x={x} dy="1em">
-        {label}
-      </tspan>
-      {year && (
-        <tspan x={x} dy="1.2em">
-          {year}
-        </tspan>
-      )}
-    </text>
   )
 }

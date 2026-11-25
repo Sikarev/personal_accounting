@@ -87,20 +87,6 @@ export function monthLabel(month: string, t: Messages): string {
   return `${t.dates.months[m - 1]} ${year}`
 }
 
-/**
- * Подпись месяца на оси: «ноя»; год — второй строкой у первого месяца и у января, чтобы
- * смена года была видна, а на 375 px подписи не слипались («ноя 2025» шире места
- * под столбцы месяца).
- */
-export function monthTick(
-  month: string,
-  index: number,
-  t: Messages,
-): { label: string; year: string | null } {
-  const [year, m] = parts(month)
-  return { label: t.dates.monthsShort[m - 1], year: index === 0 || m === 1 ? String(year) : null }
-}
-
 // ——— Баланс ———
 
 /** Понедельник ISO-недели, в которую попадает дата. */
@@ -117,12 +103,6 @@ function weekStart(date: string): string {
 export function stepRange(date: string, step: BalanceStep, period: Period): Period {
   const start = step === 'day' ? date : step === 'week' ? weekStart(date) : `${date.slice(0, 8)}01`
   return { from: start > period.from ? start : period.from, to: date }
-}
-
-/** «24 ноя» — подпись дня на оси (шаг день и неделя: точка недели — её последний день). */
-export function dayTick(date: string, t: Messages): string {
-  const [, m, d] = parts(date)
-  return `${d} ${t.dates.monthsShort[m - 1]}`
 }
 
 /**
@@ -148,29 +128,107 @@ export function pointLabel(
 }
 
 export type BalanceChange = {
-  /** Дата первой точки — от неё считается изменение. */
-  since: string
-  /** Последняя точка минус первая. */
+  /** Модуль изменения: последняя точка минус остаток на начало периода. */
   amount: bigint
   direction: 'grew' | 'fell' | 'same'
 }
 
 /**
- * Изменение баланса за период: последняя точка минус первая. Направление — по показанной
- * (округлённой до рублей) разнице. Одна точка — сравнивать не с чем, `null`.
+ * Изменение баланса за период: остаток в последней точке минус остаток на начало периода
+ * (конец дня перед `from` — отдельный запрос из одной точки). Первая точка ряда для этого
+ * не годится: это уже конец первого шага, и «12 месяцев» теряли бы весь первый месяц.
+ * Направление — по показанной (округлённой до рублей) разнице. Точек нет — `null`.
  */
 export function balanceChange(
+  start: number,
   items: readonly BalancePoint[],
   currency: string,
 ): BalanceChange | null {
-  if (items.length < 2) return null
-  const amount = BigInt(items[items.length - 1].balance) - BigInt(items[0].balance)
+  const last = items[items.length - 1]
+  if (!last) return null
+  const amount = BigInt(last.balance) - BigInt(start)
   const { sign } = formatMoneyParts(amount, currency, { roundToMajor: true })
   return {
-    since: items[0].date,
     amount: amount < 0n ? -amount : amount,
     direction: sign > 0 ? 'grew' : sign < 0 ? 'fell' : 'same',
   }
+}
+
+/**
+ * Период запроса баланса: конец — не позже «сегодня». Остаток в будущем — ровная линия
+ * из сегодняшнего остатка (или операций с будущей датой), а заголовок «На 30 ноября»
+ * 25-го числа вводил бы в заблуждение. Весь период в будущем — `null` (показать нечего).
+ * Адрес и фильтры не меняются: обрезается только запрос.
+ */
+export function balancePeriod<P extends Period>(filters: P, today: string): P | null {
+  if (filters.from > today) return null
+  return filters.to > today ? { ...filters, to: today } : filters
+}
+
+/** День перед началом периода: остаток на его конец — остаток на начало периода. */
+export function balanceStartDate(period: Period): string {
+  return shiftDate(period.from, -1)
+}
+
+// ——— Подписи осей ———
+
+export type AxisTick = {
+  /** Значение категории на оси (месяц или дата точки). */
+  value: string
+  /** «ноя» или «24 ноя». */
+  label: string
+  /** Год второй строкой: у первой подписи и там, где он сменился. */
+  year: string | null
+}
+
+// Шаги прореживания подписей: месяцы — по календарю (каждый 2-й, 3-й… месяц от января,
+// дальше — январи раз в 1, 2, 3… года), дни и недели — каждая k-я точка от последней.
+const MONTH_STEPS = [1, 2, 3, 4, 6, 12, 24, 36, 60, 120]
+const DAY_STEPS = [1, 2, 3, 5, 7, 10, 14, 28]
+
+/**
+ * Какие подписи показать на оси и какими. Выбор свой, а не recharts: тот прореживает
+ * подписи по ширине текста, измеренной в DOM, — интервалы выходят неровными, январь
+ * с годом пропадает, а подпись сдвигается на пиксель-другой в зависимости от загрузки
+ * шрифта. Здесь — не больше `maxTicks` подписей с ровным шагом:
+ * - месяцы (`kind: 'month'`) — по календарю: январь попадает всегда, год виден;
+ * - дни и недели (`kind: 'day'`) — каждая k-я точка, считая от последней (она — конец
+ *   периода, самая важная).
+ * Год — у первой подписи и у каждой, где он сменился (в т. ч. дни через Новый год).
+ */
+export function axisTicks(
+  values: readonly string[],
+  kind: 'month' | 'day',
+  maxTicks: number,
+  t: Messages,
+): AxisTick[] {
+  const max = Math.max(1, Math.floor(maxTicks))
+  const n = values.length
+  let chosen: string[] = []
+  if (kind === 'month') {
+    for (const k of MONTH_STEPS) {
+      chosen = values.filter((value) => {
+        const [y, m] = parts(value)
+        return k < 12 ? (m - 1) % k === 0 : m === 1 && y % (k / 12) === 0
+      })
+      if (chosen.length > 0 && chosen.length <= max) break
+    }
+  } else {
+    for (const k of DAY_STEPS) {
+      chosen = values.filter((_, i) => (n - 1 - i) % k === 0)
+      if (chosen.length <= max) break
+    }
+  }
+  if (chosen.length === 0 || chosen.length > max) chosen = values.slice(-1)
+
+  let lastYear: number | null = null
+  return chosen.map((value) => {
+    const [y, m, d] = parts(value)
+    const month = t.dates.monthsShort[m - 1]
+    const year = y !== lastYear ? String(y) : null
+    lastYear = y
+    return { value, label: kind === 'month' ? month : `${d} ${month}`, year }
+  })
 }
 
 /**

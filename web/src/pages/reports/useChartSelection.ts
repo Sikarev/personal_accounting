@@ -16,11 +16,21 @@ function indexOf(state: ChartState): number | null {
  * по `pointerdown`: он приходит раньше `click` и раньше эмулированных после касания
  * событий мыши — иначе `mousemove` после касания выбрал бы точку до `click`, и первое же
  * касание столбца уводило бы в ленту.
+ *
+ * `data` — данные графика: пришли другие (сменился период или счета) — выбор сброшен.
+ * Иначе индекс указывал бы на другую точку или за конец ряда, а «второе касание» по
+ * новому графику сразу уводило бы в ленту.
  */
-export function useChartSelection() {
+export function useChartSelection(data: unknown) {
   const pointer = useRef('mouse')
   const [active, setActive] = useState<number | null>(null)
   const [touched, setTouched] = useState(false)
+  const [lastData, setLastData] = useState(data)
+  if (data !== lastData) {
+    setLastData(data)
+    setActive(null)
+    setTouched(false)
+  }
 
   return {
     /** Индекс выбранной точки; `null` — не выбрана. */

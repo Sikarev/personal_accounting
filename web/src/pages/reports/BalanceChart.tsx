@@ -2,6 +2,8 @@
 import '@mantine/charts/styles.layer.css'
 
 import { LineChart } from '@mantine/charts'
+import { useElementSize } from '@mantine/hooks'
+import { useMemo } from 'react'
 
 import type { BalancePoint, BalanceStep } from '../../shared/api'
 import { useT } from '../../shared/i18n'
@@ -10,14 +12,11 @@ import { Money } from '../../shared/ui'
 import { chartColors, layout } from '../../theme'
 import { ChartReadout } from './ChartReadout'
 import type { ReportFilters } from './reportFilters'
-import { crossesZero, dayTick, monthTick, pointLabel } from './trendReport'
+import { useAxisTicks } from './useAxisTicks'
+import { crossesZero, pointLabel } from './trendReport'
 import { useChartSelection } from './useChartSelection'
 import classes from './ReportsPage.module.css'
 
-/** Ширина оси сумм, px: «−1,25 млн ₽» шрифтом 12 px. */
-const Y_AXIS_WIDTH = 76
-/** Высота оси дат, px: у месяцев под названием — год. */
-const X_AXIS_HEIGHT = 40
 /** Точки-маркеры рисуются, пока их немного: на 121 месяце они слились бы в толстую линию. */
 const MAX_DOTS = 31
 
@@ -44,12 +43,15 @@ export function BalanceChart({
   today: string
 }) {
   const t = useT()
-  const selection = useChartSelection()
+  const selection = useChartSelection(items)
+  const dates = useMemo(() => items.map((point) => point.date), [items])
+  const { ref, width } = useElementSize()
+  const axis = useAxisTicks(dates, step === 'month' ? 'month' : 'day', width)
   const values = items.map((point) => point.balance)
   const shown = items[selection.active ?? items.length - 1]
 
   return (
-    <div className={classes.trendChart} aria-hidden {...selection.wrapperProps}>
+    <div className={classes.trendChart} aria-hidden ref={ref} {...selection.wrapperProps}>
       <LineChart
         h={layout.trendChartHeight}
         data={items}
@@ -60,16 +62,10 @@ export function BalanceChart({
         valueFormatter={(value) => formatMoneyCompact(value, currency)}
         tooltipProps={{ content: () => null }}
         accessibilityLayer={false}
-        xAxisProps={{
-          height: X_AXIS_HEIGHT,
-          tick: (props: TickProps) => <DateTick {...props} step={step} />,
-          // По этой строке recharts меряет подписи и решает, какие пропустить.
-          tickFormatter: (value: string) =>
-            step === 'month' ? monthTick(value, 1, t).label : dayTick(value, t),
-        }}
-        yAxisProps={{ width: Y_AXIS_WIDTH, domain: ['auto', 'auto'] }}
+        xAxisProps={axis.xAxisProps}
+        yAxisProps={{ ...axis.yAxisProps, domain: ['auto', 'auto'] }}
         referenceLines={crossesZero(values) ? [{ y: 0, color: chartColors.zero }] : undefined}
-        lineChartProps={selection.chartHandlers}
+        lineChartProps={{ ...selection.chartHandlers, margin: axis.margin }}
       />
       {shown && (
         <ChartReadout
@@ -88,33 +84,5 @@ export function BalanceChart({
         />
       )}
     </div>
-  )
-}
-
-type TickProps = {
-  x?: number | string
-  y?: number | string
-  payload?: { value: string; index: number }
-}
-
-/** Подпись оси: день и неделя — «24 ноя» (точка недели — её последний день), месяц — «ноя». */
-function DateTick({ x, y, payload, step }: TickProps & { step: BalanceStep }) {
-  const t = useT()
-  if (!payload) return null
-  const { label, year } =
-    step === 'month'
-      ? monthTick(payload.value, payload.index, t)
-      : { label: dayTick(payload.value, t), year: null }
-  return (
-    <text x={x} y={y} textAnchor="middle" fontSize={12} fill="currentColor">
-      <tspan x={x} dy="1em">
-        {label}
-      </tspan>
-      {year && (
-        <tspan x={x} dy="1.2em">
-          {year}
-        </tspan>
-      )}
-    </text>
   )
 }

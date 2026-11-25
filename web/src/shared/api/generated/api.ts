@@ -45,6 +45,8 @@ import type {
   CreateAccountRequest,
   CreateCategoryRequest,
   CurrencyList,
+  FamilyMember,
+  FamilyMemberList,
   GetBalanceReportParams,
   GetCategoryReportParams,
   GetMonthlyReportParams,
@@ -60,6 +62,7 @@ import type {
   ProblemResponse,
   RegisterRequest,
   ReorderAccountsRequest,
+  SetFamilyRoleRequest,
   Transaction,
   TransactionDefaults,
   TransactionList,
@@ -4316,4 +4319,391 @@ export function useGetBalanceReport<
   }
 
   return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getListFamilyMembersUrl = () => {
+  return `/api/v1/family/members`
+}
+
+/**
+ * Все участники семьи текущего пользователя, включая его самого. Имя и
+ * e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+ * по дате вступления.
+ * @summary Участники семьи
+ */
+export const listFamilyMembers = async (
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<FamilyMemberList> => {
+  return apiFetch<FamilyMemberList>(getListFamilyMembersUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListFamilyMembersQueryKey = () => {
+  return [`/api/v1/family/members`] as const
+}
+
+export const getListFamilyMembersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listFamilyMembers>>,
+  TError = ErrorType<ProblemResponse>,
+>(options?: {
+  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFamilyMembers>>, TError, TData>>
+  request?: SecondParameter<typeof apiFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = queryOptions?.queryKey ?? getListFamilyMembersQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listFamilyMembers>>> = ({ signal }) =>
+    listFamilyMembers({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listFamilyMembers>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListFamilyMembersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listFamilyMembers>>
+>
+export type ListFamilyMembersQueryError = ErrorType<ProblemResponse>
+
+/**
+ * Все участники семьи текущего пользователя, включая его самого. Имя и
+ * e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+ * по дате вступления.
+ * @summary Участники семьи
+ */
+export function useListFamilyMembers<
+  TData = Awaited<ReturnType<typeof listFamilyMembers>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options: {
+    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFamilyMembers>>, TError, TData>> &
+      Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listFamilyMembers>>,
+          TError,
+          Awaited<ReturnType<typeof listFamilyMembers>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все участники семьи текущего пользователя, включая его самого. Имя и
+ * e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+ * по дате вступления.
+ * @summary Участники семьи
+ */
+export function useListFamilyMembers<
+  TData = Awaited<ReturnType<typeof listFamilyMembers>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFamilyMembers>>, TError, TData>> &
+      Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listFamilyMembers>>,
+          TError,
+          Awaited<ReturnType<typeof listFamilyMembers>>
+        >,
+        'initialData'
+      >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все участники семьи текущего пользователя, включая его самого. Имя и
+ * e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+ * по дате вступления.
+ * @summary Участники семьи
+ */
+export function useListFamilyMembers<
+  TData = Awaited<ReturnType<typeof listFamilyMembers>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFamilyMembers>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Все участники семьи текущего пользователя, включая его самого. Имя и
+ * e-mail видят все участники. Порядок: владельцы, затем остальные; внутри —
+ * по дате вступления.
+ * @summary Участники семьи
+ */
+export function useListFamilyMembers<
+  TData = Awaited<ReturnType<typeof listFamilyMembers>>,
+  TError = ErrorType<ProblemResponse>,
+>(
+  options?: {
+    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof listFamilyMembers>>, TError, TData>>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+  const queryOptions = getListFamilyMembersQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
+    queryKey: DataTag<QueryKey, TData, TError>
+  }
+
+  return withQueryKey(query, queryOptions.queryKey)
+}
+
+export const getRemoveFamilyMemberUrl = (userId: string) => {
+  return `/api/v1/family/members/${userId}`
+}
+
+/**
+ * Только для owner (иначе 403 `not_owner`). Исключить можно и другого
+ * владельца. Себя исключить нельзя — 409 `cannot_remove_self` (для этого
+ * есть `POST /family/leave`). Исключённому создаётся новая семья; его личные
+ * счета остаются в этой семье в архиве и не видны никому.
+ * @summary Исключить участника
+ */
+export const removeFamilyMember = async (
+  userId: string,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<void> => {
+  return apiFetch<void>(getRemoveFamilyMemberUrl(userId), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getRemoveFamilyMemberMutationKey = () => ['removeFamilyMember'] as const
+
+export const getRemoveFamilyMemberMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof removeFamilyMember>>,
+    TError,
+    RemoveFamilyMemberMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof removeFamilyMember>>,
+  TError,
+  RemoveFamilyMemberMutationVariables,
+  TContext
+> => {
+  const mutationKey = getRemoveFamilyMemberMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof removeFamilyMember>>,
+    RemoveFamilyMemberMutationVariables
+  > = (props) => {
+    const { userId } = props ?? {}
+
+    return removeFamilyMember(userId, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RemoveFamilyMemberMutationResult = NonNullable<
+  Awaited<ReturnType<typeof removeFamilyMember>>
+>
+
+export type RemoveFamilyMemberMutationError = ErrorType<ProblemResponse>
+export type RemoveFamilyMemberMutationVariables = { userId: string }
+
+/**
+ * Только для owner (иначе 403 `not_owner`). Исключить можно и другого
+ * владельца. Себя исключить нельзя — 409 `cannot_remove_self` (для этого
+ * есть `POST /family/leave`). Исключённому создаётся новая семья; его личные
+ * счета остаются в этой семье в архиве и не видны никому.
+ * @summary Исключить участника
+ */
+export const useRemoveFamilyMember = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof removeFamilyMember>>,
+      TError,
+      RemoveFamilyMemberMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof removeFamilyMember>>,
+  TError,
+  RemoveFamilyMemberMutationVariables,
+  TContext
+> => {
+  return useMutation(getRemoveFamilyMemberMutationOptions(options), queryClient)
+}
+
+export const getSetFamilyMemberRoleUrl = (userId: string) => {
+  return `/api/v1/family/members/${userId}/role`
+}
+
+/**
+ * Только для owner (иначе 403 `not_owner`). Понизить себя можно, если в семье
+ * есть другой владелец, иначе 409 `last_owner`. Та же роль — 200 без изменений.
+ * @summary Сменить роль участника
+ */
+export const setFamilyMemberRole = async (
+  userId: string,
+  setFamilyRoleRequest: SetFamilyRoleRequest,
+  options?: Parameters<typeof apiFetch>[1],
+): Promise<FamilyMember> => {
+  return apiFetch<FamilyMember>(getSetFamilyMemberRoleUrl(userId), {
+    ...options,
+    method: 'PUT',
+    headers: getHeaders({ 'Content-Type': 'application/json' }, options?.headers),
+    body: JSON.stringify(setFamilyRoleRequest),
+  })
+}
+
+export const getSetFamilyMemberRoleMutationKey = () => ['setFamilyMemberRole'] as const
+
+export const getSetFamilyMemberRoleMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setFamilyMemberRole>>,
+    TError,
+    SetFamilyMemberRoleMutationVariables,
+    TContext
+  >
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setFamilyMemberRole>>,
+  TError,
+  SetFamilyMemberRoleMutationVariables,
+  TContext
+> => {
+  const mutationKey = getSetFamilyMemberRoleMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setFamilyMemberRole>>,
+    SetFamilyMemberRoleMutationVariables
+  > = (props) => {
+    const { userId, data } = props ?? {}
+
+    return setFamilyMemberRole(userId, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type SetFamilyMemberRoleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setFamilyMemberRole>>
+>
+export type SetFamilyMemberRoleMutationBody = SetFamilyRoleRequest
+export type SetFamilyMemberRoleMutationError = ErrorType<ProblemResponse>
+export type SetFamilyMemberRoleMutationVariables = { userId: string; data: SetFamilyRoleRequest }
+
+/**
+ * Только для owner (иначе 403 `not_owner`). Понизить себя можно, если в семье
+ * есть другой владелец, иначе 409 `last_owner`. Та же роль — 200 без изменений.
+ * @summary Сменить роль участника
+ */
+export const useSetFamilyMemberRole = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof setFamilyMemberRole>>,
+      TError,
+      SetFamilyMemberRoleMutationVariables,
+      TContext
+    >
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<
+  Awaited<ReturnType<typeof setFamilyMemberRole>>,
+  TError,
+  SetFamilyMemberRoleMutationVariables,
+  TContext
+> => {
+  return useMutation(getSetFamilyMemberRoleMutationOptions(options), queryClient)
+}
+
+export const getLeaveFamilyUrl = () => {
+  return `/api/v1/family/leave`
+}
+
+/**
+ * Пользователь выходит из семьи, ему создаётся новая семья «Семья» (он в ней
+ * owner, категории по умолчанию). Личные счета остаются в прежней семье
+ * в архиве и не видны никому. Сессия не меняется.
+ * Единственный участник — 409 `sole_member`; единственный владелец при других
+ * участниках — 409 `last_owner` (сначала назначьте другого владельца).
+ * @summary Покинуть семью
+ */
+export const leaveFamily = async (options?: Parameters<typeof apiFetch>[1]): Promise<Me> => {
+  return apiFetch<Me>(getLeaveFamilyUrl(), {
+    ...options,
+    method: 'POST',
+  })
+}
+
+export const getLeaveFamilyMutationKey = () => ['leaveFamily'] as const
+
+export const getLeaveFamilyMutationOptions = <
+  TError = ErrorType<ProblemResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<Awaited<ReturnType<typeof leaveFamily>>, TError, void, TContext>
+  request?: SecondParameter<typeof apiFetch>
+}): UseMutationOptions<Awaited<ReturnType<typeof leaveFamily>>, TError, void, TContext> => {
+  const mutationKey = getLeaveFamilyMutationKey()
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<Awaited<ReturnType<typeof leaveFamily>>, void> = () => {
+    return leaveFamily(requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type LeaveFamilyMutationResult = NonNullable<Awaited<ReturnType<typeof leaveFamily>>>
+
+export type LeaveFamilyMutationError = ErrorType<ProblemResponse>
+
+/**
+ * Пользователь выходит из семьи, ему создаётся новая семья «Семья» (он в ней
+ * owner, категории по умолчанию). Личные счета остаются в прежней семье
+ * в архиве и не видны никому. Сессия не меняется.
+ * Единственный участник — 409 `sole_member`; единственный владелец при других
+ * участниках — 409 `last_owner` (сначала назначьте другого владельца).
+ * @summary Покинуть семью
+ */
+export const useLeaveFamily = <TError = ErrorType<ProblemResponse>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<Awaited<ReturnType<typeof leaveFamily>>, TError, void, TContext>
+    request?: SecondParameter<typeof apiFetch>
+  },
+  queryClient?: QueryClient,
+): UseMutationResult<Awaited<ReturnType<typeof leaveFamily>>, TError, void, TContext> => {
+  return useMutation(getLeaveFamilyMutationOptions(options), queryClient)
 }

@@ -30,24 +30,70 @@ export function archivedAccounts(accounts: readonly Account[]): Account[] {
     )
 }
 
-export type CurrencyTotal = { currency: string; amount: number }
+/**
+ * Базовая валюта семьи — в ней общий баланс и эквиваленты (`Account.baseBalance`).
+ * В MVP всегда рубли (requirements 5.9): отдельного поля в `Me` нет.
+ */
+export const BASE_CURRENCY = 'RUB'
+
+/** Итог по одной валюте в её минимальных единицах. `bigint`: сумма может быть больше 2^53. */
+export type CurrencyAmount = { currency: string; amount: bigint }
+
+export type BalanceSummary = {
+  /**
+   * Общий баланс в минимальных единицах базовой валюты: Σ `baseBalance` активных счетов
+   * «в общем балансе», у которых курс есть.
+   */
+  total: bigint
+  /**
+   * Валюты (кроме базовой), вошедшие в `total` по курсу ЦБ, — итоги в исходной валюте.
+   * Непусто — `total` приблизительный. Валюта с нулевым итогом не показывается.
+   */
+  converted: CurrencyAmount[]
+  /**
+   * Валюты без единого курса (`baseBalance: null`): в `total` не вошли, итоги — в исходной
+   * валюте, чтобы деньги не «пропадали». Валюта с нулевым итогом не показывается.
+   */
+  withoutRate: CurrencyAmount[]
+}
 
 /**
- * Итог по активным счетам с «учитывать в общем балансе» — отдельно по каждой валюте:
- * курсов до этапа 4 нет, складывать рубли с долларами нельзя.
- * Порядок: рубли первыми, остальные валюты по коду.
+ * Общий баланс (ux.md, «Главная»: одна главная мысль — сколько у меня денег): сумма
+ * `baseBalance` активных счетов с «учитывать в общем балансе». Курс и округление — на
+ * сервере (по последнему курсу ЦБ на «сегодня»), здесь только сложение — в BigInt,
+ * без потери точности на суммах больше 2^53. Итоги валют — по коду.
  */
-export function totalsByCurrency(accounts: readonly Account[]): CurrencyTotal[] {
-  const sums = new Map<string, number>()
+export function balanceSummary(accounts: readonly Account[]): BalanceSummary {
+  let total = 0n
+  const converted = new Map<string, bigint>()
+  const withoutRate = new Map<string, bigint>()
   for (const a of accounts) {
     if (a.archivedAt !== null || !a.includeInTotal) continue
-    sums.set(a.currency, (sums.get(a.currency) ?? 0) + a.balance)
+    if (a.baseBalance === null) {
+      withoutRate.set(a.currency, (withoutRate.get(a.currency) ?? 0n) + BigInt(a.balance))
+      continue
+    }
+    total += BigInt(a.baseBalance)
+    if (a.currency !== BASE_CURRENCY) {
+      converted.set(a.currency, (converted.get(a.currency) ?? 0n) + BigInt(a.balance))
+    }
   }
+  return { total, converted: nonZeroByCode(converted), withoutRate: nonZeroByCode(withoutRate) }
+}
+
+function nonZeroByCode(sums: Map<string, bigint>): CurrencyAmount[] {
   return [...sums]
+    .filter(([, amount]) => amount !== 0n)
     .map(([currency, amount]) => ({ currency, amount }))
-    .sort((a, b) =>
-      a.currency === 'RUB' ? -1 : b.currency === 'RUB' ? 1 : a.currency.localeCompare(b.currency),
-    )
+    .sort((a, b) => a.currency.localeCompare(b.currency))
+}
+
+/**
+ * Эквивалент остатка в базовой валюте под суммой валютного счёта (ux.md, «Деньги»).
+ * У счёта в базовой валюте и у валюты без курса эквивалента нет — `null`.
+ */
+export function baseEquivalent(account: Pick<Account, 'currency' | 'baseBalance'>): number | null {
+  return account.currency === BASE_CURRENCY ? null : account.baseBalance
 }
 
 /**

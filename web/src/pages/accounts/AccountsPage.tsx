@@ -30,15 +30,12 @@ import {
   type Currency,
 } from '../../shared/api'
 import { useT } from '../../shared/i18n'
-import {
-  archivedAccounts,
-  groupActiveAccounts,
-  isNegativeBalanceProblem,
-  totalsByCurrency,
-} from '../../shared/lib/accounts'
+import { archivedAccounts, balanceSummary, groupActiveAccounts } from '../../shared/lib/accounts'
 import { useDelayedLoading } from '../../shared/lib/useDelayedLoading'
 import {
+  AccountBalance,
   AccountMark,
+  BalanceTotals,
   EmptyState,
   Money,
   PageHeader,
@@ -99,7 +96,7 @@ function focusTargets(accounts: Account[], account: Account, extra: string[] = [
 }
 
 /**
- * Экран «Счета» (requirements 5.4, 6): остатки, итог по валютам, общие и личные
+ * Экран «Счета» (requirements 5.4, 6): остатки, общий итог в рублях, общие и личные
  * раздельно, порядок перетаскиванием, архив. Касание строки — окно счёта, где
  * правка, корректировка остатка, архив и удаление.
  */
@@ -398,7 +395,6 @@ function AccountsContent({
   const t = useT()
   const groups = groupActiveAccounts(accounts)
   const archived = archivedAccounts(accounts)
-  const totals = totalsByCurrency(accounts)
   const hasActive = groups.shared.length + groups.private.length > 0
   const totalId = useId()
 
@@ -409,21 +405,8 @@ function AccountsContent({
           <Text id={totalId} size="sm" c="dimmed">
             {t.accounts.total}
           </Text>
-          {/* Каждая валюта — отдельный пункт: при нехватке места переносится целиком,
-              а слишком длинная сумма — по разрядам (Money wrap). */}
-          <Text component="ul" size="xl" fw={600} className={classes.totals}>
-            {(totals.length === 0 ? [{ currency: 'RUB', amount: 0 }] : totals).map((total) => (
-              <li key={total.currency}>
-                <Money
-                  amount={total.amount}
-                  currency={total.currency}
-                  variant="balance"
-                  wrap
-                  className={classes.wrapAmount}
-                />
-              </li>
-            ))}
-          </Text>
+          {/* Итог — как на главной, но с копейками: здесь остаток сверяют с банком. */}
+          <BalanceTotals summary={balanceSummary(accounts)} roundToMajor={false} />
         </Paper>
       ) : (
         <Paper withBorder radius="lg">
@@ -538,16 +521,7 @@ function AccountRow({
             )}
           </Text>
         </span>
-        {!archived && (
-          <Money
-            amount={account.balance}
-            currency={account.currency}
-            variant={isNegativeBalanceProblem(account) ? 'balance' : 'plain'}
-            fw={500}
-            wrap
-            className={classes.amount}
-          />
-        )}
+        {!archived && <AccountBalance account={account} fw={500} wrap className={classes.amount} />}
       </span>
     </UnstyledButton>
   )

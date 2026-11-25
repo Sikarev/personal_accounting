@@ -115,6 +115,13 @@ describe('formatMoney', () => {
     expect(visible(formatMoney(-(2 ** 60), 'RUB'))).toBe('−11 529 215 046 068 469,76 ₽')
   })
 
+  it('bigint — точно, без потери младших разрядов', () => {
+    const sum = BigInt(Number.MAX_SAFE_INTEGER) + 2n
+    expect(visible(formatMoney(sum, 'RUB'))).toBe('90 071 992 547 409,93 ₽')
+    expect(visible(formatMoney(-sum, 'RUB', { roundToMajor: true }))).toBe('−90 071 992 547 410 ₽')
+    expect(visible(formatMoney(0n, 'RUB'))).toBe('0 ₽')
+  })
+
   it('отвергает дробное число вместо минимальных единиц', () => {
     expect(() => formatMoney(12.5, 'RUB')).toThrow(RangeError)
   })

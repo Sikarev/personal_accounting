@@ -8,8 +8,11 @@ import classes from './Money.module.css'
 export type { MoneyVariant }
 
 export type MoneyProps = Omit<TextProps, 'c' | 'color' | 'variant'> & {
-  /** Сумма в минимальных единицах валюты (копейки, центы), со знаком. */
-  amount: number
+  /**
+   * Сумма в минимальных единицах валюты (копейки, центы), со знаком. `bigint` — для сумм,
+   * сложенных без потери точности (общий баланс может быть больше 2^53).
+   */
+  amount: number | bigint
   /** Код валюты ISO 4217: `RUB`, `USD`. */
   currency: string
   /** Знаков в минимальной единице; по умолчанию — по ISO 4217 (RUB, USD — 2, JPY — 0). */

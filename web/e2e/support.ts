@@ -74,6 +74,9 @@ export const existingAccount = {
   sortOrder: 0,
   archivedAt: null,
   hasTransactions: false,
+  // Остаток в рублях (базовой валюте): у рублёвого счёта равен `balance`. Меняешь `balance`
+  // или валюту в своей копии — поменяй и его (иначе общий баланс на главной будет другим).
+  baseBalance: 0 as number | null,
 }
 
 /**

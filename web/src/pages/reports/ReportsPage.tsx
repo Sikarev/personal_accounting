@@ -151,12 +151,7 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
           />
         )}
         {tab === 'balance' && (
-          <BalanceReportTab
-            filters={filters}
-            today={today}
-            accounts={accounts}
-            accountsPending={accountsQuery.isPending}
-          />
+          <BalanceReportTab filters={filters} today={today} accountsQuery={accountsQuery} />
         )}
       </div>
     </>

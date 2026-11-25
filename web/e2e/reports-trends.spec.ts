@@ -59,13 +59,20 @@ function lastDay(month: string) {
   return `${month.slice(0, 8)}${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0')}`
 }
 
-/** Шаг по длине периода — как у API: ≤ 31 дня — день, ≤ 184 — неделя, иначе месяц. */
+/**
+ * Шаг по длине периода — как у API: ≤ 31 дня — день, ≤ 184 — неделя, иначе месяц.
+ * Запрос из одного дня (`from = to`) — остаток на начало периода: `start`.
+ */
 function balance(
   params: URLSearchParams,
   values?: (i: number, n: number) => number,
+  start = 10_000 * RUB,
 ): BalanceReportBody {
   const from = params.get('from')!
   const to = params.get('to')!
+  if (from === to) {
+    return { currency: 'RUB', step: 'day', items: [{ date: to, balance: start }], missingRates: [] }
+  }
   const days = (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1
   let dates: string[]
   let step: BalanceReportBody['step']
@@ -136,8 +143,17 @@ async function monthlyReady(page: Page) {
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible()
 }
 
-async function balanceReady(page: Page, text = 'На 30 ноября — 512 300 ₽') {
+/** Основной запрос баланса (запрос остатка на начало — из одного дня). */
+const mainBalanceRequests = (requests: URLSearchParams[]) =>
+  requests.filter((r) => r.get('from') !== r.get('to'))
+
+async function balanceReady(
+  page: Page,
+  text = 'На 24 ноября — 512 300 ₽',
+  change: string | null = 'С 1 декабря 2025 баланс вырос на 502 300 ₽',
+) {
   await expect(headline(page)).toHaveText(spaced(text))
+  if (change) await expect(page.getByText(spaced(change))).toBeVisible()
   await expect(page.locator('.recharts-line-curve').first()).toBeVisible()
 }
 
@@ -367,7 +383,9 @@ test.describe('период по умолчанию у вкладок', () => {
     // Явный период переходит на «Баланс».
     await page.getByRole('link', { name: t.reports.tabs.balance }).click()
     await expect(page).toHaveURL(/\/reports\/balance\?from=2026-11-01&to=2026-11-30$/)
-    await expect.poll(() => api.balanceRequests.at(-1)?.get('from')).toBe('2026-11-01')
+    await expect
+      .poll(() => mainBalanceRequests(api.balanceRequests).at(-1)?.get('from'))
+      .toBe('2026-11-01')
     // Крестик чипа — к умолчанию вкладки (12 месяцев).
     await page
       .getByRole('button', { name: t.feed.filters.remove(t.feed.filters.periods.thisMonth) })
@@ -382,9 +400,6 @@ test.describe('баланс', () => {
     await setup(page)
     await openReports(page, '/reports/balance')
     await balanceReady(page)
-    await expect(
-      page.getByText(spaced('С 31 декабря 2025 баланс вырос на 493 900 ₽')),
-    ).toBeVisible()
     await expect(page).toHaveScreenshot('reports-balance.png', { fullPage: true })
   })
 
@@ -403,7 +418,15 @@ test.describe('баланс', () => {
     const api = await setup(page, { memberCount: 2 })
     await openReports(page, `/reports/balance?accountId=${card.id}&authorId=${me}`)
     await balanceReady(page)
-    const request = api.balanceRequests.at(-1)!
+    const requests = api.balanceRequests
+    // Остаток на начало — тем же отбором счетов, за день до периода.
+    expect(
+      requests.some((r) => r.get('from') === '2025-11-30' && r.get('to') === '2025-11-30'),
+    ).toBe(true)
+    expect(requests.every((r) => r.getAll('accountId').join() === card.id)).toBe(true)
+    const request = mainBalanceRequests(requests).at(-1)!
+    // Конец периода — не позже сегодня.
+    expect(request.get('to')).toBe('2026-11-24')
     expect(request.getAll('accountId')).toEqual([card.id])
     expect(request.has('authorId')).toBe(false)
     await expect(page.getByLabel(t.reports.filters.author)).toHaveCount(0)
@@ -420,17 +443,19 @@ test.describe('баланс', () => {
   test('шаг день: 30 точек, таблица свёрнута', { tag: ['@visual', '@a11y'] }, async ({ page }) => {
     await setup(page)
     await openReports(page, '/reports/balance?from=2026-11-01&to=2026-11-30')
-    await expect(headline(page)).toHaveText(/^На 30 ноября\s—/)
+    await expect(headline(page)).toHaveText(/^На 24 ноября\s—/)
     await expect(page.locator('.recharts-line-curve').first()).toBeVisible()
     await expect(page).toHaveScreenshot('reports-balance-days.png', { fullPage: true })
 
-    const table = page.getByRole('table', { name: 'Общий баланс, Ноябрь 2026' })
+    // Изменение — от остатка на конец 31 октября, а не от первой точки (1 ноября).
+    await expect(page.getByText(/^С 1 ноября баланс/)).toBeVisible()
+    const table = page.getByRole('table', { name: 'Общий баланс, 1–24 ноября' })
     await expect(table.locator('tbody tr')).toHaveCount(12)
-    await expect(table.locator('tbody th').first()).toHaveText('30 ноября')
-    const more = page.getByRole('button', { name: t.reports.table.showAll(30) })
+    await expect(table.locator('tbody th').first()).toHaveText('24 ноября')
+    const more = page.getByRole('button', { name: t.reports.table.showAll(24) })
     await expect(more).toHaveAttribute('aria-expanded', 'false')
     await more.click()
-    await expect(table.locator('tbody tr')).toHaveCount(30)
+    await expect(table.locator('tbody tr')).toHaveCount(24)
     await expect(page.getByRole('button', { name: t.reports.table.showLess })).toHaveAttribute(
       'aria-expanded',
       'true',
@@ -442,24 +467,31 @@ test.describe('баланс', () => {
   test('шаг месяц за 10 лет: 120 точек', { tag: ['@visual', '@a11y'] }, async ({ page }) => {
     const api = await setup(page)
     await openReports(page, '/reports/balance?from=2016-12-01&to=2026-11-30')
-    await expect(headline(page)).toHaveText(/^На 30 ноября\s—/)
-    expect(api.balanceRequests.at(-1)!.get('from')).toBe('2016-12-01')
+    await expect(headline(page)).toHaveText(/^На 24 ноября\s—/)
+    expect(mainBalanceRequests(api.balanceRequests).at(-1)!.get('from')).toBe('2016-12-01')
     await expect(page.locator('.recharts-line-curve').first()).toBeVisible()
     await expect(page).toHaveScreenshot('reports-balance-long.png', { fullPage: true })
     await expect(page.getByRole('button', { name: t.reports.table.showAll(120) })).toBeVisible()
+    // Подписи оси — январи с годами, ровным шагом; последний год виден.
+    const ticks = page.locator('main svg text').filter({ hasText: /^[а-я]{3}\s*\d{4}$/ })
+    await expect(ticks.last()).toHaveText(/^янв\s*2026$/)
+    const texts = await ticks.allTextContents()
+    expect(texts.length).toBeGreaterThanOrEqual(4)
+    for (const text of texts) expect(text).toMatch(/^янв\s*20\d\d$/)
     await expectNoAxeViolations(page)
     expect(await horizontalOverflow(page)).toBe(0)
   })
 
   test('уход ниже нуля', { tag: ['@visual', '@a11y'] }, async ({ page }) => {
     await setup(page, {
-      balance: (params) => balance(params, (i) => (20_000 - i * 5_000) * RUB),
+      balance: (params) => balance(params, (i) => (20_000 - i * 5_000) * RUB, 25_000 * RUB),
     })
     await openReports(page, '/reports/balance')
-    await balanceReady(page, 'На 30 ноября — −35 000 ₽')
-    await expect(
-      page.getByText(spaced('С 31 декабря 2025 баланс уменьшился на 55 000 ₽')),
-    ).toBeVisible()
+    await balanceReady(
+      page,
+      'На 24 ноября — −35 000 ₽',
+      'С 1 декабря 2025 баланс уменьшился на 60 000 ₽',
+    )
     await expect(page.locator('.recharts-reference-line')).toHaveCount(1)
     await expect(page).toHaveScreenshot('reports-balance-negative.png', { fullPage: true })
     await expectNoAxeViolations(page)
@@ -494,10 +526,15 @@ test.describe('баланс', () => {
   })
 
   test('ошибка загрузки и «Повторить»', { tag: ['@visual', '@a11y'] }, async ({ page }) => {
-    const api = await setup(page)
-    api.failNext.push(
-      (route) => problem(route, 500, 'internal'),
-      (route) => problem(route, 500, 'internal'),
+    await setup(page)
+    // Отказывает основной запрос (два раза — клиент повторяет 5xx один раз); запрос
+    // остатка на начало уходит параллельно и отвечает.
+    let failures = 2
+    await page.route(
+      (url) =>
+        url.pathname.endsWith('/api/v1/reports/balance') &&
+        url.searchParams.get('from') !== url.searchParams.get('to'),
+      (route) => (failures-- > 0 ? problem(route, 500, 'internal') : route.fallback()),
     )
     await openReports(page, '/reports/balance')
     await expect(page.getByRole('heading', { name: t.reports.loadError })).toBeVisible()
@@ -505,6 +542,53 @@ test.describe('баланс', () => {
     await expectNoAxeViolations(page)
     await page.getByRole('button', { name: t.errors.retry }).click()
     await balanceReady(page)
+  })
+
+  test(
+    'не загрузились счета — ошибка, а не «Счетов пока нет»',
+    { tag: ['@visual', '@a11y'] },
+    async ({ page }) => {
+      const api = await setup(page)
+      let failures = 2
+      await page.route(`**/api/v1/accounts`, (route) =>
+        failures-- > 0 ? problem(route, 500, 'internal') : route.fallback(),
+      )
+      await openReports(page, '/reports/balance')
+      await expect(page.getByRole('heading', { name: t.reports.loadError })).toBeVisible()
+      await expect(
+        page.getByRole('heading', { name: t.reports.balance.noAccounts.title }),
+      ).toHaveCount(0)
+      await expect(page.getByRole('link', { name: t.accounts.create })).toHaveCount(0)
+      expect(api.balanceRequests).toHaveLength(0)
+      await expect(page).toHaveScreenshot('reports-balance-accounts-error.png', { fullPage: true })
+      await expectNoAxeViolations(page)
+      await page.getByRole('button', { name: t.errors.retry }).click()
+      await balanceReady(page)
+    },
+  )
+
+  test('остаток на начало не загрузился — отчёт без строки изменения', async ({ page }) => {
+    await setup(page)
+    await page.route(
+      (url) =>
+        url.pathname.endsWith('/api/v1/reports/balance') &&
+        url.searchParams.get('from') === url.searchParams.get('to'),
+      (route) => problem(route, 500, 'internal'),
+    )
+    await openReports(page, '/reports/balance')
+    await balanceReady(page, 'На 24 ноября — 512 300 ₽', null)
+    await expect(page.getByText(/баланс (вырос|уменьшился|не изменился)/)).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: t.reports.loadError })).toHaveCount(0)
+  })
+
+  test('период в будущем — объяснение без запроса', { tag: '@a11y' }, async ({ page }) => {
+    const api = await setup(page)
+    await openReports(page, '/reports/balance?from=2026-12-01&to=2026-12-31')
+    await expect(page.getByRole('heading', { name: t.reports.balance.future.title })).toBeVisible()
+    // Фильтры и адрес не меняются.
+    await expect(page).toHaveURL(/from=2026-12-01&to=2026-12-31$/)
+    expect(api.balanceRequests).toHaveLength(0)
+    await expectNoAxeViolations(page)
   })
 
   test('нет курса валюты — про счета', { tag: '@a11y' }, async ({ page }) => {

@@ -95,6 +95,7 @@ export function MonthlyTable({
                       roundToMajor
                       variant="flow"
                       wrap
+                      className={classes.inlineAmount}
                     />
                   </span>
                 </td>
@@ -109,11 +110,25 @@ export function MonthlyTable({
             </th>
             <td role="cell" className={classes.trendCell}>
               <CellLabel>{s.income}</CellLabel>
-              <Money amount={totals.income} currency={currency} roundToMajor wrap fw={600} />
+              <Money
+                amount={totals.income}
+                currency={currency}
+                roundToMajor
+                wrap
+                fw={600}
+                className={classes.inlineAmount}
+              />
             </td>
             <td role="cell" className={classes.trendCell}>
               <CellLabel>{s.expense}</CellLabel>
-              <Money amount={totals.expense} currency={currency} roundToMajor wrap fw={600} />
+              <Money
+                amount={totals.expense}
+                currency={currency}
+                roundToMajor
+                wrap
+                fw={600}
+                className={classes.inlineAmount}
+              />
             </td>
             <td role="cell" className={classes.trendCell}>
               <CellLabel>{s.difference}</CellLabel>
@@ -123,6 +138,7 @@ export function MonthlyTable({
                 roundToMajor
                 variant="flow"
                 wrap
+                className={classes.inlineAmount}
                 fw={600}
               />
             </td>
@@ -176,7 +192,13 @@ function AmountLink({
         </span>
       ) : (
         <Link to={href} className={`${classes.cellValue} ${classes.amountLink}`}>
-          <Money amount={amount} currency={currency} roundToMajor wrap />
+          <Money
+            amount={amount}
+            currency={currency}
+            roundToMajor
+            wrap
+            className={classes.inlineAmount}
+          />
           <VisuallyHidden>{context}</VisuallyHidden>
         </Link>
       )}

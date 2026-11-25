@@ -1,5 +1,5 @@
 import { Button, Text, Title } from '@mantine/core'
-import { IconWallet } from '@tabler/icons-react'
+import { IconCalendarTime, IconWallet } from '@tabler/icons-react'
 import { keepPreviousData } from '@tanstack/react-query'
 import { useId } from 'react'
 import { Link } from 'react-router'
@@ -14,10 +14,10 @@ import { BalanceChart } from './BalanceChart'
 import { BalanceTable } from './BalanceTable'
 import { isPeriodTooLong, toBalanceReportParams, type ReportFilters } from './reportFilters'
 import { MissingRatesNotice, ReportError, ReportFrame, TooLongState } from './reportParts'
-import { failedQueries, useShownFilters } from './reportQuery'
 import { periodLabel } from './reportPeriod'
+import { failedQueries, useShownFilters, type FailingQuery } from './reportQuery'
 import { ReportSkeleton } from './ReportSkeleton'
-import { balanceChange } from './trendReport'
+import { balanceChange, balancePeriod, balanceStartDate } from './trendReport'
 import classes from './ReportsPage.module.css'
 
 /** Почему баланс показать не из чего: счетов нет или ни один не входит в общий баланс. */
@@ -36,46 +36,77 @@ function noBalance(accounts: readonly Account[], filters: ReportFilters): NoBala
   return null
 }
 
+/** Запрос списка счетов (`useListAccounts`): по нему решаем, есть ли из чего строить баланс. */
+type AccountsQuery = FailingQuery & { data?: { items: Account[] }; isPending: boolean }
+
 /**
  * Вкладка «Баланс» (requirements 5.10): растут деньги или тают. Сначала вывод — остаток
- * на конец периода и изменение с первой точки, — потом линия и таблица значений.
+ * на конец периода и изменение за период, — потом линия и таблица значений.
  * Фильтра участника нет: у остатка нет автора.
+ *
+ * Период запроса обрезан «сегодня» (`balancePeriod`): будущее — ровная линия, а не данные.
+ * Изменение за период — от остатка на начало периода: вторым запросом той же выборки
+ * из одной точки (`to = from = день перед периодом`). Его ошибка или ожидание отчёт
+ * не ломают: строка изменения просто не показывается (место под неё занято).
  */
 export function BalanceReportTab({
   filters,
   today,
-  accounts,
-  accountsPending,
+  accountsQuery,
 }: {
   filters: ReportFilters
   today: string
-  accounts: readonly Account[]
-  accountsPending: boolean
+  accountsQuery: AccountsQuery
 }) {
+  const period = balancePeriod(filters, today)
   const tooLong = isPeriodTooLong(filters)
-  const empty = accountsPending ? null : noBalance(accounts, filters)
-  const params = toBalanceReportParams(filters)
-  const report = useGetBalanceReport(params, {
-    query: { enabled: !tooLong && !accountsPending && !empty, placeholderData: keepPreviousData },
-  })
-  const { stale, shownFilters } = useShownFilters(report, JSON.stringify(params), filters)
+  const accounts = accountsQuery.data?.items
+  // «Нет счетов» — только по полученному списку: ошибка загрузки счетов — это ошибка.
+  const empty = accounts ? noBalance(accounts, filters) : null
+  const enabled = period !== null && !tooLong && accounts !== undefined && !empty
 
-  const isPending = !tooLong && !empty && (accountsPending || report.isPending)
+  const params = toBalanceReportParams(period ?? filters)
+  const report = useGetBalanceReport(params, {
+    query: { enabled, placeholderData: keepPreviousData },
+  })
+  const startDate = balanceStartDate(period ?? filters)
+  const start = useGetBalanceReport(
+    { ...params, from: startDate, to: startDate },
+    {
+      query: { enabled },
+    },
+  )
+  const { stale, shownFilters } = useShownFilters(report, JSON.stringify(params), period ?? filters)
+
+  const isPending = enabled ? report.isPending : accountsQuery.isPending
   const showSkeleton = useDelayedLoading(isPending)
-  const failed = failedQueries([report])
+  const failed = failedQueries(enabled ? [report] : [accountsQuery])
+
+  // Остаток на начало — только для текущих фильтров и пока на экране не прежний отчёт.
+  const startBalance = !stale ? start.data?.items[0]?.balance : undefined
+  const changePending = stale || start.isPending
 
   let content
-  if (tooLong) {
+  if (period === null) {
+    content = <FutureState />
+  } else if (tooLong) {
     content = <TooLongState />
-  } else if (empty) {
-    content = <NoBalanceState reason={empty} />
   } else if (failed.length > 0) {
     content = <ReportError failed={failed} />
+  } else if (empty) {
+    content = <NoBalanceState reason={empty} />
   } else if (isPending || !report.data) {
     content = showSkeleton ? <ReportSkeleton chart="trend" /> : null
   } else {
     content = (
-      <BalanceBody report={report.data} filters={shownFilters} stale={stale} today={today} />
+      <BalanceBody
+        report={report.data}
+        startBalance={startBalance}
+        changePending={changePending}
+        filters={shownFilters}
+        stale={stale}
+        today={today}
+      />
     )
   }
   return <div aria-busy={stale || undefined}>{content}</div>
@@ -106,13 +137,33 @@ function NoBalanceState({ reason }: { reason: 'noAccounts' | 'noneInTotal' }) {
   )
 }
 
+/** Весь период — в будущем: остатка там ещё нет. */
+function FutureState() {
+  const t = useT()
+  return (
+    <div className={classes.card}>
+      <EmptyState
+        icon={IconCalendarTime}
+        title={t.reports.balance.future.title}
+        description={t.reports.balance.future.description}
+      />
+    </div>
+  )
+}
+
 function BalanceBody({
   report,
+  startBalance,
+  changePending,
   filters,
   stale,
   today,
 }: {
   report: BalanceReport
+  /** Остаток на начало периода; `undefined` — неизвестен (ждём или запрос не удался). */
+  startBalance: number | undefined
+  /** Остаток на начало ещё грузится: место под строку изменения занято. */
+  changePending: boolean
   /** Фильтры, по которым получен `report` (во время загрузки новых — прежние). */
   filters: ReportFilters
   stale: boolean
@@ -122,8 +173,10 @@ function BalanceBody({
   const headingId = useId()
   const b = t.reports.balance
   const last = report.items[report.items.length - 1]
-  const change = balanceChange(report.items, report.currency)
+  const change =
+    startBalance === undefined ? null : balanceChange(startBalance, report.items, report.currency)
   if (!last) return null
+  const since = formatPeriod(filters.from, filters.from, today)
 
   return (
     <ReportFrame stale={stale}>
@@ -139,19 +192,32 @@ function BalanceBody({
               roundToMajor
               variant="balance"
               wrap
+              className={classes.inlineAmount}
             />
           </Title>
-          {change && (
+          {change ? (
             <Text c="dimmed">
               {change.direction === 'same' ? (
-                b.same(formatPeriod(change.since, change.since, today))
+                b.same(since)
               ) : (
                 <>
-                  {b[change.direction](formatPeriod(change.since, change.since, today))}{' '}
-                  <Money amount={change.amount} currency={report.currency} roundToMajor wrap />
+                  {b[change.direction](since)}{' '}
+                  <Money
+                    amount={change.amount}
+                    currency={report.currency}
+                    roundToMajor
+                    wrap
+                    className={classes.inlineAmount}
+                  />
                 </>
               )}
             </Text>
+          ) : (
+            changePending && (
+              <Text c="dimmed" aria-hidden>
+                {' '}
+              </Text>
+            )
           )}
         </div>
         <BalanceChart

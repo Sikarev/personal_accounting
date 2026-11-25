@@ -56,6 +56,7 @@ export function BalanceTable({
                   roundToMajor
                   variant="balance"
                   wrap
+                  className={classes.inlineAmount}
                 />
               </td>
             </tr>

@@ -127,14 +127,27 @@ function MonthlyBody({
               m.equal
             ) : (
               <>
-                {m[direction]} <Money amount={abs} currency={report.currency} roundToMajor wrap />
+                {m[direction]}{' '}
+                <Money
+                  amount={abs}
+                  currency={report.currency}
+                  roundToMajor
+                  wrap
+                  className={classes.inlineAmount}
+                />
               </>
             )}
           </Title>
           {average && (
             <Text c="dimmed">
               {m.averageLead}{' '}
-              <Money amount={average.amount} currency={report.currency} roundToMajor wrap />{' '}
+              <Money
+                amount={average.amount}
+                currency={report.currency}
+                roundToMajor
+                wrap
+                className={classes.inlineAmount}
+              />{' '}
               {m.averageTail(formatCount(average.months, m.fullMonths))}
             </Text>
           )}

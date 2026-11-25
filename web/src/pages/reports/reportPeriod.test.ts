@@ -34,6 +34,15 @@ describe('periodShape и подписи', () => {
     expect(periodLead({ from: '2025-05-01', to: '2025-05-31' }, TODAY, t)).toBe('В мае 2025 года')
     expect(periodLead({ from: '2026-01-01', to: '2026-12-31' }, TODAY, t)).toBe('В 2026 году')
     expect(periodLead({ from: '2026-11-01', to: '2026-11-15' }, TODAY, t)).toBe('За 1–15 ноября')
+    expect(periodLead({ from: '2025-12-01', to: '2026-11-30' }, TODAY, t)).toBe('За 12 месяцев')
+    // Те же 12 месяцев, но не от «сегодня» — обычный отрезок.
+    expect(periodLead({ from: '2024-12-01', to: '2025-11-30' }, TODAY, t)).toBe(
+      'За 1 декабря 2024 – 30 ноября 2025',
+    )
+  })
+
+  it('12 месяцев — без сравнения', () => {
+    expect(comparisonPeriod({ from: '2025-12-01', to: '2026-11-30' }, TODAY)).toBe(null)
   })
 
   it('подпись периода', () => {

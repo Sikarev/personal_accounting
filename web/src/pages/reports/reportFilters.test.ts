@@ -7,10 +7,14 @@ import {
   applyPatch,
   feedLink,
   isPeriodTooLong,
+  monthEnd,
+  monthFeedLink,
   parseReportFilters,
   reportFilterChips,
   reportFiltersToSearchParams,
+  toBalanceReportParams,
   toCategoryReportParams,
+  toMonthlyReportParams,
   type ReportFilters,
 } from './reportFilters'
 
@@ -160,5 +164,96 @@ describe('reportFilterChips', () => {
     expect(
       reportFilterChips({ ...NOVEMBER, from: '2026-01-01', to: '2026-12-31' }, lookups, t)[0].label,
     ).toBe(t.feed.filters.periods.thisYear)
+  })
+})
+
+describe('период вкладки по умолчанию (тренды — 12 месяцев)', () => {
+  const LAST_12: ReportFilters = { ...NOVEMBER, from: '2025-12-01', to: '2026-11-30' }
+  const trend = 'last12Months' as const
+
+  it('пустой адрес — 12 месяцев, включая текущий', () => {
+    expect(parseReportFilters(new URLSearchParams(''), TODAY, trend)).toEqual(LAST_12)
+  })
+
+  it('умолчание вкладки в адрес не пишется, умолчание другой вкладки — пишется', () => {
+    expect(reportFiltersToSearchParams(LAST_12, TODAY, trend).toString()).toBe('')
+    expect(reportFiltersToSearchParams(NOVEMBER, TODAY, trend).toString()).toBe(
+      'from=2026-11-01&to=2026-11-30',
+    )
+    // Явно выбранные «12 месяцев» на категориях переносятся на другие вкладки.
+    expect(reportFiltersToSearchParams(LAST_12, TODAY).toString()).toBe(
+      'from=2025-12-01&to=2026-11-30',
+    )
+  })
+
+  it('сброс периода — к умолчанию вкладки', () => {
+    expect(applyPatch(NOVEMBER, { from: null, to: null }, TODAY, trend)).toEqual(LAST_12)
+  })
+
+  it('чип периода — если период не умолчание вкладки', () => {
+    const lookups = { accountNames: new Map<string, string>(), today: TODAY }
+    expect(reportFilterChips(LAST_12, { ...lookups, defaultPreset: trend }, t)).toEqual([])
+    expect(
+      reportFilterChips(NOVEMBER, { ...lookups, defaultPreset: trend }, t).map((c) => c.label),
+    ).toEqual([t.feed.filters.periods.thisMonth])
+    expect(reportFilterChips(LAST_12, lookups, t).map((c) => c.label)).toEqual([
+      t.feed.filters.periods.last12Months,
+    ])
+  })
+})
+
+describe('по месяцам и баланс: запросы и ссылки', () => {
+  it('параметры без пустых массивов; у баланса нет автора', () => {
+    expect(toMonthlyReportParams(NOVEMBER)).toEqual({ from: '2026-11-01', to: '2026-11-30' })
+    expect(toMonthlyReportParams({ ...NOVEMBER, accountId: [A], authorId: [U] })).toEqual({
+      from: '2026-11-01',
+      to: '2026-11-30',
+      accountId: [A],
+      authorId: [U],
+    })
+    expect(toBalanceReportParams({ ...NOVEMBER, accountId: [A], authorId: [U] })).toEqual({
+      from: '2026-11-01',
+      to: '2026-11-30',
+      accountId: [A],
+    })
+  })
+
+  it('последний день месяца', () => {
+    expect(monthEnd('2026-02-01')).toBe('2026-02-28')
+    expect(monthEnd('2028-02-01')).toBe('2028-02-29')
+    expect(monthEnd('2026-12-01')).toBe('2026-12-31')
+  })
+
+  it('месяц → лента: вид, счета, автор; месяц обрезан периодом отчёта', () => {
+    const filters = {
+      ...NOVEMBER,
+      from: '2025-12-15',
+      to: '2026-11-20',
+      accountId: [A],
+      authorId: [U],
+    }
+    const parse = (link: string) => {
+      const [path, query] = link.split('?')
+      expect(path).toBe('/transactions')
+      return parseFilters(new URLSearchParams(query))
+    }
+    expect(parse(monthFeedLink(filters, '2026-03-01', 'income'))).toEqual({
+      from: '2026-03-01',
+      to: '2026-03-31',
+      kind: ['income'],
+      accountId: [A],
+      categoryId: [],
+      authorId: [U],
+      q: '',
+    })
+    expect(parse(monthFeedLink(filters, '2025-12-01', 'expense'))).toMatchObject({
+      from: '2025-12-15',
+      to: '2025-12-31',
+      kind: ['expense'],
+    })
+    expect(parse(monthFeedLink(filters, '2026-11-01', 'expense'))).toMatchObject({
+      from: '2026-11-01',
+      to: '2026-11-20',
+    })
   })
 })

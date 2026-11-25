@@ -8,10 +8,11 @@ import classes from './ReportsPage.module.css'
 const NAME_WIDTHS = ['52%', '38%', '60%', '44%', '30%']
 
 /**
- * Скелетон отчёта в форме будущего содержимого (ux.md, раздел 4): строка вывода, кольцо
- * и строки таблицы. Показывается, только если ответ дольше 300 мс (`useDelayedLoading`).
+ * Скелетон отчёта в форме будущего содержимого (ux.md, раздел 4): строка вывода, график
+ * (кольцо рядом с таблицей у категорий, прямоугольник во всю ширину у трендов) и строки
+ * таблицы. Показывается, только если ответ дольше 300 мс (`useDelayedLoading`).
  */
-export function ReportSkeleton() {
+export function ReportSkeleton({ chart = 'donut' }: { chart?: 'donut' | 'trend' }) {
   const t = useT()
   return (
     <div role="status" aria-live="polite" className={classes.report}>
@@ -20,10 +21,14 @@ export function ReportSkeleton() {
         <Skeleton className={classes.skeletonHeadline} radius="sm" />
         <Skeleton className={classes.skeletonComparison} radius="sm" />
       </div>
-      <div className={classes.reportBody} aria-hidden>
-        <div className={classes.chart}>
-          <Skeleton circle className={classes.skeletonDonut} />
-        </div>
+      <div className={chart === 'donut' ? classes.reportBody : classes.stack} aria-hidden>
+        {chart === 'donut' ? (
+          <div className={classes.chart}>
+            <Skeleton circle className={classes.skeletonDonut} />
+          </div>
+        ) : (
+          <Skeleton className={classes.skeletonTrend} radius="md" />
+        )}
         <div className={classes.skeletonRows}>
           {NAME_WIDTHS.map((width, i) => (
             <div key={i} className={classes.skeletonRow}>

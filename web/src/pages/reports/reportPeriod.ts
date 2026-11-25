@@ -33,8 +33,11 @@ function monthIn(year: number, month: number, today: string, t: Messages): strin
   return year === parts(today)[0] ? name : t.reports.headline.withYear(name, year)
 }
 
-/** Начало вывода: «В ноябре», «В 2026 году», «За 1–15 ноября». */
+/** Начало вывода: «В ноябре», «В 2026 году», «За 12 месяцев», «За 1–15 ноября». */
 export function periodLead(period: ReportPeriod, today: string, t: Messages): string {
+  if (detectPreset(period, today, ['last12Months']) === 'last12Months') {
+    return t.reports.headline.last12Months
+  }
   const shape = periodShape(period)
   if (shape.type === 'month')
     return t.reports.headline.inMonth(monthIn(shape.year, shape.month, today, t))

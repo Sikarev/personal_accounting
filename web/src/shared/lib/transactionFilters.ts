@@ -115,7 +115,8 @@ export function hasActiveFilters(filters: FeedFilters): boolean {
 
 // ——— Период ———
 
-export type PeriodPreset = 'all' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'custom'
+export type PeriodPreset =
+  'all' | 'thisMonth' | 'lastMonth' | 'last12Months' | 'thisYear' | 'custom'
 
 export const PERIOD_PRESETS = [
   'all',
@@ -139,6 +140,8 @@ function monthRange(year: number, month: number): Period {
 /**
  * Границы готового периода относительно «сегодня» пользователя (`useToday()`): месяц
  * и год — целиком, включая будущие дни (операцию можно внести и на завтра).
+ * «12 месяцев» — текущий и 11 предыдущих целиком: с 1-го числа месяца 11 месяцев назад
+ * по конец текущего (отчёты по месяцам и баланс, requirements 5.10).
  * «Всё время» — без границ; у «Своего периода» границ нет — их задаёт пользователь.
  */
 export function presetPeriod(preset: PeriodPreset, today: string): Period {
@@ -148,6 +151,14 @@ export function presetPeriod(preset: PeriodPreset, today: string): Period {
       return monthRange(year, month)
     case 'lastMonth':
       return month === 1 ? monthRange(year - 1, 12) : monthRange(year, month - 1)
+    case 'last12Months': {
+      // Номер месяца от начала эры: 11 месяцев назад — без ручного перехода через год.
+      const start = year * 12 + (month - 1) - 11
+      return {
+        from: iso(Math.floor(start / 12), (start % 12) + 1, 1),
+        to: monthRange(year, month).to,
+      }
+    }
     case 'thisYear':
       return { from: iso(year, 1, 1), to: iso(year, 12, 31) }
     case 'all':
@@ -156,10 +167,19 @@ export function presetPeriod(preset: PeriodPreset, today: string): Period {
   }
 }
 
-/** Какой готовый период совпадает с границами; не совпал ни один — «Свой период». */
-export function detectPreset(period: Period, today: string): PeriodPreset {
+/**
+ * Какой готовый период совпадает с границами; не совпал ни один — «Свой период».
+ * Проверяются только варианты из `presets` (по умолчанию — ленты): в ленте нет
+ * «12 месяцев», и такие границы там — свой период, а не вариант, которого нет в списке.
+ */
+export function detectPreset(
+  period: Period,
+  today: string,
+  presets: readonly PeriodPreset[] = PERIOD_PRESETS,
+): PeriodPreset {
   if (period.from === null && period.to === null) return 'all'
-  for (const preset of ['thisMonth', 'lastMonth', 'thisYear'] as const) {
+  for (const preset of presets) {
+    if (preset === 'all' || preset === 'custom') continue
     const range = presetPeriod(preset, today)
     if (range.from === period.from && range.to === period.to) return preset
   }

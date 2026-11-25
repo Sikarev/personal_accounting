@@ -142,6 +142,22 @@ describe('presetPeriod', () => {
     expect(presetPeriod('thisYear', today)).toEqual({ from: '2026-01-01', to: '2026-12-31' })
   })
 
+  it('12 месяцев — текущий и 11 предыдущих целиком', () => {
+    expect(presetPeriod('last12Months', today)).toEqual({ from: '2025-12-01', to: '2026-11-30' })
+    expect(presetPeriod('last12Months', '2026-12-31')).toEqual({
+      from: '2026-01-01',
+      to: '2026-12-31',
+    })
+    expect(presetPeriod('last12Months', '2026-01-15')).toEqual({
+      from: '2025-02-01',
+      to: '2026-01-31',
+    })
+    expect(presetPeriod('last12Months', '2028-02-29')).toEqual({
+      from: '2027-03-01',
+      to: '2028-02-29',
+    })
+  })
+
   it('всё время и свой период — без границ', () => {
     expect(presetPeriod('all', today)).toEqual({ from: null, to: null })
     expect(presetPeriod('custom', today)).toEqual({ from: null, to: null })
@@ -156,6 +172,18 @@ describe('detectPreset', () => {
     expect(detectPreset({ from: '2026-11-01', to: '2026-11-30' }, today)).toBe('thisMonth')
     expect(detectPreset({ from: '2026-10-01', to: '2026-10-31' }, today)).toBe('lastMonth')
     expect(detectPreset({ from: '2026-01-01', to: '2026-12-31' }, today)).toBe('thisYear')
+  })
+
+  it('12 месяцев узнаются, только если вариант есть в списке', () => {
+    const period = { from: '2025-12-01', to: '2026-11-30' }
+    // В ленте такого варианта нет — свой период.
+    expect(detectPreset(period, today)).toBe('custom')
+    expect(detectPreset(period, today, ['thisMonth', 'last12Months', 'custom'])).toBe(
+      'last12Months',
+    )
+    expect(
+      detectPreset({ from: '2026-01-01', to: '2026-12-31' }, today, ['thisMonth', 'custom']),
+    ).toBe('custom')
   })
 
   it('остальное — свой период', () => {

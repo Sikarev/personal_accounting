@@ -22,7 +22,8 @@ export type PeriodFieldProps = {
   presets: readonly PeriodPreset[]
   /**
    * Вариант по умолчанию: к нему период возвращают снаружи (крестик на чипе, «Сбросить
-   * всё») — тогда поля дат прячутся. Лента — «Всё время», отчёты — «Этот месяц».
+   * всё») — тогда поля дат прячутся. Лента — «Всё время», отчёты — «Этот месяц»
+   * (по категориям) или «12 месяцев» (по месяцам, баланс).
    */
   defaultPreset: PeriodPreset
   /**
@@ -46,7 +47,7 @@ export function PeriodField({
   required = false,
 }: PeriodFieldProps) {
   const t = useT()
-  const detected = detectPreset(period, today)
+  const detected = detectPreset(period, today, presets)
   // «Свой период» выбран, а даты ещё пустые (или совпали с готовым вариантом): поля дат
   // остаются на экране, пока пользователь не выберет другой вариант.
   const [customChosen, setCustomChosen] = useState(detected === 'custom')

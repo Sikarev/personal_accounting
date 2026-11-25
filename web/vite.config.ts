@@ -9,6 +9,12 @@ const apiTarget = process.env.API_PROXY_TARGET ?? 'http://localhost:8080'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  build: {
+    // Бюджет проекта — 250 КБ gzip на первую загрузку (ux.md §8), его проверяем отдельно.
+    // Ленивый чанк «Отчётов» с графиками (recharts) больше 500 КБ до сжатия осознанно:
+    // он грузится только на этом экране, делить его искусственно незачем.
+    chunkSizeWarningLimit: 600,
+  },
   server: {
     // В разработке фронт и API на одном origin: cookie сессии работают без CORS.
     // changeOrigin: false — заголовок Host остаётся адресом dev-сервера. Короткая запись

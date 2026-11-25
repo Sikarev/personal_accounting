@@ -248,15 +248,15 @@ test.describe('по категориям', () => {
     // Чип счёта виден.
     await expect(page.getByRole('button', { name: t.feed.filters.remove('Карта') })).toBeVisible()
 
-    // Вкладка-заглушка: ссылка с теми же параметрами, без запросов отчёта.
+    // Другая вкладка — ссылка с теми же параметрами: счёт переходит в отчёт по месяцам.
     const before = api.requests.length
     await page.getByRole('link', { name: t.reports.tabs.monthly }).click()
     await expect(page).toHaveURL(new RegExp(`/reports/monthly\\?kind=income&accountId=${card.id}$`))
-    await expect(page.getByRole('heading', { name: t.reports.soon.title })).toBeVisible()
     await expect(page.getByRole('link', { name: t.reports.tabs.monthly })).toHaveAttribute(
       'aria-current',
       'page',
     )
+    await expect.poll(() => api.monthlyRequests.at(-1)?.getAll('accountId')).toEqual([card.id])
     await expectNoAxeViolations(page)
     expect(api.requests.length).toBe(before)
   })

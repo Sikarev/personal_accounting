@@ -386,3 +386,248 @@
   width: 5rem;
   height: var(--mantine-font-size-md);
 }
+
+.skeletonTrend {
+  width: 100%;
+  height: var(--app-trend-chart-height);
+}
+
+/* ——— Тренды: по месяцам и баланс ——— */
+
+/* Сумма в выводе и в таблице переносится целиком («493 900 ₽» не рвётся посреди числа);
+   по разрядам — только если одна не помещается в строку (как в BalanceTotals). */
+.inlineAmount {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* Таблица баланса (дата и остаток) в узком блоке относительно шрифта (телефон при шрифте
+   200 %): строка — в две, дата сверху, остаток под ней во всю ширину. В две колонки таблица
+   отдавала бы сумме ширину одного разряда («512 / 300 ₽»). Порог в rem растёт со шрифтом:
+   при обычном шрифте на 375 px — в строку. Роли ARIA сохраняют таблицу для диктора. */
+@container report (max-width: 20rem) {
+  .trendTable[data-columns='2'] {
+    display: block;
+
+    & tbody {
+      display: block;
+    }
+
+    & .trendHead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    & .trendRow {
+      display: flex;
+      flex-direction: column;
+      padding-block: var(--mantine-spacing-xs);
+    }
+
+    & .trendLabel,
+    & .trendCell {
+      display: block;
+      padding: 0;
+    }
+  }
+}
+
+/* График во всю ширину блока, под ним — легенда со значениями выбранной точки. */
+.trendChart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+  min-width: 0;
+
+  /* Линия разницы и её точки лежат поверх столбцов: касание по точке выбранного месяца
+     не должно перехватывать касание столбца (второе касание — переход в ленту). */
+  & :global(.recharts-line),
+  & :global(.recharts-dot),
+  & :global(.recharts-active-dot) {
+    pointer-events: none;
+  }
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--mantine-spacing-md);
+  row-gap: var(--mantine-spacing-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--mantine-spacing-xs);
+}
+
+/* Обозначение серии — той же формы, что на графике: столбец — квадрат цвета, линия
+   разницы — пунктир, линия баланса — сплошная. Так серии различимы и без различения цвета. */
+.legendMarker {
+  flex: none;
+  align-self: center;
+
+  &[data-marker='bar'] {
+    width: var(--mantine-spacing-sm);
+    height: var(--mantine-spacing-md);
+    border-radius: var(--mantine-radius-xs);
+    background-color: var(--marker-color);
+  }
+
+  &[data-marker='line'],
+  &[data-marker='dashed'] {
+    width: var(--mantine-spacing-md);
+    border-top: 2px solid var(--marker-color);
+  }
+
+  &[data-marker='dashed'] {
+    border-top-style: dashed;
+  }
+}
+
+.tableBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.showAll {
+  align-self: flex-start;
+  min-height: var(--app-touch-target);
+}
+
+.trendTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.trendHead th {
+  padding: var(--mantine-spacing-xs) 0 var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  text-align: end;
+
+  &:first-child {
+    padding-inline-start: 0;
+    text-align: start;
+  }
+}
+
+.trendRow {
+  border-bottom: 1px solid var(--mantine-color-default-border);
+
+  /* «Итого»: жирнее и без линии снизу. */
+  &[data-total] {
+    border-bottom: 0;
+    font-weight: 600;
+  }
+}
+
+.trendLabel {
+  padding: var(--mantine-spacing-xs) 0;
+  font-weight: inherit;
+  text-align: start;
+  vertical-align: middle;
+}
+
+.trendCell {
+  padding: var(--mantine-spacing-xs) 0 var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  text-align: end;
+  vertical-align: middle;
+}
+
+/* Подпись колонки в ячейке — только когда строка становится карточкой (ниже). */
+.cellLabel {
+  display: none;
+}
+
+/* Значение ячейки по высоте зоны касания: суммы-ссылки (44 px) и обычные суммы в строке
+   стоят на одной линии. */
+.cellValue {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+}
+
+/* Сумма-ссылка в ленту: подчёркнута, чтобы в таблице чисел было видно, что она ведёт
+   дальше. */
+.amountLink {
+  color: var(--mantine-color-text);
+  text-decoration: underline;
+  text-decoration-color: var(--mantine-color-dimmed);
+  text-underline-offset: 0.2em;
+
+  &:hover {
+    text-decoration-color: currentColor;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--app-focus-ring);
+    outline-offset: 2px;
+    border-radius: var(--mantine-radius-xs);
+  }
+}
+
+/* Узкий блок (телефон): четыре колонки сумм не помещаются — строка месяца становится
+   карточкой: месяц сверху, под ним доходы, расходы и разница с подписями. Колонки сумм
+   переносятся, когда им тесно (шрифт 200 % — по одной в строку). Роли ARIA в разметке
+   сохраняют таблицу для диктора; заголовки колонок для него остаются. */
+@container report (max-width: 36rem) {
+  .trendTable[data-columns='4'] {
+    display: block;
+
+    & tbody,
+    & tfoot {
+      display: block;
+    }
+
+    & .trendHead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    & .trendRow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+      column-gap: var(--mantine-spacing-sm);
+      padding-bottom: var(--mantine-spacing-sm);
+    }
+
+    & .trendLabel {
+      grid-column: 1 / -1;
+      padding-bottom: var(--mantine-spacing-xs);
+    }
+
+    & .trendCell {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 0;
+      text-align: start;
+    }
+
+    & .cellLabel {
+      display: block;
+    }
+  }
+}

@@ -29,6 +29,11 @@ export const layout = {
    * рисует кольцо в пикселях, и при крупном шрифте рамка не должна расти отдельно от него.
    */
   chartSize: 208,
+  /**
+   * Высота графиков трендов (по месяцам, баланс), px: ширина — по блоку. В пикселях, как
+   * и кольцо: подписи осей recharts — в пикселях и со шрифтом не растут.
+   */
+  trendChartHeight: 240,
 } as const
 
 /**
@@ -150,6 +155,17 @@ export const semanticColors = {
 export const chartColors = {
   series: Array.from({ length: 8 }, (_, i) => `var(--app-chart-${i + 1})`),
   other: 'var(--app-chart-other)',
+  /**
+   * Тренды (по месяцам, баланс): доход — семантический цвет дохода (5,3:1 и 7,7:1 к фону),
+   * расход — первый цвет палитры (индиго, не красный: расход — не проблема, ux.md §2),
+   * линии разницы и баланса — цвет текста: они отличаются от столбцов и формой
+   * (пунктир, точки), не только цветом.
+   */
+  income: 'var(--app-color-income)',
+  expense: 'var(--app-chart-1)',
+  line: 'var(--mantine-color-text)',
+  /** Линия нуля, когда значения уходят ниже нуля. */
+  zero: 'var(--mantine-color-dimmed)',
 } as const
 
 // Оттенки палитры графиков по темам: [цвет, оттенок светлой, оттенок тёмной]. Каждый —
@@ -190,6 +206,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     '--app-auth-form-width': rem(layout.authFormWidth),
     '--app-reading-width': rem(layout.readingWidth),
     '--app-chart-size': `${layout.chartSize}px`,
+    '--app-trend-chart-height': `${layout.trendChartHeight}px`,
   },
   light: {
     '--mantine-color-dimmed': '#656c73', // 5.4:1 на белом, 5.1:1 на gray-0

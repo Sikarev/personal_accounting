@@ -24,7 +24,8 @@ const (
 	// соглашается пользователь при регистрации. Меняется вместе с текстами.
 	// Сейчас тексты — заглушки.
 	termsVersion = "stub-2026-11-19"
-	// defaultFamilyName — имя семьи, которая создаётся при регистрации.
+	// defaultFamilyName — имя семьи, которая создаётся при регистрации
+	// и при выходе или исключении из семьи (createOwnFamily).
 	defaultFamilyName = "Семья"
 
 	// SQLSTATE нарушения уникальности и имя индекса e-mail из 00001_init.sql.
@@ -88,16 +89,8 @@ func (s *server) Register(ctx context.Context, req oapi.RegisterRequestObject) (
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	familyID, err := q.CreateFamily(ctx, defaultFamilyName)
+	familyID, err := createOwnFamily(ctx, q, userID)
 	if err != nil {
-		return nil, fmt.Errorf("create family: %w", err)
-	}
-	if err := q.AddFamilyMember(ctx, dbgen.AddFamilyMemberParams{
-		FamilyID: familyID, UserID: userID, Role: dbgen.FamilyRoleOwner,
-	}); err != nil {
-		return nil, fmt.Errorf("add family owner: %w", err)
-	}
-	if err := createDefaultCategories(ctx, q, familyID); err != nil {
 		return nil, err
 	}
 	token, expires, err := s.createSession(ctx, q, userID, now)

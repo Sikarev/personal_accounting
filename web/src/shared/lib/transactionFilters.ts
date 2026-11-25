@@ -21,6 +21,11 @@ export type FeedFilters = {
   kind: TransactionKind[]
   accountId: string[]
   categoryId: string[]
+  /**
+   * Авторы операций (id пользователей). Поля в фильтрах ленты нет: так на ленту ведут
+   * отчёты с фильтром «участник», снимается чипом.
+   */
+  authorId: string[]
   /** Поиск по комментарию — как ввёл пользователь, пробелы обрезаются перед запросом. */
   q: string
 }
@@ -31,12 +36,14 @@ export const EMPTY_FILTERS: FeedFilters = {
   kind: [],
   accountId: [],
   categoryId: [],
+  authorId: [],
   q: '',
 }
 
 // Ограничения контракта: лишнее API отклонило бы 422, и лента показала бы ошибку
 // из-за испорченной руками ссылки. Поэтому неподходящие значения просто отбрасываются.
 const MAX_IDS = 100
+const MAX_AUTHORS = 50
 const MAX_QUERY = 200
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -53,14 +60,15 @@ function dateParam(params: URLSearchParams, name: string): string | null {
 
 /** Фильтры из адреса. Неизвестные, повреждённые и повторяющиеся значения отбрасываются. */
 export function parseFilters(params: URLSearchParams): FeedFilters {
-  const ids = (name: string) =>
-    unique(params.getAll(name).filter((id) => UUID.test(id))).slice(0, MAX_IDS)
+  const ids = (name: string, max = MAX_IDS) =>
+    unique(params.getAll(name).filter((id) => UUID.test(id))).slice(0, max)
   return {
     from: dateParam(params, 'from'),
     to: dateParam(params, 'to'),
     kind: unique(params.getAll('kind').filter(isKind)),
     accountId: ids('accountId'),
     categoryId: ids('categoryId'),
+    authorId: ids('authorId', MAX_AUTHORS),
     q: (params.get('q') ?? '').slice(0, MAX_QUERY),
   }
 }
@@ -73,6 +81,7 @@ export function filtersToSearchParams(filters: FeedFilters): URLSearchParams {
   for (const kind of filters.kind) params.append('kind', kind)
   for (const id of filters.accountId) params.append('accountId', id)
   for (const id of filters.categoryId) params.append('categoryId', id)
+  for (const id of filters.authorId) params.append('authorId', id)
   if (filters.q !== '') params.set('q', filters.q)
   return params
 }
@@ -85,6 +94,7 @@ export function toListParams(filters: FeedFilters): ListTransactionsParams {
   if (filters.kind.length) params.kind = filters.kind
   if (filters.accountId.length) params.accountId = filters.accountId
   if (filters.categoryId.length) params.categoryId = filters.categoryId
+  if (filters.authorId.length) params.authorId = filters.authorId
   const q = filters.q.trim()
   if (q) params.q = q
   return params
@@ -98,6 +108,7 @@ export function hasActiveFilters(filters: FeedFilters): boolean {
     filters.kind.length > 0 ||
     filters.accountId.length > 0 ||
     filters.categoryId.length > 0 ||
+    filters.authorId.length > 0 ||
     filters.q.trim() !== ''
   )
 }

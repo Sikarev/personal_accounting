@@ -24,6 +24,11 @@ export const layout = {
   authFormWidth: 420,
   /** Ширина текстовой страницы (документы): длина строки удобна для чтения. */
   readingWidth: 680,
+  /**
+   * Диаметр кольцевой диаграммы в отчётах. Переменная — в пикселях, не в rem: recharts
+   * рисует кольцо в пикселях, и при крупном шрифте рамка не должна расти отдельно от него.
+   */
+  chartSize: 208,
 } as const
 
 /**
@@ -137,6 +142,37 @@ export const semanticColors = {
 } as const
 
 /**
+ * Палитра графиков (сегменты кольца в отчётах и метки строк таблицы под ним): восемь цветов
+ * категорий и приглушённый для «Прочего». Значения — `--app-chart-*` ниже, свои в каждой
+ * теме: в тёмной — светлее, чтобы сегменты не тонули в фоне. Соседние цвета разнесены
+ * по тону; цвет — не единственный носитель смысла: рядом всегда название и сумма.
+ */
+export const chartColors = {
+  series: Array.from({ length: 8 }, (_, i) => `var(--app-chart-${i + 1})`),
+  other: 'var(--app-chart-other)',
+} as const
+
+// Оттенки палитры графиков по темам: [цвет, оттенок светлой, оттенок тёмной].
+const chartPalette = [
+  ['indigo', 6, 4],
+  ['orange', 7, 5],
+  ['teal', 7, 5],
+  ['pink', 6, 4],
+  ['cyan', 7, 5],
+  ['yellow', 7, 5],
+  ['grape', 6, 4],
+  ['lime', 8, 5],
+] as const
+
+const chartVariables = (scheme: 'light' | 'dark') =>
+  Object.fromEntries(
+    chartPalette.map(([color, light, dark], i) => [
+      `--app-chart-${i + 1}`,
+      `var(--mantine-color-${color}-${scheme === 'light' ? light : dark})`,
+    ]),
+  )
+
+/**
  * Дополняет CSS-переменные Mantine: семантические цвета и размеры каркаса.
  * Заодно усиливает `dimmed` и `error`: стандартные оттенки Mantine не проходят AA
  * (gray-6 на белом — 3.3:1, dark-2 на dark-7 — 4.0:1).
@@ -149,6 +185,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     '--app-touch-target': rem(layout.touchTarget),
     '--app-auth-form-width': rem(layout.authFormWidth),
     '--app-reading-width': rem(layout.readingWidth),
+    '--app-chart-size': `${layout.chartSize}px`,
   },
   light: {
     '--mantine-color-dimmed': '#656c73', // 5.4:1 на белом, 5.1:1 на gray-0
@@ -165,6 +202,8 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     // 4.1:1, ниже AA. Середина между indigo-1 и indigo-2 даёт 4.7:1 и остаётся заметной.
     [`--mantine-color-${t.primaryColor}-light-hover`]: `color-mix(in srgb, var(--mantine-color-${t.primaryColor}-1), var(--mantine-color-${t.primaryColor}-2))`,
     '--mantine-primary-color-light-hover': `var(--mantine-color-${t.primaryColor}-light-hover)`,
+    ...chartVariables('light'),
+    '--app-chart-other': 'var(--mantine-color-gray-5)',
   },
   dark: {
     '--mantine-color-dimmed': '#a3a3a3', // 6.5:1 на dark-7, 5.4:1 на dark-6
@@ -177,5 +216,7 @@ export const cssVariablesResolver: CSSVariablesResolver = (t) => ({
     // indigo-4: 5.23 на dark-7, 5.55 на dark-8, 4.58 на dark-6, 3.78 на dark-5 (hover),
     // 4.61 на подложке активного пункта меню.
     '--app-focus-ring': `var(--mantine-color-${t.primaryColor}-4)`,
+    ...chartVariables('dark'),
+    '--app-chart-other': 'var(--mantine-color-dark-2)',
   },
 })

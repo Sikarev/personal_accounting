@@ -52,7 +52,7 @@ export function CategoryReportTab({
   filters: ReportFilters
   onChange: (patch: ReportFiltersPatch) => void
   today: string
-  /** Заданы фильтры кроме вида (период не по умолчанию, счета, участник). */
+  /** Заданы счета или участник: пустой отчёт объясняется ими и снимается «Сбросить фильтры». */
   filtered: boolean
   onResetFilters: () => void
 }) {
@@ -73,6 +73,30 @@ export function CategoryReportTab({
     { query: { enabled: !tooLong && previous !== null } },
   )
   const categoriesQuery = useListCategories()
+
+  // Пока грузится отчёт с новыми фильтрами, на экране — прежний (placeholder). Рисовать его
+  // нужно с теми фильтрами, по которым он получен: иначе заголовок врал бы («получено»
+  // при суммах расходов, «в октябре» при суммах за ноябрь), а ссылки строк вели бы с новым
+  // видом и старой категорией в пустую ленту. Запоминаем фильтры последнего настоящего ответа.
+  const key = JSON.stringify(params)
+  const [loaded, setLoaded] = useState<{ key: string; filters: ReportFilters } | null>(null)
+  if (report.data && !report.isPlaceholderData && loaded?.key !== key) {
+    setLoaded({ key, filters })
+  }
+  const stale = report.isPlaceholderData
+  const shownFilters = stale && loaded ? loaded.filters : filters
+
+  // Сравнение — только когда и отчёт, и сравнительный ответ получены для текущих фильтров.
+  // Пока ждём — строка сравнения занимает своё место (иначе кольцо и таблица сдвигались бы).
+  let comparison: Comparison = null
+  if (previous !== null) {
+    if (stale || previousReport.isPending) {
+      comparison = 'pending'
+    } else if (previousReport.data && report.data) {
+      const change = compareTotals(report.data.total, previousReport.data.total)
+      comparison = change && comparisonText(change, previous, today, t)
+    }
+  }
 
   const isPending = !tooLong && (report.isPending || categoriesQuery.isPending)
   const showSkeleton = useDelayedLoading(isPending)
@@ -122,19 +146,16 @@ export function CategoryReportTab({
     content = (
       <ReportBody
         report={report.data}
-        previous={
-          previous && previousReport.data && !previousReport.isPlaceholderData
-            ? { period: previous, total: previousReport.data.total }
-            : null
-        }
-        filters={filters}
+        comparison={comparison}
+        filters={shownFilters}
+        stale={stale}
         today={today}
         categories={categoriesQuery.data?.items ?? []}
         empty={
           <div className={classes.card}>
             <EmptyState
               icon={IconChartPie}
-              title={t.reports.empty[filters.kind]}
+              title={t.reports.empty[shownFilters.kind]}
               description={
                 filtered ? t.reports.empty.filteredDescription : t.reports.empty.description
               }
@@ -164,7 +185,7 @@ export function CategoryReportTab({
   return (
     <div className={classes.stack}>
       <KindSwitch value={filters.kind} onChange={(kind) => onChange({ kind })} />
-      <div aria-busy={report.isPlaceholderData || undefined}>{content}</div>
+      <div aria-busy={stale || undefined}>{content}</div>
     </div>
   )
 }
@@ -201,17 +222,24 @@ function KindSwitch({
   )
 }
 
+/** Строка сравнения: текст, «ждём» (место занято) или её нет. */
+type Comparison = string | 'pending' | null
+
 function ReportBody({
   report,
-  previous,
+  comparison,
   filters,
+  stale,
   today,
   categories,
   empty,
 }: {
   report: CategoryReport
-  previous: { period: NonNullable<ReturnType<typeof comparisonPeriod>>; total: number } | null
+  comparison: Comparison
+  /** Фильтры, по которым получен `report` (во время загрузки новых — прежние). */
   filters: ReportFilters
+  /** Показан прежний отчёт, пока грузится новый: блок приглушён и не реагирует на действия. */
+  stale: boolean
   today: string
   categories: Parameters<typeof buildCategoryRows>[1]
   empty: ReactNode
@@ -226,7 +254,6 @@ function ReportBody({
   // Подсвеченная категория: наведение на сегмент подсвечивает строку таблицы.
   const [active, setActive] = useState<string | null>(null)
 
-  const change = previous ? compareTotals(report.total, previous.total) : null
   const notice = report.missingRates.length > 0 && (
     <div className={classes.notice}>
       <IconInfoCircle
@@ -241,7 +268,7 @@ function ReportBody({
 
   if (rows.length === 0) {
     return (
-      <div className={classes.stack}>
+      <div className={classes.stack} data-stale={stale || undefined} inert={stale}>
         {notice}
         {empty}
       </div>
@@ -249,7 +276,9 @@ function ReportBody({
   }
 
   return (
-    <div className={classes.stack}>
+    // Устаревший отчёт приглушён и инертен: ссылки и кольцо не ведут по прежним данным,
+    // пока на экране не появится отчёт по выбранным фильтрам.
+    <div className={classes.stack} data-stale={stale || undefined} inert={stale}>
       {notice}
       <section aria-labelledby={headingId} className={classes.report}>
         <div className={classes.headline}>
@@ -259,8 +288,12 @@ function ReportBody({
             {filters.kind === 'expense' ? t.reports.headline.spent : t.reports.headline.received}{' '}
             <Money amount={report.total} currency={report.currency} roundToMajor wrap />
           </Title>
-          {change && previous && (
-            <Text c="dimmed">{comparisonText(change, previous.period, today, t)}</Text>
+          {comparison === 'pending' ? (
+            <Text c="dimmed" aria-hidden>
+              {' '}
+            </Text>
+          ) : (
+            comparison !== null && <Text c="dimmed">{comparison}</Text>
           )}
         </div>
         <div className={classes.reportBody}>

@@ -261,6 +261,56 @@ test.describe('по категориям', () => {
     expect(api.requests.length).toBe(before)
   })
 
+  test(
+    'пока грузятся доходы, прежний отчёт приглушён и не выдаёт себя за новый',
+    { tag: '@a11y' },
+    async ({ page }) => {
+      await setup(page)
+      // Ответ по доходам — только по сигналу: виден промежуточный кадр.
+      let release!: () => void
+      const released = new Promise<void>((resolve) => (release = resolve))
+      await page.route(
+        (url) =>
+          url.pathname.endsWith('/reports/categories') && url.searchParams.get('kind') === 'income',
+        async (route) => {
+          await released
+          await route.fallback()
+        },
+      )
+      await openReports(page)
+      await reportReady(page)
+      await page.locator('label', { hasText: t.reports.kind.income }).click()
+      await expect(page).toHaveURL(/kind=income/)
+
+      // Прежние суммы — с прежним заголовком («потрачено»), блок приглушён и инертен:
+      // ссылки строк по прежним данным не работают, сравнения нет (место под него занято).
+      const stale = page.locator('[data-stale]')
+      await expect(stale).toBeVisible()
+      await expect(stale).toHaveAttribute('inert', '')
+      await expect(headline(page)).toHaveText(spaced('В ноябре потрачено 84 300 ₽'))
+      await expect(page.getByText(/меньше, чем/)).toHaveCount(0)
+      await expect(page.locator('main [aria-busy="true"]')).toHaveCount(1)
+      await expectNoAxeViolations(page)
+
+      release()
+      await expect(headline(page)).toHaveText(spaced('В ноябре получено 150 000 ₽'))
+      await expect(stale).toHaveCount(0)
+      // Ссылка строки — с новым видом и категорией нового отчёта.
+      await expect(page.getByRole('link', { name: 'Зарплата' })).toHaveAttribute(
+        'href',
+        new RegExp(`kind=income&categoryId=${salary.id}`),
+      )
+    },
+  )
+
+  test('пусто за прошлый месяц — без «Сбросить фильтры»', async ({ page }) => {
+    await setup(page, { respond: () => emptyCategoryReport })
+    await openReports(page, '/reports/categories?from=2026-10-01&to=2026-10-31')
+    await expect(page.getByRole('heading', { name: t.reports.empty.expense })).toBeVisible()
+    await expect(page.getByText(t.reports.empty.description)).toBeVisible()
+    await expect(page.getByRole('button', { name: t.reports.empty.resetFilters })).toHaveCount(0)
+  })
+
   test('прошлый месяц — сравнение с целым месяцем', async ({ page }) => {
     await setup(page, {
       respond: (params) =>

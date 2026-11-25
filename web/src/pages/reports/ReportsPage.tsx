@@ -114,8 +114,9 @@ export function ReportsPage({ tab }: { tab: ReportTab }) {
               filters={filters}
               onChange={setFilters}
               today={today}
-              filtered={chips.length > 0}
-              onResetFilters={resetFilters}
+              // Пустой отчёт объясняется счетами и участником; период и так виден в выводе.
+              filtered={filters.accountId.length > 0 || filters.authorId.length > 0}
+              onResetFilters={() => setFilters({ accountId: [], authorId: [] })}
             />
           </>
         ) : (

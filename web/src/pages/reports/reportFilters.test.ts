@@ -96,14 +96,17 @@ describe('applyPatch', () => {
 })
 
 describe('длина периода', () => {
-  it('addYears: 29 февраля в невисокосном году — 28-е', () => {
-    expect(addYears('2024-02-29', 10)).toBe('2034-02-28')
+  it('addYears — как AddDate в Go: 29 февраля в невисокосном году — 1 марта', () => {
+    expect(addYears('2024-02-29', 10)).toBe('2034-03-01')
     expect(addYears('2026-11-24', -1)).toBe('2025-11-24')
   })
 
   it('10 лет и длиннее — слишком длинный (как period_too_long в API)', () => {
     expect(isPeriodTooLong({ from: '2016-11-25', to: '2026-11-24' })).toBe(false)
     expect(isPeriodTooLong({ from: '2016-11-24', to: '2026-11-24' })).toBe(true)
+    // Как в API: от 29.02.2024 граница — 1 марта 2034, 28 февраля ещё можно.
+    expect(isPeriodTooLong({ from: '2024-02-29', to: '2034-02-28' })).toBe(false)
+    expect(isPeriodTooLong({ from: '2024-02-29', to: '2034-03-01' })).toBe(true)
   })
 })
 

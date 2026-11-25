@@ -101,18 +101,18 @@ export function applyPatch(
   return next
 }
 
-/** Последний день месяца: нулевой день следующего. */
-const lastDay = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate()
-
 /**
- * Дата на `years` лет позже; 29 февраля в невисокосном году — 28-е (как `date + interval`
- * в Postgres, которым API проверяет длину периода).
+ * Дата на `years` лет позже — как `time.AddDate(years, 0, 0)` в Go, которым API проверяет
+ * длину периода (`internal/httpapi/reports.go`): несуществующая дата переносится вперёд,
+ * 29 февраля + 10 лет = 1 марта (а не 28 февраля, как `date + interval` в Postgres).
  */
 export function addYears(date: string, years: number): string {
   const [y, m, d] = date.split('-').map(Number)
-  const year = y + years
-  const day = Math.min(d, lastDay(year, m))
-  return `${String(year).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  // Не `Date.UTC(year, …)`: он переводит годы 0–99 в 1900–1999. Переполнение дня
+  // `setUTCFullYear` нормализует так же, как Go.
+  const result = new Date(0)
+  result.setUTCFullYear(y + years, m - 1, d)
+  return result.toISOString().slice(0, 10)
 }
 
 /**

@@ -6,20 +6,16 @@ import { Link } from 'react-router'
 import { paths } from '../../app/navigation'
 import type { Account } from '../../shared/api'
 import { useT } from '../../shared/i18n'
-import {
-  groupActiveAccounts,
-  isNegativeBalanceProblem,
-  totalsByCurrency,
-} from '../../shared/lib/accounts'
+import { balanceSummary, groupActiveAccounts } from '../../shared/lib/accounts'
 import { formatCount } from '../../shared/lib/plural'
-import { AccountMark, BalanceTotals, Money } from '../../shared/ui'
+import { AccountBalance, AccountMark, BalanceTotals } from '../../shared/ui'
 import { icons } from '../../theme'
 import { useCollapsedGroups, type AccountGroupKey } from './collapsedGroups'
 import classes from './HomePage.module.css'
 
 /**
- * Баланс и счета — один блок (один запрос `GET /accounts`): крупно общий баланс по валютам,
- * под ним счета, общие и личные раздельно, каждая группа сворачивается. Архивные счета
+ * Баланс и счета — один блок (один запрос `GET /accounts`): крупно общий баланс в рублях
+ * (валютные счета — по курсу ЦБ), под ним счета, общие и личные раздельно, каждая группа сворачивается. Архивные счета
  * не показываются. Строки — только для чтения: всё про счёт — на экране «Счета»
  * (ссылка «Все счета»), чтобы на главной не было лишних остановок табуляции.
  */
@@ -42,7 +38,7 @@ export function HomeAccounts({ accounts }: { accounts: readonly Account[] }) {
         <Title id={balanceId} order={2} size="sm" fw={500} c="dimmed">
           {t.home.balanceTitle}
         </Title>
-        <BalanceTotals totals={totalsByCurrency(accounts)} labelledBy={balanceId} />
+        <BalanceTotals summary={balanceSummary(accounts)} />
       </div>
 
       {hasActive ? (
@@ -131,7 +127,7 @@ function AccountGroup({
   )
 }
 
-/** Строка счёта, как на «Счетах»: метка · название и тип · остаток. */
+/** Строка счёта, как на «Счетах»: метка · название и тип · остаток (у валютного — с эквивалентом). */
 function AccountRow({ account }: { account: Account }) {
   const t = useT()
   return (
@@ -149,14 +145,7 @@ function AccountRow({ account }: { account: Account }) {
             {!account.includeInTotal && ` · ${t.accounts.excluded}`}
           </Text>
         </span>
-        <Money
-          amount={account.balance}
-          currency={account.currency}
-          variant={isNegativeBalanceProblem(account) ? 'balance' : 'plain'}
-          fw={500}
-          wrap
-          className={classes.amount}
-        />
+        <AccountBalance account={account} fw={500} wrap className={classes.amount} />
       </span>
     </li>
   )

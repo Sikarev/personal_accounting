@@ -5,11 +5,11 @@ import { useState } from 'react'
 
 import { useAdjustAccountBalance, type Account, type Currency } from '../../shared/api'
 import { useT } from '../../shared/i18n'
-import { isNegativeBalanceProblem, minorUnitsOf } from '../../shared/lib/accounts'
+import { minorUnitsOf } from '../../shared/lib/accounts'
 import { parseMoneyInput } from '../../shared/lib/moneyInput'
 import { submitErrorState } from '../../shared/lib/submitErrorState'
 import { useFormState } from '../../shared/lib/useFormState'
-import { Money, notifyWithUndo, SubmitForm } from '../../shared/ui'
+import { AccountBalance, Money, notifyWithUndo, SubmitForm } from '../../shared/ui'
 import { accountMutationOptions, upsertAccount } from '../../features/accounts/accountsCache'
 import { undoTransaction } from '../../features/transactions/transactionToasts'
 
@@ -100,16 +100,12 @@ export function AdjustBalanceForm({
         <Text fw={500} truncate="end">
           {account.name}
         </Text>
-        <Group justify="space-between" gap="sm" wrap="nowrap">
+        {/* Остаток валютного счёта — с эквивалентом в рублях под ним. */}
+        <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
           <Text size="sm" c="dimmed">
             {t.accounts.adjust.current}
           </Text>
-          <Money
-            amount={account.balance}
-            currency={account.currency}
-            variant={isNegativeBalanceProblem(account) ? 'balance' : 'plain'}
-            fw={600}
-          />
+          <AccountBalance account={account} fw={600} />
         </Group>
       </Stack>
       <TextInput

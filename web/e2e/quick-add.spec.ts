@@ -20,7 +20,13 @@ import {
 
 const id = (n: number) => `01a1faf8-0000-7000-8000-0000000000${String(n).padStart(2, '0')}`
 
-const card = { ...existingAccount, id: id(1), name: 'Карта', balance: 4_523_050 }
+const card = {
+  ...existingAccount,
+  id: id(1),
+  name: 'Карта',
+  balance: 4_523_050,
+  baseBalance: 4_523_050,
+}
 const cash = { ...existingAccount, id: id(2), name: 'Наличные', type: 'cash', sortOrder: 1 }
 const usd = {
   ...existingAccount,
@@ -29,6 +35,7 @@ const usd = {
   currency: 'USD',
   visibility: 'private',
   balance: 50_000,
+  baseBalance: 4_617_500, // 500 $ × 92,35 ₽
 }
 
 function category(n: number, name: string, kind = 'expense', parentId: string | null = null) {
@@ -493,6 +500,7 @@ test.describe('состояния', () => {
         ...card,
         name: 'Накопительный счёт на отпуск в следующем году — не трогать до лета',
         balance: 99_999_999_999_99,
+        baseBalance: 99_999_999_999_99,
       }
       const longCategory = category(
         9,

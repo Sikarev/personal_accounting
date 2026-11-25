@@ -21,6 +21,8 @@ import classes from './ReportsPage.module.css'
  * без ссылки: лента не умеет показать родителя без подкатегорий, а ссылка на родителя
  * показала бы другую сумму.
  */
+// Роли ARIA повторяют родные: при узком блоке строки перестраиваются через display (CSS),
+// а смена display у элементов таблицы в части браузеров стирает её смысл для диктора.
 export function CategoryTable({
   rows,
   total,
@@ -54,22 +56,30 @@ export function CategoryTable({
   }
 
   return (
-    <table className={classes.table}>
+    <table className={classes.table} role="table">
       <caption className={classes.visuallyHidden}>{caption}</caption>
-      <thead className={classes.visuallyHidden}>
-        <tr>
-          <th scope="col">{t.reports.table.category}</th>
-          <th scope="col">{t.reports.table.amount}</th>
+      <thead className={classes.visuallyHidden} role="rowgroup">
+        <tr role="row">
+          <th scope="col" role="columnheader">
+            {t.reports.table.category}
+          </th>
+          <th scope="col" role="columnheader">
+            {t.reports.table.amount}
+          </th>
         </tr>
       </thead>
-      <tbody>
+      <tbody role="rowgroup">
         {rows.map((row, index) => {
           const color = rowColor(index, rows.length)
           const open = expanded.has(row.id)
           return (
             <Fragment key={row.id}>
-              <tr className={classes.row} data-highlight={highlighted === row.id || undefined}>
-                <th scope="row" className={classes.nameCell}>
+              <tr
+                role="row"
+                className={classes.row}
+                data-highlight={highlighted === row.id || undefined}
+              >
+                <th scope="row" role="rowheader" className={classes.nameCell}>
                   <div className={classes.nameLine}>
                     {row.children.length > 0 ? (
                       <ActionIcon
@@ -96,7 +106,7 @@ export function CategoryTable({
                       aria-hidden
                     />
                     <Link to={feedLink(filters, row.id)} className={classes.nameLink}>
-                      {name(row)}
+                      <span className={classes.nameClamp}>{name(row)}</span>
                     </Link>
                   </div>
                 </th>
@@ -117,9 +127,9 @@ export function CategoryTable({
           )
         })}
       </tbody>
-      <tfoot>
-        <tr className={classes.totalRow}>
-          <th scope="row" className={classes.nameCell}>
+      <tfoot role="rowgroup">
+        <tr role="row" className={classes.totalRow}>
+          <th scope="row" role="rowheader" className={classes.nameCell}>
             <div className={classes.nameLine}>
               <span className={classes.expandSpacer} />
               <Text component="span" fw={600}>
@@ -148,16 +158,18 @@ function LeafRow({
   currency: string
 }) {
   return (
-    <tr className={classes.row} data-level="1">
-      <th scope="row" className={classes.nameCell}>
+    <tr role="row" className={classes.row} data-level="1">
+      <th scope="row" role="rowheader" className={classes.nameCell}>
         <div className={classes.nameLine}>
           <span className={classes.expandSpacer} />
           {href ? (
             <Link to={href} className={classes.nameLink}>
-              {label}
+              <span className={classes.nameClamp}>{label}</span>
             </Link>
           ) : (
-            <span className={classes.nameText}>{label}</span>
+            <span className={classes.nameText}>
+              <span className={classes.nameClamp}>{label}</span>
+            </span>
           )}
         </div>
       </th>
@@ -180,7 +192,7 @@ function AmountCell({
 }) {
   const t = useT()
   return (
-    <td className={classes.amountCell}>
+    <td role="cell" className={classes.amountCell}>
       <Money
         amount={amount}
         currency={currency}

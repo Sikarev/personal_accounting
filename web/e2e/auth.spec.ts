@@ -215,7 +215,7 @@ test.describe('регистрация', () => {
     await passwordField(page).fill(PASSWORD)
     await page.getByRole('checkbox').check()
     await page.getByRole('button', { name: t.auth.register.submit }).click()
-    await expect(page).toHaveURL(/\/reports$/)
+    await expect(page).toHaveURL(/\/reports\/categories$/)
     expect(body).toEqual({
       name: 'Анна',
       email: EMAIL,
@@ -295,7 +295,7 @@ test.describe('защита маршрутов', () => {
     await emailField(page).fill(EMAIL)
     await passwordField(page).fill(PASSWORD)
     await page.getByRole('button', { name: t.auth.login.submit }).click()
-    await expect(page).toHaveURL(/\/reports$/)
+    await expect(page).toHaveURL(/\/reports\/categories$/)
     await expect(page.getByRole('heading', { level: 1, name: t.nav.reports })).toBeVisible()
   })
 
@@ -319,7 +319,7 @@ test.describe('защита маршрутов', () => {
       })
       await page.goto('/reports')
       await page.getByRole('button', { name: t.auth.banner.resend }).click()
-      await expect(page).toHaveURL(/\/login\?next=%2Freports$/)
+      await expect(page).toHaveURL(/\/login\?next=%2Freports%2Fcategories$/)
       await expect(passwordField(page)).toBeVisible()
     },
   )

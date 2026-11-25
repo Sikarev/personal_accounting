@@ -469,7 +469,8 @@ test.describe('состояния', () => {
       await page.goBack()
       await expect(page).toHaveURL(/\/$/)
       await page.goBack()
-      await expect(page).toHaveURL(/\/reports$/)
+      // /reports перенаправляет на первую вкладку отчётов с заменой записи истории.
+      await expect(page).toHaveURL(/\/reports\/categories$/)
     },
   )
 

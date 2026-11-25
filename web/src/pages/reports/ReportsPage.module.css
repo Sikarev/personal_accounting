@@ -29,11 +29,12 @@
 }
 
 /* ——— Вкладки ———
-   Как переключатель «Вход / Регистрация»: ссылки с aria-current. Не помещаются в строку
-   (крупный шрифт) — встают столбиком, слово не рвётся. */
+   Как переключатель «Вход / Регистрация»: ссылки с aria-current. Поровну в строке, но не уже
+   подписи: не помещаются (крупный шрифт) — вкладка переносится целиком, слово не рвётся.
+   Шрифт sm — чтобы три вкладки помещались в строку на 375 px. */
 .tabs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9em), 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--mantine-spacing-xs);
   padding: var(--mantine-spacing-xs);
   border-radius: var(--mantine-radius-md);
@@ -42,6 +43,8 @@
 }
 
 .tab {
+  flex: 1 1 0;
+  min-width: max-content;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -49,7 +52,7 @@
   padding-inline: var(--mantine-spacing-sm);
   border: 1px solid transparent;
   border-radius: var(--mantine-radius-sm);
-  font-size: var(--mantine-font-size-md);
+  font-size: var(--mantine-font-size-sm);
   font-weight: 500;
   text-align: center;
   color: var(--mantine-color-dimmed);
@@ -191,7 +194,10 @@
   }
 }
 
+/* Колонка названий — 60 %: иначе таблица отдавала бы длинным названиям место сумм, и суммы
+   переносились бы по разрядам уже при обычном шрифте. Суммам не хватает 40 % — сжимается она. */
 .nameCell {
+  width: 60%;
   padding: var(--mantine-spacing-xs) 0;
   text-align: start;
   font-weight: inherit;
@@ -243,20 +249,26 @@
   border-radius: var(--mantine-radius-xs);
 }
 
-/* Название — ссылка в ленту во всю доступную ширину, зона касания 44 px. Длинное — не больше
-   двух строк с многоточием (рядом сумма, ux.md раздел 4). */
+/* Название — ссылка в ленту во всю доступную ширину, зона касания 44 px. */
 .nameLink,
 .nameText {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: var(--app-touch-target);
+  color: var(--mantine-color-text);
+}
+
+/* Длинное название — не больше двух строк с многоточием (рядом сумма, ux.md раздел 4).
+   Обрезка — на внутреннем элементе: отступы у обрезаемого блока показали бы третью строку. */
+.nameClamp {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
-  padding-block: calc((var(--app-touch-target) - var(--mantine-font-size-md) * 1.5) / 2);
-  color: var(--mantine-color-text);
 }
 
 .nameLink {
@@ -283,6 +295,38 @@
   & .nameCell,
   & .amountCell {
     padding-top: var(--mantine-spacing-sm);
+  }
+}
+
+/* Узкий блок относительно шрифта (телефон при шрифте 200 %): строка в две — название
+   во всю ширину, под ним сумма и доля. В колонку рядом с суммой название влезало бы
+   по две буквы. Порог в rem растёт со шрифтом: при обычном шрифте на 375 px — в строку.
+   Роли ARIA в разметке сохраняют смысл таблицы при смене display. */
+@container report (max-width: 20rem) {
+  .table,
+  .table tbody,
+  .table tfoot {
+    display: block;
+  }
+
+  .row,
+  .totalRow {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .nameCell {
+    display: block;
+    width: 100%;
+  }
+
+  .amountCell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-end;
+    column-gap: var(--mantine-spacing-sm);
+    padding-top: 0;
   }
 }
 

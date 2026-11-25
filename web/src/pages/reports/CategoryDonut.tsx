@@ -108,6 +108,8 @@ export function CategoryDonut({
           cursor: cell.name === OTHER_KEY ? 'default' : 'pointer',
         })}
         pieProps={{
+          // Сам сектор-группу recharts тоже ставит в порядок Tab (tabindex="0") — убираем.
+          rootTabIndex: -1,
           onMouseEnter: (_: unknown, index: number) => select(index, 'hover'),
           onClick: (_: unknown, index: number) => select(index, 'click'),
         }}

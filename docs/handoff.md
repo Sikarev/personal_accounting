@@ -173,6 +173,7 @@
 - Postgres из `docker-compose.yml` общий для всех worktree: имя проекта зафиксировано (`name: personal_accounting`), поэтому `docker compose up -d` из worktree не поднимает второй контейнер. Тестовые БД изолированы, а dev-БД `pa` — общая.
 - Playwright в разных worktree запускать на разных портах: `E2E_PORT=4181`.
 - Ручная проверка web против настоящего API из worktree: API на свободном порту, `APP_BASE_URL` → адрес dev-сервера фронта, `pnpm dev` с `API_PROXY_TARGET`. Письма — в Mailpit (`http://localhost:8025`, API `/api/v1/messages`).
+- Ручная проверка против настоящего API — `cmd/devseed` (`go run ./cmd/devseed -api http://localhost:<порт>`: владелец и участник семьи, счета RUB/USD, ~300 операций за полгода, корректировка, удалённая операция; печатает логины и cookie для curl; `-ops N` — для замеров, `-seed` — другая картина), после — `go run ./cmd/devseed -cleanup`.
 - Go 1.25 в системе сам подтягивает toolchain 1.26 (`GOTOOLCHAIN=auto`). sqlc работает с `CGO_ENABLED=0`, используется WASM-парсер.
 
 ## 5. Текущий этап

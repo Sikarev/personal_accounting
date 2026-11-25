@@ -18,6 +18,7 @@ api/                Go-бэкенд
   cmd/api/          HTTP-сервер
   cmd/migrate/      применение миграций БД
   cmd/rates/        разовая загрузка курсов ЦБ РФ (`go run ./cmd/rates sync`)
+  cmd/devseed/      тестовые данные для ручной проверки (`go run ./cmd/devseed`, убрать — `-cleanup`)
   internal/         код приложения (не импортируется извне — правило Go для папки internal)
     config/         настройки из переменных окружения
     httpapi/        роутер, middleware, обработчики эндпоинтов
@@ -74,6 +75,15 @@ cd web && API_PROXY_TARGET=http://localhost:8091 pnpm dev --port 5191
 Если Mailpit не запущен, API работает, но письма не уходят: ошибка отправки пишется в лог (`mail: send failed`).
 
 Перед шагом 1 должен быть запущен **Docker Desktop**. Если он не запущен, `docker compose` сообщает `failed to connect to the docker API`, а тесты API падают с сообщением `testdb: нет тестовой БД`. Запусти Docker Desktop и повтори.
+
+### Тестовые данные
+
+```bash
+cd api && go run ./cmd/devseed -api http://localhost:8080   # API должен быть запущен
+cd api && go run ./cmd/devseed -cleanup                     # удалить всё созданное devseed
+```
+
+`devseed` регистрирует пользователя `devseed-<время>@example.com` через API и создаёт счета (общие RUB, кредитку с минусом, личный, USD, архивный) и ~300 операций за полгода; второго участника семьи (приглашений в API пока нет) добавляет прямо в БД (`DATABASE_URL` или `-db`). Печатает логины, пароль и cookie `pa_session` для curl. `-ops N` — больше операций для замеров, `-seed N` — другая, но воспроизводимая картина. `-cleanup` удаляет только пользователей `devseed-%@example.com` и семьи, в которых нет никого, кроме них.
 
 ### После обновления кода (`git pull`, слияние веток)
 

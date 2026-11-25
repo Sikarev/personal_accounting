@@ -87,6 +87,11 @@ func run(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// Тестовые пользователи и пароль devseed-password в рабочей базе — дыра,
+	// а -cleanup удаляет данные: в production команда не запускается вовсе.
+	if os.Getenv("APP_ENV") == "production" {
+		return errors.New("devseed не запускается при APP_ENV=production")
+	}
 	if o.db == "" {
 		cfg, err := config.Load()
 		if err != nil {
